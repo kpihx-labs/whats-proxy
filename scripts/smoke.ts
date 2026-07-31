@@ -172,6 +172,95 @@ console.log("\n[7] store-only actions via CLI (daemon auto-spawn)");
   check("daemon stopped after stop", !(await (await import("../src/whats_proxy/client.ts")).pingDaemon(paths)));
 }
 
+// ── 8. CLI edge paths: no-payload, file-payload, -o output-file, direct daemon ──
+console.log("\n[8] CLI edge paths");
+{
+  const { writeFileSync, existsSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { loadConfig, statePaths } = await import("../src/whats_proxy/config.ts");
+  const paths = statePaths(loadConfig());
+
+  // 8a. `do <action>` with NO payload (defaults apply)
+  {
+    const out: string[] = [];
+    const orig = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((s: string) => { out.push(String(s)); return true; }) as never;
+    const code = await main(["do", "chat-list"]);
+    process.stdout.write = orig;
+    const text = out.join("");
+    check("no-payload exit 0", code === 0);
+    check("no-payload ok envelope", text.includes('"status": "ok"'));
+  }
+
+  // 8b. payload from a JSON FILE
+  {
+    const payloadFile = join(WORK, "payload.json");
+    writeFileSync(payloadFile, JSON.stringify({ value: 1 }));
+    const out: string[] = [];
+    const orig = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((s: string) => { out.push(String(s)); return true; }) as never;
+    const code = await main(["do", "connection-status", payloadFile]);
+    process.stdout.write = orig;
+    const text = out.join("");
+    check("file-payload exit 0", code === 0);
+    check("file-payload ok envelope", text.includes('"status": "ok"'));
+  }
+
+  // 8c. -o output-file: file written, result still printed, stdout pure JSON
+  {
+    const outFile = join(WORK, "out.json");
+    const out: string[] = [];
+    const orig = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((s: string) => { out.push(String(s)); return true; }) as never;
+    const code = await main(["do", "chat-list", "-o", outFile]);
+    process.stdout.write = orig;
+    const text = out.join("");
+    check("-o exit 0", code === 0);
+    check("-o file written", existsSync(outFile));
+    const fileResult = JSON.parse((await import("node:fs")).readFileSync(outFile, "utf-8"));
+    check("-o file has envelope", fileResult?.meta?.status === "ok");
+    check("-o stdout still JSON", (() => { try { JSON.parse(text); return true; } catch { return false; } })());
+  }
+
+  // 8d. direct `daemon` command (hidden) serves RPC, then shuts down cleanly.
+  // Runs on a fresh socket: stop any daemon first so the direct spawn is the
+  // sole owner (also exercises the guard: a second spawn must exit quietly).
+  {
+    const { spawn } = await import("node:child_process");
+    const { pingDaemon, rpcCall } = await import("../src/whats_proxy/client.ts");
+    try { await rpcCall(paths.sockFile, "shutdown"); } catch { /* already down */ }
+    await new Promise((r) => setTimeout(r, 600));
+
+    const entry = join(import.meta.dir, "../src/whats_proxy/index.ts");
+    const child = spawn(process.execPath, [entry, "daemon"], {
+      detached: true,
+      stdio: "ignore",
+      env: process.env,
+    });
+    child.unref();
+    let up = false;
+    for (let i = 0; i < 50; i++) {
+      await new Promise((r) => setTimeout(r, 200));
+      if (await pingDaemon(paths)) { up = true; break; }
+    }
+    check("direct daemon serves ping", up);
+
+    // Second spawn must NOT hijack: the guard makes it exit(0) immediately.
+    const rival = spawn(process.execPath, [entry, "daemon"], {
+      detached: true,
+      stdio: "ignore",
+      env: process.env,
+    });
+    rival.unref();
+    await new Promise((r) => setTimeout(r, 1200));
+    check("rival daemon exits (guard)", rival.exitCode !== null, `exitCode=${rival.exitCode}`);
+
+    try { await rpcCall(paths.sockFile, "shutdown"); } catch { /* already down */ }
+    await new Promise((r) => setTimeout(r, 600));
+    check("direct daemon stopped", !(await pingDaemon(paths)));
+  }
+}
+
 // ── Cleanup ─────────────────────────────────────────────────────────────────
 rmSync(WORK, { recursive: true, force: true });
 

@@ -33,7 +33,7 @@ whats-proxy admin status           # check daemon + auth state
 whats-proxy admin stop             # stop the daemon (persists store, keeps session)
 ```
 
-The daemon auto-spawns on first `do` command. Session credentials live in `~/.config/whats-proxy/state/` — **never delete this folder** or you must re-pair.
+The daemon auto-spawns on first `do` command. Session credentials live in `~/.config/whats-proxy/state/` — **never delete this folder** or you must re-pair. A spawn guard prevents daemon races: if another daemon already serves the socket, a newcomer exits quietly instead of hijacking the session.
 
 ## Usage
 

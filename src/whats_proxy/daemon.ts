@@ -317,6 +317,22 @@ export async function startDaemon(): Promise<void> {
   rotateLogFile(paths.logFile);
   log = new Logger((config.logging?.level as never) || "info", paths.logFile);
 
+  // Guard: if a live daemon already owns the socket (spawn race — two `do`
+  // commands started simultaneously), do NOT hijack its socket. The loser
+  // exits quietly; the winner keeps the session. Prevents orphaned daemons
+  // whose socket file was unlinked by the newcomer.
+  if (existsSync(paths.sockFile)) {
+    try {
+      const { pingDaemon } = await import("./client.ts");
+      if (await pingDaemon(paths)) {
+        log.info("Another daemon is already serving; exiting.");
+        process.exit(0);
+      }
+    } catch {
+      /* socket exists but unresponsive → stale, safe to take over */
+    }
+  }
+
   // PID lifecycle
   writeFileSync(paths.pidFile, String(process.pid));
   const clearPid = () => {

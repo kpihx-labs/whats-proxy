@@ -32,7 +32,7 @@ src/whats_proxy/          # all source
 ├── config.ts logger.ts display.ts doc.ts version.ts exceptions.ts types.ts
 ├── actions/              # 13 category modules + history.ts + registry.ts
 └── admin/                # setup.ts + status.ts + stop.ts
-scripts/smoke.ts          # 30-check end-to-end smoke
+scripts/smoke.ts          # 44-check end-to-end smoke (incl. CLI edge paths + spawn guard)
 tests/                    # bun test: helpers, store, display
 ```
 

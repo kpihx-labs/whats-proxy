@@ -341,8 +341,9 @@ Examples:
 
 - [x] Full whats-mcp catalog extraction (65 tools + schemas)
 - [x] CONTRACT.md (this file)
-- [ ] `package.json` (bin: `whats-proxy`), `tsconfig.json`
-- [ ] `src/whats_proxy/` — cli, client, store, helpers, config, display, doc, exceptions, logger, daemon, admin/
-- [ ] `README.md`, `AGENTS.md`, `Makefile` (check/smoke/install/uninstall/git-push/release), `.env.example`, `scripts/install.sh`, `scripts/uninstall.sh`
-- [ ] Tests (jest-style → bun:test) + smoke test
+- [x] `package.json` (bin: `whats-proxy`), `tsconfig.json`
+- [x] `src/whats_proxy/` — cli, client, store, helpers, config, display, doc, exceptions, logger, daemon, admin/
+- [x] `README.md`, `AGENTS.md`, `Makefile` (check/smoke/install/uninstall/git-push/release), `.env.example`, `scripts/install.sh`, `scripts/uninstall.sh`
+- [x] Tests (bun:test — 31 cases) + smoke test (44 checks)
+- [x] Version single-sourced via `version.ts` ← `package.json`; `admin stop` lifecycle; spawn guard for daemon races
 - [ ] Final verification: `admin setup` (QR), `admin status`, `do` against live daemon
