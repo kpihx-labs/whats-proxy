@@ -21,7 +21,7 @@ make check        # tsc --noEmit + bun test + smoke
 make test         # unit tests only
 make smoke        # end-to-end (isolated state dir)
 make stress       # daemon race stress test (O_EXCL lock arbitration)
-make install      # bun link global
+make install      # bun link global + shell completions symlink
 make git-push     # push to github + gitlab (both remotes)
 ```
 
@@ -29,6 +29,8 @@ Daemon ownership: `O_CREAT|O_EXCL` lockfile (`whats-proxy.lock`) — kernel-atom
 exactly one winner; socket bound before WhatsApp connect; losers exit. Never
 "fix" this with socket probing alone — Unix sockets cannot arbitrate races
 (a second listen() on the same path silently binds an orphaned inode).
+Idle-exit: `daemon.max_idle_minutes` (>0) exits after that long without RPC
+activity; `ping` does NOT count as activity (liveness probe, not user input).
 
 ## Structure
 

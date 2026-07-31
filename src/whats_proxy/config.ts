@@ -22,6 +22,10 @@ export interface AppConfig {
     name: string;
     version: string;
   };
+  daemon: {
+    /** Minutes of RPC inactivity before the daemon exits (0 = never). */
+    max_idle_minutes: number;
+  };
   connection: {
     print_qr_in_terminal: boolean;
     reconnect_interval_ms: number;
@@ -46,6 +50,9 @@ const DEFAULTS: AppConfig = {
   server: {
     name: "whats-proxy",
     version: VERSION,
+  },
+  daemon: {
+    max_idle_minutes: 0,
   },
   connection: {
     print_qr_in_terminal: true,
@@ -157,6 +164,11 @@ export function loadConfig(): AppConfig {
   }
   if (process.env.WHATS_PROXY_LOG_LEVEL) {
     config.logging.level = process.env.WHATS_PROXY_LOG_LEVEL;
+  }
+
+  if (process.env.WHATS_PROXY_MAX_IDLE_MINUTES !== undefined) {
+    const v = Number(process.env.WHATS_PROXY_MAX_IDLE_MINUTES);
+    if (!Number.isNaN(v) && v >= 0) config.daemon.max_idle_minutes = v;
   }
   if (process.env.WHATS_PROXY_MAX_RECONNECT) {
     config.connection.max_reconnect_attempts = parseInt(process.env.WHATS_PROXY_MAX_RECONNECT, 10);

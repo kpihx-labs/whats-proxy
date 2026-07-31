@@ -100,6 +100,7 @@ async function cmdDo(argv: string[]): Promise<number> {
   let payload: string | undefined;
   let outputFile: string | undefined;
   let fmt: "json" | "table" = "json";
+  let fmtExplicit = false;
   let help = false;
 
   const rest = [...argv];
@@ -121,6 +122,7 @@ async function cmdDo(argv: string[]): Promise<number> {
         return 2;
       }
       fmt = v === "table" ? "table" : "json";
+      fmtExplicit = true;
     } else if (arg.startsWith("-")) {
       print_error(`Unknown option: ${arg}`);
       return 2;
@@ -137,7 +139,31 @@ async function cmdDo(argv: string[]): Promise<number> {
   // No action / --help at the `do` level → compact catalog help
   if (!action || help) {
     if (action && help) {
-      process.stdout.write(getActionHelp(action, REGISTRY) + "\n");
+      if (fmtExplicit && fmt === "json") {
+        // Machine-readable help (-h -f json): the registry meta IS the schema.
+        const def = REGISTRY[action];
+        process.stdout.write(
+          JSON.stringify(
+            {
+              meta: { status: def ? "ok" : "error", comment: "", edited: false },
+              data: def
+                ? {
+                    action: def.meta.action,
+                    category: def.meta.category,
+                    description: def.meta.description,
+                    arguments: def.meta.arguments,
+                    example: def.meta.example,
+                    returns: def.meta.returns,
+                  }
+                : { error: `Unknown action: ${action}.` },
+            },
+            null,
+            2,
+          ) + "\n",
+        );
+      } else {
+        process.stdout.write(getActionHelp(action, REGISTRY) + "\n");
+      }
       return 0;
     }
     process.stdout.write(

@@ -297,6 +297,30 @@ console.log("\n[8] CLI edge paths");
     }
     check("no daemon survives section 8", !(await pingDaemon(paths)));
   }
+
+  // 8g. idle-exit: daemon with max_idle_minutes exits itself after inactivity
+  {
+    const { spawn } = await import("node:child_process");
+    const { pingDaemon, rpcCall } = await import("../src/whats_proxy/client.ts");
+    try { await rpcCall(paths.sockFile, "shutdown"); } catch { /* already down */ }
+    await new Promise((r) => setTimeout(r, 600));
+
+    const entry = join(import.meta.dir, "../src/whats_proxy/index.ts");
+    const idleChild = spawn(process.execPath, [entry, "daemon"], {
+      detached: true,
+      stdio: "ignore",
+      env: { ...process.env, WHATS_PROXY_MAX_IDLE_MINUTES: "0.05" }, // 3s idle
+    });
+    idleChild.unref();
+    let up = false;
+    for (let i = 0; i < 50; i++) {
+      await new Promise((r) => setTimeout(r, 200));
+      if (await pingDaemon(paths)) { up = true; break; }
+    }
+    check("idle daemon serves ping", up);
+    await new Promise((r) => setTimeout(r, 5000)); // wait past the 3s idle window
+    check("idle daemon exits itself", !(await pingDaemon(paths)));
+  }
 }
 
 // ── Cleanup ─────────────────────────────────────────────────────────────────

@@ -35,6 +35,8 @@ whats-proxy admin stop             # stop the daemon (persists store, keeps sess
 
 The daemon auto-spawns on first `do` command. Session credentials live in `~/.config/whats-proxy/state/` — **never delete this folder** or you must re-pair. A spawn guard prevents daemon races: if another daemon already serves the socket, a newcomer exits quietly instead of hijacking the session.
 
+For a full validation pass on a real account: `bun run scripts/live.ts --to <phone> [--code]` — pairs (QR or code), sends a test message, stops the daemon. (Excluded from `make check`; it needs a physical phone.)
+
 ## Usage
 
 ```
@@ -46,10 +48,12 @@ whats-proxy --version
 ```
 
 - **`do`** — dispatch an action. `payload` is a JSON string or a path to a JSON file. Non-object payloads are wrapped as `{ "value": ... }`.
+- **`do <action> -h -f json`** — machine-readable per-action help (schema from the registry meta), for scripting/autocomplete.
 - **`admin`** — daemon/auth management. Always JSON output; refuses `-f`/`-o` (exit 2).
 - **`admin stop`** — cleanly stops the daemon: store snapshot persisted, session credentials kept (`state/auth/` untouched). Next `do` auto-spawns it again.
 - Every response is an envelope: `{ "meta": { "status": "ok"|"error", "comment": "", "edited": false }, "data": {...} }`.
 - Errors exit `1` with the envelope on stderr. Autosave writes each call to `/tmp/whats-proxy-autosave/`.
+- **Idle exit** — set `daemon.max_idle_minutes` in `config.json` (or `WHATS_PROXY_MAX_IDLE_MINUTES`) to make the daemon exit after that long without RPC activity (`ping` does NOT count — it's a liveness probe, not user activity). `0` (default) = stay forever (session-holder).
 
 ### Table format
 
@@ -110,7 +114,7 @@ make smoke       # end-to-end: spawn daemon, RPC, CLI catalog
 make stress      # race test: N simultaneous daemon spawns → exactly 1 survives
 ```
 
-Shell completions (zsh + bash) for the 65 actions live in `completions/` — source or symlink them (e.g. `completions/_whats-proxy` → `$fpath` for zsh).
+Shell completions (zsh + bash) for the 65 actions live in `completions/` — `make install` symlinks them automatically; manually: `completions/_whats-proxy` → `$fpath` (zsh) or `completions/whats-proxy.bash` → bash-completion dir.
 
 Layout:
 

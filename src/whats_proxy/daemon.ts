@@ -47,6 +47,8 @@ let connectionState: "disconnected" | "connecting" | "open" | "closing" = "disco
 let reconnectAttempts = 0;
 let reconnecting = false;
 let persistStoreTimer: ReturnType<typeof setTimeout> | null = null;
+let lastActivity = Date.now();
+let idleTimer: ReturnType<typeof setInterval> | null = null;
 
 // ── Connection info (mirrors whats-mcp getConnectionInfo) ───────────────────
 
@@ -233,6 +235,10 @@ function rpcError(id: number, code: number, message: string) {
 
 async function handleRequest(req: RpcRequest): Promise<unknown> {
   const { id, method, params = {} } = req;
+  // ping is a liveness probe (client keep-alive), NOT user activity — it must
+  // not reset the idle clock, or a polling client would keep the daemon alive
+  // forever. Everything else counts as activity.
+  if (method !== "ping") lastActivity = Date.now();
 
   switch (method) {
     case "ping":
@@ -444,6 +450,21 @@ export async function startDaemon(): Promise<void> {
   // losing daemon's probe sees us as the live owner and exits promptly.
   mkdirSync(paths.auth, { recursive: true });
   await createSocket(paths.auth, config);
+
+  // Idle-exit: if configured (max_idle_minutes > 0) and no RPC arrives for
+  // that long, exit cleanly (store persisted, session kept — next `do`
+  // auto-spawns). 0 = stay forever (session-holder default).
+  const idleMinutes = Number(config.daemon?.max_idle_minutes || 0);
+  if (idleMinutes > 0) {
+    const checkMs = Math.min(idleMinutes * 60_000, 30_000); // poll ≤30s
+    idleTimer = setInterval(() => {
+      const idleMs = Date.now() - lastActivity;
+      if (idleMs >= idleMinutes * 60_000) {
+        log.info(`Idle for ${idleMinutes} min — exiting (max_idle_minutes).`);
+        shutdown();
+      }
+    }, checkMs);
+  }
 
   log.info("Daemon ready. Use 'whats-proxy do <action>' or 'whats-proxy admin status'.");
 }
