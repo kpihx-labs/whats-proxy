@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+bun.lock
+bun.lockb
+
+# Build artifacts
+dist/
+*.tsbuildinfo
+
+# State — NEVER commit
+~/.config/whats-proxy/
+.config/
+state/
+store.json
+*.pid
+*.log
+*.sock
+
+# Autosave
+/tmp/whats-proxy-autosave/
+
+# Env
+.env
+
+# OS
+.DS_Store

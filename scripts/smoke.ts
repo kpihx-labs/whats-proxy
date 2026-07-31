@@ -1,0 +1,175 @@
+#!/usr/bin/env bun
+/**
+ * whats-proxy — smoke test.
+ *
+ * Real end-to-end verification without touching a live WhatsApp account:
+ *   1. `do --help` catalog (65 actions)
+ *   2. per-action help
+ *   3. daemon spawn + ping
+ *   4. RPC dispatch against a stub store (chat-list, connection-status, guide)
+ *   5. admin status
+ *   6. error paths (unknown action, invalid payload)
+ *
+ * Uses an isolated state dir under /tmp so it never touches the real config.
+ */
+
+import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+const WORK = mkdtempSync(join(tmpdir(), "whats-proxy-smoke-"));
+process.env.WHATS_PROXY_STATE_DIR = WORK;
+process.env.WHATS_PROXY_CONFIG_DIR = WORK;
+
+const { main } = await import("../src/whats_proxy/cli.ts");
+
+let failures = 0;
+function check(name: string, cond: boolean, detail = "") {
+  if (cond) {
+    console.log(`  ok   ${name}`);
+  } else {
+    failures++;
+    console.log(`  FAIL ${name}${detail ? ` — ${detail}` : ""}`);
+  }
+}
+
+// ── 1. Catalog help ──────────────────────────────────────────────────────────
+console.log("\n[1] catalog help");
+{
+  const out: string[] = [];
+  const orig = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((s: string) => { out.push(String(s)); return true; }) as never;
+  const code = await main(["do", "--help"]);
+  process.stdout.write = orig;
+  const text = out.join("");
+  check("exit 0", code === 0);
+  check("mentions send-text", text.includes("send-text"));
+  check("mentions find-messages", text.includes("find-messages"));
+  check("mentions daily-digest", text.includes("daily-digest"));
+  const actionCount = (text.match(/^  [a-z-]+$/gm) || []).length;
+  check(`catalog lists ~65 actions (found ${actionCount})`, actionCount >= 60, `count=${actionCount}`);
+}
+
+// ── 2. Per-action help ───────────────────────────────────────────────────────
+console.log("\n[2] per-action help");
+{
+  const out: string[] = [];
+  const orig = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((s: string) => { out.push(String(s)); return true; }) as never;
+  const code = await main(["do", "send-text", "--help"]);
+  process.stdout.write = orig;
+  const text = out.join("");
+  check("exit 0", code === 0);
+  check("has Arguments section", text.includes("Arguments:"));
+  check("has jid arg", text.includes("jid"));
+  check("has usage line", text.includes("whats-proxy do send-text"));
+}
+
+// ── 3. Unknown action → error envelope + exit 1 ─────────────────────────────
+console.log("\n[3] unknown action");
+{
+  const out: string[] = [];
+  const orig = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((s: string) => { out.push(String(s)); return true; }) as never;
+  const code = await main(["do", "does-not-exist", "{}"]);
+  process.stdout.write = orig;
+  const text = out.join("");
+  check("exit 1", code === 1);
+  check("error envelope", text.includes('"status": "error"'));
+  check("hint present", text.includes("catalog"));
+}
+
+// ── 4. Invalid payload ───────────────────────────────────────────────────────
+console.log("\n[4] invalid payload");
+{
+  const out: string[] = [];
+  const orig = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((s: string) => { out.push(String(s)); return true; }) as never;
+  const code = await main(["do", "chat-list", "not-json-{!!"]);
+  process.stdout.write = orig;
+  const text = out.join("");
+  check("exit 1", code === 1);
+  check("error envelope", text.includes('"status": "error"'));
+}
+
+// ── 5. Daemon spawn + RPC round-trip (auto-spawn path) ──────────────────────
+console.log("\n[5] daemon spawn + dispatch");
+{
+  const { spawnDaemon, pingDaemon, rpcCall, ensureDaemon } = await import("../src/whats_proxy/client.ts");
+  const { loadConfig, statePaths } = await import("../src/whats_proxy/config.ts");
+  const cfg = loadConfig();
+  const paths = statePaths(cfg);
+
+  await spawnDaemon(cfg, 30_000);
+  check("daemon answers ping", await pingDaemon(paths));
+
+  // connection-info
+  const info = await rpcCall(paths.sockFile, "connection-info");
+  check(
+    "connection-info ok",
+    !info.error && (info.result as { state: string }).state === "connecting" ||
+      (info.result as { state: string }).state === "disconnected",
+    JSON.stringify(info.result),
+  );
+
+  // dispatch a store-only action (chat-list works without auth — store is empty)
+  const resp = await rpcCall(paths.sockFile, "dispatch", { action: "chat-list", args: {} });
+  check("chat-list dispatched", !resp.error, resp.error?.message);
+  const result = resp.result as { meta: { status: string }; data: unknown };
+  check("chat-list ok envelope", result?.meta?.status === "ok");
+  check("chat-list data", Array.isArray((result?.data as { chats?: unknown })?.chats));
+
+  // unknown action through RPC
+  const bad = await rpcCall(paths.sockFile, "dispatch", { action: "nope", args: {} });
+  check("unknown action → RPC error", !!bad.error, JSON.stringify(bad.error));
+
+  // shutdown
+  const shut = await rpcCall(paths.sockFile, "shutdown");
+  check("shutdown ok", !shut.error);
+  await new Promise((r) => setTimeout(r, 600));
+  check("daemon stopped", !(await pingDaemon(paths)));
+}
+
+// ── 6. admin status (daemon down) ────────────────────────────────────────────
+console.log("\n[6] admin status");
+{
+  const { adminStatus } = await import("../src/whats_proxy/admin/status.ts");
+  const result = await adminStatus();
+  check("status ok envelope", result.meta.status === "ok");
+  const data = result.data as { daemon: { running: boolean }; auth: { present: boolean; hint: string } };
+  check("daemon.running false", data.daemon.running === false);
+  check("auth.present false", data.auth.present === false);
+  check("hint mentions admin setup", String(data.auth.hint).includes("admin setup"));
+}
+
+// ── 7. guide + connection-status (store-only, daemon up) ────────────────────
+console.log("\n[7] store-only actions via CLI (daemon auto-spawn)");
+{
+  const out: string[] = [];
+  const orig = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((s: string) => { out.push(String(s)); return true; }) as never;
+  const code = await main(["do", "guide"]);
+  process.stdout.write = orig;
+  const text = out.join("");
+  check("guide exit 0", code === 0);
+  check("guide lists 65 tools", text.includes("65"), text.match(/"total_tools": (\d+)/)?.[1]);
+  check("guide has categories", text.includes("categories"));
+
+  // Shut down the auto-spawned daemon so no detached process leaks.
+  const { rpcCall } = await import("../src/whats_proxy/client.ts");
+  const { loadConfig, statePaths } = await import("../src/whats_proxy/config.ts");
+  const paths = statePaths(loadConfig());
+  try {
+    await rpcCall(paths.sockFile, "shutdown");
+  } catch {
+    /* already down */
+  }
+  await new Promise((r) => setTimeout(r, 600));
+  check("daemon stopped after shutdown", !(await (await import("../src/whats_proxy/client.ts")).pingDaemon(paths)));
+}
+
+// ── Cleanup ─────────────────────────────────────────────────────────────────
+rmSync(WORK, { recursive: true, force: true });
+
+console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
+process.exit(failures === 0 ? 0 : 1);
