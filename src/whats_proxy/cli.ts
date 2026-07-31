@@ -108,9 +108,18 @@ async function cmdDo(argv: string[]): Promise<number> {
     if (arg === "-h" || arg === "--help") {
       help = true;
     } else if (arg === "-o" || arg === "--output-file") {
-      outputFile = rest.shift();
+      const v = rest.shift();
+      if (!v || v.startsWith("-")) {
+        print_error(`Option ${arg} requires a file path.`);
+        return 2;
+      }
+      outputFile = v;
     } else if (arg === "-f" || arg === "--format") {
       const v = rest.shift();
+      if (!v || v.startsWith("-")) {
+        print_error(`Option ${arg} requires a format (json|table).`);
+        return 2;
+      }
       fmt = v === "table" ? "table" : "json";
     } else if (arg.startsWith("-")) {
       print_error(`Unknown option: ${arg}`);

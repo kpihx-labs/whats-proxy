@@ -222,6 +222,26 @@ console.log("\n[8] CLI edge paths");
     check("-o stdout still JSON", (() => { try { JSON.parse(text); return true; } catch { return false; } })());
   }
 
+  // 8e. argument parsing errors: -o and -f without a value → exit 2, clear stderr
+  {
+    for (const args of [["do", "chat-list", "-o"], ["do", "chat-list", "-f"]]) {
+      const out: string[] = [];
+      const err: string[] = [];
+      const origOut = process.stdout.write.bind(process.stdout);
+      const origErr = process.stderr.write.bind(process.stderr);
+      process.stdout.write = ((s: string) => { out.push(String(s)); return true; }) as never;
+      process.stderr.write = ((s: string) => { err.push(String(s)); return true; }) as never;
+      const code = await main(args);
+      process.stdout.write = origOut;
+      process.stderr.write = origErr;
+      check(`missing value exit 2 (${args[2]})`, code === 2);
+      check(`missing value error msg (${args[2]})`, err.join("").includes("requires"));
+    }
+    // Unknown option → exit 2
+    const code = await main(["do", "chat-list", "--bogus"]);
+    check("unknown option exit 2", code === 2);
+  }
+
   // 8d. direct `daemon` command (hidden) serves RPC, then shuts down cleanly.
   // Runs on a fresh socket: stop any daemon first so the direct spawn is the
   // sole owner (also exercises the guard: a second spawn must exit quietly).
@@ -258,6 +278,24 @@ console.log("\n[8] CLI edge paths");
     try { await rpcCall(paths.sockFile, "shutdown"); } catch { /* already down */ }
     await new Promise((r) => setTimeout(r, 600));
     check("direct daemon stopped", !(await pingDaemon(paths)));
+  }
+
+  // 8f. hermetic sweep: no daemon may survive section 8 (kill-if-needed).
+  {
+    const { pingDaemon, rpcCall } = await import("../src/whats_proxy/client.ts");
+    try { await rpcCall(paths.sockFile, "shutdown"); } catch { /* already down */ }
+    await new Promise((r) => setTimeout(r, 600));
+    const stillUp = await pingDaemon(paths);
+    if (stillUp) {
+      // The daemon ignored shutdown (rare race) — force it via the pid file.
+      const { readFileSync } = await import("node:fs");
+      try {
+        const pid = Number(readFileSync(paths.pidFile, "utf-8").trim());
+        process.kill(pid, "SIGTERM");
+      } catch { /* no pid file */ }
+      await new Promise((r) => setTimeout(r, 800));
+    }
+    check("no daemon survives section 8", !(await pingDaemon(paths)));
   }
 }
 

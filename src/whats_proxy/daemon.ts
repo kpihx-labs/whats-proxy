@@ -24,7 +24,7 @@ import {
 } from "@whiskeysockets/baileys";
 import pino from "pino";
 import qrcode from "qrcode";
-import { createServer, type Socket } from "node:net";
+import { createServer, connect as netConnect, type Socket } from "node:net";
 import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -274,8 +274,25 @@ async function handleRequest(req: RpcRequest): Promise<unknown> {
 // ── Unix socket server ───────────────────────────────────────────────────────
 
 async function serveSocket(cfg: AppConfig, paths: ReturnType<typeof statePaths>) {
-  // Remove stale socket file (left over from a crashed daemon)
-  if (existsSync(paths.sockFile)) unlinkSync(paths.sockFile);
+  // Remove stale socket file (left over from a crashed daemon) — but NEVER a
+  // live one: probe it first. Two daemons racing to bind (guard TOCTOU window)
+  // must not unlink each other's socket; the loser probes, sees a live owner,
+  // and exits instead of hijacking.
+  if (existsSync(paths.sockFile)) {
+    const alive = await new Promise<boolean>((resolve) => {
+      const probe = netConnect(paths.sockFile);
+      probe.on("connect", () => {
+        probe.end();
+        resolve(true);
+      });
+      probe.on("error", () => resolve(false));
+    });
+    if (alive) {
+      log.info("Socket already served by a live daemon; exiting.");
+      process.exit(0);
+    }
+    unlinkSync(paths.sockFile);
+  }
 
   const server = createServer((client: Socket) => {
     let buffer = "";
