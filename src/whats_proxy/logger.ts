@@ -7,7 +7,7 @@
  */
 
 import { appendFileSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 
 export type LogLevel = "debug" | "info" | "warn" | "error" | "silent";
 
@@ -70,10 +70,6 @@ export function rotateLogFile(file: string) {
   } catch {
     /* ignore */
   }
-}
-
-export function defaultLogFile(stateDir: string): string {
-  return join(stateDir, "whats-proxy.log");
 }
 
 export const logger = new Logger();

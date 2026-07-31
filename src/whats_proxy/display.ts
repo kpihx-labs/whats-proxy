@@ -88,9 +88,6 @@ export function output_result(result: Output, format: "json" | "table" = "json")
 }
 
 /** Simple stderr diagnostics (never pollute stdout). */
-export function print_warning(msg: string) {
-  process.stderr.write(`[warn] ${msg}\n`);
-}
 export function print_error(msg: string) {
   process.stderr.write(`[error] ${msg}\n`);
 }

@@ -377,9 +377,3 @@ export async function startDaemon(): Promise<void> {
 
   log.info("Daemon ready. Use 'whats-proxy do <action>' or 'whats-proxy admin status'.");
 }
-
-// ── Default (exported for reuse by the CLI) ─────────────────────────────────
-
-export function daemonStatePaths(cfg: AppConfig): ReturnType<typeof statePaths> {
-  return statePaths(cfg);
-}
