@@ -24,32 +24,34 @@ const { loadConfig, statePaths } = await import("../src/whats_proxy/config.ts");
 const paths = statePaths(loadConfig());
 const entry = join(import.meta.dir, "../src/whats_proxy/index.ts");
 
-const daemonsAlive = () =>
-  Number(
-    execSync('ps aux | grep "bun.*whats_proxy.*daemon" | grep -v grep | wc -l')
-      .toString()
-      .trim(),
-  );
-
-// Hermetic baseline: any daemon left over from a previous run would poison the
-// "exactly 1 survivor" assertion (system-wide ps count). Clear them first.
-for (const pid of execSync('ps aux | grep "bun.*whats_proxy.*daemon" | grep -v grep | awk \'{print $2}\'')
-  .toString()
-  .trim()
-  .split("\n")
-  .filter(Boolean)) {
+/**
+ * Daemons owned by THIS test run: find candidate daemon processes with pgrep,
+ * then confirm ownership via each process's own env (WHATS_PROXY_STATE_DIR →
+ * WORK, visible through `ps eww <pid>`). Never touches daemons outside the
+ * test state dir — a user's real daemon with a live session is never killed
+ * by a test.
+ */
+const ownDaemonPids = (): string[] => {
+  let pids: string[] = [];
   try {
-    process.kill(Number(pid), "SIGKILL");
+    pids = execSync('pgrep -f "index.ts daemon"')
+      .toString()
+      .trim()
+      .split("\n")
+      .filter(Boolean);
   } catch {
-    /* already gone */
+    return []; // no candidates
   }
-}
-await new Promise((r) => setTimeout(r, 300));
-const baseline = daemonsAlive();
-if (baseline !== 0) {
-  console.log(`✗ baseline not clean (${baseline} daemons still alive); aborting.`);
-  process.exit(1);
-}
+  return pids.filter((pid) => {
+    try {
+      return execSync(`ps eww -o args ${pid}`).toString().includes(`WHATS_PROXY_STATE_DIR=${WORK}`);
+    } catch {
+      return false; // process gone
+    }
+  });
+};
+
+const daemonsAlive = () => ownDaemonPids().length;
 
 // Fire COUNT daemons at the same instant — the race the guard must resolve.
 const children = Array.from({ length: COUNT }, () =>
