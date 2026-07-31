@@ -9,6 +9,7 @@
  *   whats-proxy do <action> [payload|file] [-o file] [-f json|table] [-h]
  *   whats-proxy admin setup [--code] [--phone N]
  *   whats-proxy admin status
+ *   whats-proxy admin stop
  *   whats-proxy --version
  */
 
@@ -214,12 +215,19 @@ async function cmdAdmin(argv: string[]): Promise<number> {
       return result.meta.status === "error" ? 1 : 0;
     }
 
+    case "stop": {
+      const { adminStop } = await import("./admin/stop.ts");
+      const result = await adminStop();
+      print_json(result);
+      return result.meta.status === "error" ? 1 : 0;
+    }
+
     default:
       print_json({
         meta: { status: "error", comment: `Unknown admin subcommand: ${sub}`, edited: false },
         data: {
           error: `Unknown admin subcommand: ${sub}`,
-          usage: "whats-proxy admin setup|status",
+          usage: "whats-proxy admin setup|status|stop",
         },
       } satisfies Output);
       return 2;
@@ -260,6 +268,7 @@ export async function main(argv: string[]): Promise<number> {
           `  whats-proxy do <action> --help # per-action help\n` +
           `  whats-proxy admin setup [--code] [--phone N]\n` +
           `  whats-proxy admin status\n` +
+          `  whats-proxy admin stop\n` +
           `  whats-proxy --version\n`,
       );
       return cmd === "--help" || cmd === "-h" || cmd === undefined ? 0 : 2;

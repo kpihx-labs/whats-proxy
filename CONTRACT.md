@@ -9,7 +9,7 @@
 Refonte totale du MCP `whats-mcp` (`~/Work/AI/MCPs/whats_mcp`) suivant exactement le modèle non-MCP de `tg-proxy` (`~/KpihX-Labs/tg_proxy`):
 
 - **CLI JSON-RPC 2.0** — `whats-proxy do <action> [payload|file] [--output-file/-o] [--format/-f json|table] [--help/-h]`
-- **Namespaces `do` + `admin`** — `whats-proxy admin setup|status` (admin = toujours JSON, pas de `--format`)
+- **Namespaces `do` + `admin`** — `whats-proxy admin setup|status|stop` (admin = toujours JSON, pas de `--format`)
 - **Sortie `meta` + `data`** — every response has the envelope
 - **Implémentation en Bun** (contrairement à tg-proxy qui est Python/uv/typer)
 - **Écosystème préservé** — the 65 whats-mcp tools are preserved as flat `do` actions; `k-whatsapp` skill keeps working (CLI instead of MCP transport)
@@ -43,6 +43,7 @@ whats-proxy
 |---------|------|--------|:-----------:|---------|
 | `whats-proxy admin setup` | First-time auth — QR in terminal OR pairing code via `--phone` | JSON (final) | ✅ | Baileys |
 | `whats-proxy admin status` | Connection + account + store summary | JSON | ❌ | Baileys (fresh probe) |
+| `whats-proxy admin stop` | Stop the daemon cleanly (store snapshot persisted, session creds kept) | JSON | ✅ | RPC shutdown |
 
 ### `whats-proxy do` — RPC Actions (JSON default, table via `--format/-f`)
 
@@ -265,7 +266,7 @@ whats-proxy
 ```
 whats-proxy
    │
-   ├── admin setup|status                    # Baileys auth + status (ALWAYS JSON)
+   ├── admin setup|status|stop               # Baileys auth + status + daemon stop (ALWAYS JSON)
    └── do <action> [payload] [-o file] [-f fmt]
        │
        ▼

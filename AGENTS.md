@@ -31,7 +31,7 @@ src/whats_proxy/          # all source
 ├── index.ts cli.ts client.ts daemon.ts store.ts helpers.ts
 ├── config.ts logger.ts display.ts doc.ts version.ts exceptions.ts types.ts
 ├── actions/              # 13 category modules + history.ts + registry.ts
-└── admin/                # setup.ts + status.ts
+└── admin/                # setup.ts + status.ts + stop.ts
 scripts/smoke.ts          # 30-check end-to-end smoke
 tests/                    # bun test: helpers, store, display
 ```

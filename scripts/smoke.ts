@@ -155,17 +155,21 @@ console.log("\n[7] store-only actions via CLI (daemon auto-spawn)");
   check("guide lists 65 tools", text.includes("65"), text.match(/"total_tools": (\d+)/)?.[1]);
   check("guide has categories", text.includes("categories"));
 
-  // Shut down the auto-spawned daemon so no detached process leaks.
-  const { rpcCall } = await import("../src/whats_proxy/client.ts");
+  // Stop the auto-spawned daemon through the real `admin stop` CLI path
+  // (clean exit: store persisted, session creds kept — no detached leak).
+  const out2: string[] = [];
+  const orig2 = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((s: string) => { out2.push(String(s)); return true; }) as never;
+  const stopCode = await main(["admin", "stop"]);
+  process.stdout.write = orig2;
+  const stopText = out2.join("");
+  check("admin stop exit 0", stopCode === 0);
+  check("admin stop ok envelope", stopText.includes('"status": "ok"'));
+  check("admin stop stopped true", stopText.includes('"stopped": true'));
+  await new Promise((r) => setTimeout(r, 600));
   const { loadConfig, statePaths } = await import("../src/whats_proxy/config.ts");
   const paths = statePaths(loadConfig());
-  try {
-    await rpcCall(paths.sockFile, "shutdown");
-  } catch {
-    /* already down */
-  }
-  await new Promise((r) => setTimeout(r, 600));
-  check("daemon stopped after shutdown", !(await (await import("../src/whats_proxy/client.ts")).pingDaemon(paths)));
+  check("daemon stopped after stop", !(await (await import("../src/whats_proxy/client.ts")).pingDaemon(paths)));
 }
 
 // ── Cleanup ─────────────────────────────────────────────────────────────────

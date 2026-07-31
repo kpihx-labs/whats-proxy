@@ -30,6 +30,7 @@ Requires [Bun](https://bun.sh) >= 1.1.
 whats-proxy admin setup            # shows QR code in terminal
 whats-proxy admin setup --code     # phone-pairing mode (enter code on phone)
 whats-proxy admin status           # check daemon + auth state
+whats-proxy admin stop             # stop the daemon (persists store, keeps session)
 ```
 
 The daemon auto-spawns on first `do` command. Session credentials live in `~/.config/whats-proxy/state/` — **never delete this folder** or you must re-pair.
@@ -40,11 +41,13 @@ The daemon auto-spawns on first `do` command. Session credentials live in `~/.co
 whats-proxy do <action> [payload|file] [-o file] [-f json|table] [-h]
 whats-proxy admin setup [--code] [--phone N]
 whats-proxy admin status
+whats-proxy admin stop
 whats-proxy --version
 ```
 
 - **`do`** — dispatch an action. `payload` is a JSON string or a path to a JSON file. Non-object payloads are wrapped as `{ "value": ... }`.
 - **`admin`** — daemon/auth management. Always JSON output; refuses `-f`/`-o` (exit 2).
+- **`admin stop`** — cleanly stops the daemon: store snapshot persisted, session credentials kept (`state/auth/` untouched). Next `do` auto-spawns it again.
 - Every response is an envelope: `{ "meta": { "status": "ok"|"error", "comment": "", "edited": false }, "data": {...} }`.
 - Errors exit `1` with the envelope on stderr. Autosave writes each call to `/tmp/whats-proxy-autosave/`.
 
@@ -66,7 +69,7 @@ whats-proxy (CLI, Bun)                daemon (detached background process)
 ┌──────────────────────┐    spawn     ┌───────────────────────────────────┐
 │ do <action>          │ ───────────► │ Baileys socket (WhatsApp session)  │
 │   payload/file       │              │ + in-memory Store                 │
-│ admin setup/status   │              │ JSON-RPC 2.0 over Unix socket      │
+│ admin setup/status/stop │         │ JSON-RPC 2.0 over Unix socket      │
 │ --version            │ ◄─────────── │   ping | connection-info |         │
 └──────────────────────┘  newline     │   dispatch | shutdown              │
                           JSON-RPC    └───────────────────────────────────┘
