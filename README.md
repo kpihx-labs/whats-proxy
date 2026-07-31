@@ -107,7 +107,10 @@ bun install
 make check       # tsc --noEmit + bun test + smoke (isolated state)
 make test        # unit tests only
 make smoke       # end-to-end: spawn daemon, RPC, CLI catalog
+make stress      # race test: N simultaneous daemon spawns → exactly 1 survives
 ```
+
+Shell completions (zsh + bash) for the 65 actions live in `completions/` — source or symlink them (e.g. `completions/_whats-proxy` → `$fpath` for zsh).
 
 Layout:
 

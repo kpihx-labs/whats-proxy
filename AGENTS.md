@@ -20,9 +20,15 @@ Non-MCP CLI proxy for WhatsApp. Full `whats-mcp` catalog (65 actions) as flat JS
 make check        # tsc --noEmit + bun test + smoke
 make test         # unit tests only
 make smoke        # end-to-end (isolated state dir)
+make stress       # daemon race stress test (O_EXCL lock arbitration)
 make install      # bun link global
 make git-push     # push to github + gitlab (both remotes)
 ```
+
+Daemon ownership: `O_CREAT|O_EXCL` lockfile (`whats-proxy.lock`) — kernel-atomic,
+exactly one winner; socket bound before WhatsApp connect; losers exit. Never
+"fix" this with socket probing alone — Unix sockets cannot arbitrate races
+(a second listen() on the same path silently binds an orphaned inode).
 
 ## Structure
 
@@ -32,7 +38,8 @@ src/whats_proxy/          # all source
 ├── config.ts logger.ts display.ts doc.ts version.ts exceptions.ts types.ts
 ├── actions/              # 13 category modules + history.ts + registry.ts
 └── admin/                # setup.ts + status.ts + stop.ts
-scripts/smoke.ts          # 44-check end-to-end smoke (incl. CLI edge paths + spawn guard)
+scripts/smoke.ts          # 50-check end-to-end smoke (CLI edge paths, spawn guard, hermetic sweep)
+scripts/stress.ts         # daemon race stress test (default 8 spawns, `make stress`)
 tests/                    # bun test: helpers, store, display
 ```
 

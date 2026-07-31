@@ -7,7 +7,7 @@ VERSION       := $(shell grep -m 1 '"version"' package.json | tr -s ' ' | cut -d
 BUN     := $(shell command -v bun 2>/dev/null || echo bun)
 TS_FILES := $(shell find $(PKG_DIR) -name "*.ts")
 
-.PHONY: help check typecheck test smoke install uninstall link git-push push git-install-hooks release
+.PHONY: help check typecheck test smoke stress install uninstall link git-push push git-install-hooks release
 
 help: ## Show help
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*##"}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -25,6 +25,9 @@ test: ## Unit tests (bun test)
 
 smoke: ## Smoke test — CLI + daemon end-to-end (isolated state dir)
 	@$(BUN) run smoke
+
+stress: ## Race stress test — N simultaneous daemon spawns, exactly 1 must survive
+	@$(BUN) run scripts/stress.ts
 
 # ─── Install / Uninstall ───
 

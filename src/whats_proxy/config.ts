@@ -91,6 +91,7 @@ export function statePaths(cfg: AppConfig) {
     pidFile: join(dir, "whats-proxy.pid"),
     logFile: join(dir, "whats-proxy.log"),
     sockFile: join(dir, "whats-proxy.sock"),
+    lockFile: join(dir, "whats-proxy.lock"),
     autosaveDir: "/tmp/whats-proxy-autosave",
   };
 }

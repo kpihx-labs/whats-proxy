@@ -24,8 +24,8 @@ import {
 } from "@whiskeysockets/baileys";
 import pino from "pino";
 import qrcode from "qrcode";
-import { createServer, connect as netConnect, type Socket } from "node:net";
-import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from "node:fs";
+import { createServer, type Socket } from "node:net";
+import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync, openSync, closeSync } from "node:fs";
 import { join } from "node:path";
 
 import { loadConfig, type AppConfig, statePaths, ensureDirs } from "./config.ts";
@@ -255,6 +255,11 @@ async function handleRequest(req: RpcRequest): Promise<unknown> {
         return rpcError(id, -32601, `Unknown action: ${action}. Run 'whats-proxy do --help' for the catalog.`);
       }
       try {
+        // Wait for Baileys init (socket bound before createSocket now): the
+        // client may dispatch in the tiny window while `sock` is still null.
+        for (let i = 0; i < 150 && !sock; i++) {
+          await new Promise((r) => setTimeout(r, 200));
+        }
         const output = await def.handler(args, buildContext());
         schedulePersist();
         return { jsonrpc: "2.0", id, result: output };
@@ -273,26 +278,54 @@ async function handleRequest(req: RpcRequest): Promise<unknown> {
 
 // ── Unix socket server ───────────────────────────────────────────────────────
 
-async function serveSocket(cfg: AppConfig, paths: ReturnType<typeof statePaths>) {
-  // Remove stale socket file (left over from a crashed daemon) — but NEVER a
-  // live one: probe it first. Two daemons racing to bind (guard TOCTOU window)
-  // must not unlink each other's socket; the loser probes, sees a live owner,
-  // and exits instead of hijacking.
-  if (existsSync(paths.sockFile)) {
-    const alive = await new Promise<boolean>((resolve) => {
-      const probe = netConnect(paths.sockFile);
-      probe.on("connect", () => {
-        probe.end();
-        resolve(true);
-      });
-      probe.on("error", () => resolve(false));
-    });
-    if (alive) {
-      log.info("Socket already served by a live daemon; exiting.");
-      process.exit(0);
+/**
+ * Acquire the exclusive daemon lock (O_CREAT|O_EXCL — kernel-atomic).
+ *
+ * Exactly one process can create the lock file; every other contender gets
+ * EEXIST and loses the race. A stale lock (crashed daemon) is recovered by
+ * probing the socket: if nothing answers, the lock is dead — steal it and
+ * retry once.
+ */
+async function acquireLock(lockFile: string, sockFile: string): Promise<boolean> {
+  const tryLock = (): boolean => {
+    try {
+      const fd = openSync(lockFile, "wx");
+      closeSync(fd);
+      writeFileSync(lockFile, String(process.pid));
+      return true;
+    } catch {
+      return false;
     }
-    unlinkSync(paths.sockFile);
+  };
+
+  if (tryLock()) return true;
+
+  // Lock exists — is the owner alive? Probe the socket.
+  const { connect } = await import("node:net");
+  const alive = await new Promise<boolean>((resolve) => {
+    const probe = connect(sockFile);
+    probe.on("connect", () => {
+      probe.end();
+      resolve(true);
+    });
+    probe.on("error", () => resolve(false));
+  });
+  if (alive) return false;
+
+  // Stale lock (owner crashed): steal it and retry once.
+  try {
+    unlinkSync(lockFile);
+    return tryLock();
+  } catch {
+    return false;
   }
+}
+
+async function serveSocket(cfg: AppConfig, paths: ReturnType<typeof statePaths>) {
+  // Remove stale socket file (left over from a crashed daemon). Single
+  // ownership is guaranteed by the exclusive lockfile (startDaemon), so a
+  // live socket can never exist here.
+  if (existsSync(paths.sockFile)) unlinkSync(paths.sockFile);
 
   const server = createServer((client: Socket) => {
     let buffer = "";
@@ -318,8 +351,15 @@ async function serveSocket(cfg: AppConfig, paths: ReturnType<typeof statePaths>)
     client.on("error", () => { /* client went away */ });
   });
 
-  await new Promise<void>((resolve, reject) => {
-    server.on("error", reject);
+  // Bind the socket. The exclusive lock guarantees we are the sole owner, so
+  // EADDRINUSE here would mean a stale-lock bug — exit rather than serve
+  // socket-less (that leaks an orphaned daemon).
+  await new Promise<void>((resolve) => {
+    server.once("error", (err) => {
+      const code = (err as NodeJS.ErrnoException).code;
+      log.warn(`Socket bind failed (${code}); exiting.`);
+      process.exit(code === "EADDRINUSE" ? 0 : 1);
+    });
     server.listen(paths.sockFile, () => resolve());
   });
 
@@ -334,20 +374,14 @@ export async function startDaemon(): Promise<void> {
   rotateLogFile(paths.logFile);
   log = new Logger((config.logging?.level as never) || "info", paths.logFile);
 
-  // Guard: if a live daemon already owns the socket (spawn race — two `do`
-  // commands started simultaneously), do NOT hijack its socket. The loser
-  // exits quietly; the winner keeps the session. Prevents orphaned daemons
-  // whose socket file was unlinked by the newcomer.
-  if (existsSync(paths.sockFile)) {
-    try {
-      const { pingDaemon } = await import("./client.ts");
-      if (await pingDaemon(paths)) {
-        log.info("Another daemon is already serving; exiting.");
-        process.exit(0);
-      }
-    } catch {
-      /* socket exists but unresponsive → stale, safe to take over */
-    }
+  // ── Atomic single-owner lock ─────────────────────────────────────────────
+  // O_CREAT|O_EXCL is kernel-atomic: exactly one daemon wins. Unix sockets
+  // CANNOT provide this (a second listen() on the same path silently binds an
+  // orphaned inode — empirically proven). Losers exit; the winner owns the
+  // session. A stale lock (crashed daemon) is detected via the socket probe.
+  if (!(await acquireLock(paths.lockFile, paths.sockFile))) {
+    log.info("Another daemon holds the lock; exiting.");
+    process.exit(0);
   }
 
   // PID lifecycle
@@ -399,14 +433,17 @@ export async function startDaemon(): Promise<void> {
     if (imported > 0) log.info(`Seeded ${imported} watchlist(s) from config into store`);
   }
 
-  // Connect WhatsApp FIRST (QR or existing auth) so that by the time the
-  // socket server is up, `sock` is assigned and dispatch never races init.
-  mkdirSync(paths.auth, { recursive: true });
-  await createSocket(paths.auth, config);
-
-  // Socket server after init: ping only answers once the daemon is truly ready.
+  // Bind the socket FIRST (we hold the lock): losers probing the socket now
+  // see a live owner and exit. The lock window is tiny — from lock to bind is
+  // microseconds — so the stale-recovery probe is reliable. `sock` (Baileys)
+  // is created afterwards; dispatch guards on `sock` assignment anyway.
   await serveSocket(config, paths);
   log.info(`Unix socket ready: ${paths.sockFile}`);
+
+  // Connect WhatsApp (QR or existing auth). The socket is already up, so a
+  // losing daemon's probe sees us as the live owner and exits promptly.
+  mkdirSync(paths.auth, { recursive: true });
+  await createSocket(paths.auth, config);
 
   log.info("Daemon ready. Use 'whats-proxy do <action>' or 'whats-proxy admin status'.");
 }

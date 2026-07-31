@@ -94,6 +94,8 @@ whats-proxy
 - `whats-proxy do` — if no daemon → **spawn a detached daemon** (`admin serve` in background), wait for readiness, then send the request.
 - `whats-proxy admin status` — independent probe (short-lived socket OR daemon state) — always works, even when the daemon is down.
 - Daemon lifecycle is fully transparent: pidfile + log in the state dir; `admin status` shows daemon state.
+- **Single-owner daemon lock** — ownership is decided by an `O_CREAT|O_EXCL` lockfile (`whats-proxy.lock`, kernel-atomic: exactly one winner). Unix sockets CANNOT arbitrate races (a second `listen()` on the same path silently binds an orphaned inode — empirically verified). The winner binds the socket FIRST, then connects WhatsApp; losers exit. A stale lock (crashed owner) is recovered via a socket probe. Stress-proven: 48 simultaneous spawns → exactly 1 survivor, 0 orphans (`make stress`).
+- **Spawn guard** — `startDaemon` acquires the lock before anything else; concurrent `do` invocations therefore never spawn competing daemons (the loser exits(0) instantly).
 
 ---
 
@@ -231,6 +233,7 @@ whats-proxy
 ├── store.json      # persistent Store snapshot (chats/contacts/messages/analytics)
 ├── whats-proxy.pid # daemon pidfile
 ├── whats-proxy.log # daemon + CLI log (rotating)
+├── whats-proxy.lock # daemon single-owner lock (O_EXCL — atomic race arbiter)
 └── whats-proxy.sock # daemon Unix socket (JSON-RPC 2.0)
 ```
 
