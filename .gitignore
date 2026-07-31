@@ -12,6 +12,7 @@ dist/
 state/
 store.json
 *.pid
+*.lock
 *.log
 *.sock
 
