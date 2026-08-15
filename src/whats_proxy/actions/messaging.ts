@@ -49,6 +49,11 @@ export default [
         { name: "mentions", description: "Optional: array of JIDs to @mention.", required: false },
       ],
       example: { jid: "33612345678", text: "Hello!" },
+      examples: [
+        { description: "Direct contact text", payload: { jid: "33612345678", text: "Hello, are you available at 14:00?" } },
+        { description: "Formatted group update", payload: { jid: "120363000000000@g.us", text: "*Sprint update*\n- Tests green\n- Review pending" } },
+        { description: "Reply and mention", payload: { jid: "120363000000000@g.us", text: "@Alice, noted.", quoted_id: "ABC123", mentions: ["33600000000@s.whatsapp.net"] } },
+      ],
       returns: "{ status, jid, message_id, timestamp }",
     },
     handler: async ({ jid, text, quoted_id, mentions }, { sock, store }) => {
@@ -72,6 +77,11 @@ export default [
         { name: "quoted_id", description: "Optional: message ID to reply/quote.", required: false },
       ],
       example: { jid: "33612345678", source: "/path/to/image.jpg", caption: "Look!" },
+      examples: [
+        { description: "Local image with caption", payload: { jid: "33612345678", source: "/home/user/Pictures/diagram.png", caption: "Architecture diagram" } },
+        { description: "Remote image", payload: { jid: "120363000000000@g.us", source: "https://example.com/announcement.jpg", caption: "Announcement" } },
+        { description: "Reply with an image", payload: { jid: "33612345678", source: "/home/user/Pictures/receipt.jpg", quoted_id: "ABC123" } },
+      ],
       returns: "{ status, jid, message_id, timestamp }",
     },
     handler: async ({ jid, source, caption, quoted_id }, { sock, store }) => {
@@ -97,6 +107,11 @@ export default [
         { name: "quoted_id", description: "Optional: message ID to reply/quote.", required: false },
       ],
       example: { jid: "33612345678", source: "/path/to/video.mp4", caption: "Watch this" },
+      examples: [
+        { description: "Local video", payload: { jid: "33612345678", source: "/home/user/Videos/demo.mp4", caption: "Demo recording" } },
+        { description: "GIF playback", payload: { jid: "120363000000000@g.us", source: "/home/user/Videos/loop.mp4", gif_playback: true } },
+        { description: "Video note", payload: { jid: "33612345678", source: "/home/user/Videos/answer.mp4", ptv: true } },
+      ],
       returns: "{ status, jid, message_id, timestamp }",
     },
     handler: async ({ jid, source, caption, gif_playback, ptv, quoted_id }, { sock, store }) => {
@@ -147,6 +162,11 @@ export default [
         { name: "quoted_id", description: "Optional: message ID to reply/quote.", required: false },
       ],
       example: { jid: "33612345678", source: "/path/to/report.pdf", filename: "report.pdf" },
+      examples: [
+        { description: "Local PDF", payload: { jid: "33612345678", source: "/home/user/Documents/report.pdf", filename: "report.pdf", mimetype: "application/pdf" } },
+        { description: "Remote document", payload: { jid: "120363000000000@g.us", source: "https://example.com/agenda.pdf", filename: "agenda.pdf" } },
+        { description: "Document reply", payload: { jid: "33612345678", source: "/home/user/Documents/answer.pdf", quoted_id: "ABC123" } },
+      ],
       returns: "{ status, jid, message_id, timestamp }",
     },
     handler: async ({ jid, source, filename, mimetype, caption, quoted_id }, { sock, store }) => {
@@ -400,6 +420,11 @@ export default [
         { name: "delay_ms", description: "Delay in ms between sends to avoid rate-limiting. Default 1000.", required: false },
       ],
       example: { jids: ["33612345678", "33600000000"], text: "Hi all!" },
+      examples: [
+        { description: "Two contacts", payload: { jids: ["33612345678", "33600000000"], text: "Meeting starts in ten minutes." } },
+        { description: "Contacts and a group", payload: { jids: ["33612345678", "120363000000000@g.us"], text: "The document is ready." } },
+        { description: "Rate-limited broadcast", payload: { jids: ["33612345678", "33600000000"], text: "*Reminder*\nPlease confirm attendance.", delay_ms: 1500 } },
+      ],
       returns: "{ total, sent, failed, results }",
     },
     handler: async ({ jids, text, delay_ms }, { sock }) => {

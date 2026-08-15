@@ -1,8 +1,10 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
  * whats-proxy — entry point.
  *
- * Single binary, namespaced CLI (mirrors tg-proxy):
+ * Single binary, namespaced CLI (follows tick-proxy). Bun owns installation
+ * and testing; Node.js runs the production binary because Baileys requires
+ * `ws` upgrade events Bun 1.3.11 does not implement.
  *   whats-proxy do <action> [payload|file] [-o file] [-f json|table]
  *   whats-proxy admin setup [--code] [--phone N]
  *   whats-proxy admin status

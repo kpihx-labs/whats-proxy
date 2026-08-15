@@ -4,15 +4,14 @@
  * Thin JSON-RPC 2.0 client over the daemon's Unix socket. Auto-spawns a
  * detached daemon when none is running (transparent: logged to the state
  * dir, pidfile written, `admin status` reflects it). Every method returns
- * the full Output envelope (`meta` + `data`) — same shape as tg-proxy.
+ * the full Output envelope (`meta` + `data`) — the tick-proxy standard.
  */
 
 import { connect as netConnect, type Socket } from "node:net";
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
-import { dirname } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { loadConfig, statePaths, type AppConfig } from "./config.ts";
 import { WhatsProxyError } from "./exceptions.ts";
@@ -75,9 +74,13 @@ export function unwrap(resp: RpcResponse): Output {
 
 // ── Daemon spawn / lifecycle ─────────────────────────────────────────────────
 
-function daemonEntry(): string {
-  // index.ts sits next to client.ts in src/whats_proxy/
-  return join(dirname(new URL(import.meta.url).pathname), "index.ts");
+function daemonCommand(): { executable: string; args: string[] } {
+  const sourceDir = dirname(new URL(import.meta.url).pathname);
+  const projectRoot = resolve(sourceDir, "../..");
+  return {
+    executable: process.execPath,
+    args: [join(projectRoot, "bin", "whats-proxy.mjs"), "daemon"],
+  };
 }
 
 /**
@@ -88,8 +91,9 @@ export async function spawnDaemon(cfg: AppConfig, waitMs = 30_000): Promise<void
   const paths = statePaths(cfg);
   mkdirSync(paths.dir, { recursive: true });
 
-  // Detached: keeps running after the CLI exits; logs to the state dir.
-  const child = spawn(process.execPath, [daemonEntry(), "daemon"], {
+   // Detached: keeps running after the CLI exits; diagnostics remain on stderr.
+   const command = daemonCommand();
+   const child = spawn(command.executable, command.args, {
     detached: true,
     stdio: ["ignore", "ignore", "ignore"],
     cwd: process.cwd(),
@@ -103,7 +107,7 @@ export async function spawnDaemon(cfg: AppConfig, waitMs = 30_000): Promise<void
     if (await pingDaemon(paths)) return;
     if (Date.now() > deadline) {
       throw new WhatsProxyError(
-        `Daemon did not become ready within ${waitMs / 1000}s. Check ${paths.logFile}.`,
+         `Daemon did not become ready within ${waitMs / 1000}s. Run 'whats-proxy admin status' and inspect stderr diagnostics.`,
         "DAEMON_START_TIMEOUT",
       );
     }
@@ -154,7 +158,30 @@ export class WaClient {
     return unwrap(resp);
   }
 
-  /** Raw RPC access (tg-proxy `raw` equivalent). */
+  /**
+   * Call the raw daemon JSON-RPC transport for internal lifecycle operations.
+   *
+   * This is intentionally a programmatic escape hatch, not a public `do`
+   * action: public WhatsApp operations must remain registry-routed so required
+   * argument validation, policies, HITL, preflight, and verification cannot be
+   * bypassed.
+   *
+   * Args:
+   *   method: Internal daemon method such as `ping`, `connection-info`, or
+   *     `shutdown`; never use it to bypass a registered WhatsApp action.
+   *   params: JSON-RPC parameters accepted by that internal method.
+   *
+   * Returns:
+   *   Raw JSON-RPC response object from the Unix-socket daemon.
+   *
+   * Examples:
+   *   await new WaClient().raw("ping")
+   *   // => { jsonrpc: "2.0", id: 1, result: { pong: true } }
+   *   await new WaClient().raw("connection-info")
+   *   // => { jsonrpc: "2.0", id: 1, result: { state: "open", ... } }
+   *   await new WaClient().raw("shutdown")
+   *   // => { jsonrpc: "2.0", id: 1, result: { meta: { status: "ok", ... }, data: { stopped: true, ... } } }
+   */
   async raw(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
     if (this.autoSpawn) await ensureDaemon(this.cfg);
     const resp = await rpcCall(this.paths.sockFile, method, params);

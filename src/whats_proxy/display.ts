@@ -1,7 +1,7 @@
 /**
  * whats-proxy — Display layer.
  *
- * Port of tg-proxy display.py / output_result, without external deps:
+ * Tick-proxy-standard output rendering without external dependencies:
  * plain ASCII rendering, no colors, no Rich. stdout carries ONLY the JSON
  * envelope (or the rendered table) — nothing else.
  */

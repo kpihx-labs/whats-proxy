@@ -93,7 +93,20 @@ console.log("\n[4] invalid payload");
 }
 
 // ── 5. Daemon spawn + RPC round-trip (auto-spawn path) ──────────────────────
-console.log("\n[5] daemon spawn + dispatch");
+// Required arguments are rejected before a daemon is spawned.
+console.log("\n[5] required payload validation");
+{
+  const out: string[] = [];
+  const orig = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((s: string) => { out.push(String(s)); return true; }) as never;
+  const code = await main(["do", "send-text", "{}"]);
+  process.stdout.write = orig;
+  check("missing required arguments exit 1", code === 1);
+  check("missing required arguments identify fields", out.join("").includes("jid, text"));
+}
+
+// ── 6. Daemon spawn + RPC round-trip (auto-spawn path) ──────────────────────
+console.log("\n[6] daemon spawn + dispatch");
 {
   const { spawnDaemon, pingDaemon, rpcCall, ensureDaemon } = await import("../src/whats_proxy/client.ts");
   const { loadConfig, statePaths } = await import("../src/whats_proxy/config.ts");
@@ -130,8 +143,8 @@ console.log("\n[5] daemon spawn + dispatch");
   check("daemon stopped", !(await pingDaemon(paths)));
 }
 
-// ── 6. admin status (daemon down) ────────────────────────────────────────────
-console.log("\n[6] admin status");
+// ── 7. admin status (daemon down) ────────────────────────────────────────────
+console.log("\n[7] admin status");
 {
   const { adminStatus } = await import("../src/whats_proxy/admin/status.ts");
   const result = await adminStatus();
@@ -142,8 +155,8 @@ console.log("\n[6] admin status");
   check("hint mentions admin setup", String(data.auth.hint).includes("admin setup"));
 }
 
-// ── 7. guide + connection-status (store-only, daemon up) ────────────────────
-console.log("\n[7] store-only actions via CLI (daemon auto-spawn)");
+// ── 8. guide + connection-status (store-only, daemon up) ────────────────────
+console.log("\n[8] store-only actions via CLI (daemon auto-spawn)");
 {
   const out: string[] = [];
   const orig = process.stdout.write.bind(process.stdout);
@@ -172,15 +185,15 @@ console.log("\n[7] store-only actions via CLI (daemon auto-spawn)");
   check("daemon stopped after stop", !(await (await import("../src/whats_proxy/client.ts")).pingDaemon(paths)));
 }
 
-// ── 8. CLI edge paths: no-payload, file-payload, -o output-file, direct daemon ──
-console.log("\n[8] CLI edge paths");
+// ── 9. CLI edge paths: no-payload, file-payload, -o output-file, direct daemon ──
+console.log("\n[9] CLI edge paths");
 {
   const { writeFileSync, existsSync } = await import("node:fs");
   const { join } = await import("node:path");
   const { loadConfig, statePaths } = await import("../src/whats_proxy/config.ts");
   const paths = statePaths(loadConfig());
 
-  // 8a. `do <action>` with NO payload (defaults apply)
+  // 9a. `do <action>` with NO payload (defaults apply)
   {
     const out: string[] = [];
     const orig = process.stdout.write.bind(process.stdout);
@@ -192,7 +205,7 @@ console.log("\n[8] CLI edge paths");
     check("no-payload ok envelope", text.includes('"status": "ok"'));
   }
 
-  // 8b. payload from a JSON FILE
+  // 9b. payload from a JSON FILE
   {
     const payloadFile = join(WORK, "payload.json");
     writeFileSync(payloadFile, JSON.stringify({ value: 1 }));
@@ -206,7 +219,7 @@ console.log("\n[8] CLI edge paths");
     check("file-payload ok envelope", text.includes('"status": "ok"'));
   }
 
-  // 8c. -o output-file: file written, result still printed, stdout pure JSON
+  // 9c. -o output-file: file written, result still printed, stdout pure JSON
   {
     const outFile = join(WORK, "out.json");
     const out: string[] = [];
@@ -222,7 +235,7 @@ console.log("\n[8] CLI edge paths");
     check("-o stdout still JSON", (() => { try { JSON.parse(text); return true; } catch { return false; } })());
   }
 
-  // 8e. argument parsing errors: -o and -f without a value → exit 2, clear stderr
+  // 9e. argument parsing errors: -o and -f without a value → exit 2, clear stderr
   {
     for (const args of [["do", "chat-list", "-o"], ["do", "chat-list", "-f"]]) {
       const out: string[] = [];
@@ -242,7 +255,7 @@ console.log("\n[8] CLI edge paths");
     check("unknown option exit 2", code === 2);
   }
 
-  // 8d. direct `daemon` command (hidden) serves RPC, then shuts down cleanly.
+  // 9d. direct `daemon` command (hidden) serves RPC, then shuts down cleanly.
   // Runs on a fresh socket: stop any daemon first so the direct spawn is the
   // sole owner (also exercises the guard: a second spawn must exit quietly).
   {
@@ -280,7 +293,7 @@ console.log("\n[8] CLI edge paths");
     check("direct daemon stopped", !(await pingDaemon(paths)));
   }
 
-  // 8f. hermetic sweep: no daemon may survive section 8 (kill-if-needed).
+  // 9f. hermetic sweep: no daemon may survive section 9 (kill-if-needed).
   {
     const { pingDaemon, rpcCall } = await import("../src/whats_proxy/client.ts");
     try { await rpcCall(paths.sockFile, "shutdown"); } catch { /* already down */ }
@@ -295,10 +308,10 @@ console.log("\n[8] CLI edge paths");
       } catch { /* no pid file */ }
       await new Promise((r) => setTimeout(r, 800));
     }
-    check("no daemon survives section 8", !(await pingDaemon(paths)));
+    check("no daemon survives section 9", !(await pingDaemon(paths)));
   }
 
-  // 8g. idle-exit: daemon with max_idle_minutes exits itself after inactivity
+  // 9g. idle-exit: daemon with max_idle_minutes exits itself after inactivity
   {
     const { spawn } = await import("node:child_process");
     const { pingDaemon, rpcCall } = await import("../src/whats_proxy/client.ts");

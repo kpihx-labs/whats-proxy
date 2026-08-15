@@ -19,6 +19,14 @@ export interface ActionArg {
   type?: string;
 }
 
+/** One concrete action-owned help scenario, rendered as an executable command. */
+export interface ActionExample {
+  /** What the scenario proves or changes. */
+  description: string;
+  /** Valid JSON payload for this exact scenario. */
+  payload: Record<string, unknown>;
+}
+
 /** Static metadata describing an action — powers `--help`. */
 export interface ActionMeta {
   action: string;
@@ -26,6 +34,8 @@ export interface ActionMeta {
   description: string;
   arguments: ActionArg[];
   example?: Record<string, unknown>;
+  /** Extra semantic scenarios for complex action families. */
+  examples?: ActionExample[];
   returns?: string;
 }
 
@@ -52,3 +62,26 @@ export interface ActionDef {
 
 /** Registry: kebab-case action name → definition. */
 export type ActionRegistry = Record<string, ActionDef>;
+
+/**
+ * Validate universally declared required arguments before an action can review or execute.
+ *
+ * Args:
+ *   definition: Registered action whose declarative argument schema is checked.
+ *   args: Decoded JSON payload supplied by the CLI client.
+ *
+ * Returns:
+ *   A readable validation error, or null when every required argument is present.
+ *
+ * Examples:
+ *   validateRequiredArguments(definition, { jid: "33600000000", text: "Hello" })
+ *   // => null
+ *   validateRequiredArguments(definition, { jid: "33600000000" })
+ *   // => "Missing required argument(s) for send-text: text."
+ */
+export function validateRequiredArguments(definition: ActionDef, args: Record<string, unknown>): string | null {
+  const missing = definition.meta.arguments
+    .filter((argument) => argument.required && (args[argument.name] === undefined || args[argument.name] === null || args[argument.name] === ""))
+    .map((argument) => argument.name);
+  return missing.length === 0 ? null : `Missing required argument(s) for ${definition.meta.action}: ${missing.join(", ")}.`;
+}

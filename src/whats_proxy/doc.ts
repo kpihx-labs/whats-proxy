@@ -2,11 +2,71 @@
  * whats-proxy — Documentation / help rendering.
  *
  * Generates `--help` output dynamically from the action registry
- * (JSDoc-style metadata + zod schemas), mirroring tg-proxy's doc.py.
+ * (JSDoc-style metadata + declared action arguments), following tick-proxy.
  * No hand-maintained help text: every action declares its own doc.
  */
 
-import type { ActionDef, ActionRegistry } from "./actions/types.ts";
+import { policyFor } from "./actions/policies.ts";
+import type { ActionDef, ActionExample, ActionRegistry } from "./actions/types.ts";
+
+/**
+ * Build the canonical executable examples for one action help page.
+ *
+ * Each action can declare semantic scenarios in `meta.examples`. When it has
+ * none, its safe canonical payload expands into three transport forms. This
+ * keeps all 65 pages executable without duplicating payloads outside registry
+ * metadata, while complex actions document meaningful branches themselves.
+ *
+ * Args:
+ *   definition: Registered action whose declarative metadata is rendered.
+ *
+ * Returns:
+ *   At least three executable command/documentation lines.
+ *
+ * Examples:
+ *   getActionExamples(REGISTRY["send-text"]).length >= 3
+ *   // => true
+ *   getActionExamples(REGISTRY["chat-list"])[0].includes("chat-list")
+ *   // => true
+ */
+export function getActionExamples(definition: ActionDef): string[] {
+  const { action, example = {} } = definition.meta;
+  const semanticExamples: ActionExample[] = definition.meta.examples?.length
+    ? definition.meta.examples
+    : [
+      { description: "Inline JSON", payload: example },
+      { description: "Payload file", payload: example },
+      { description: "Capture JSON", payload: example },
+    ];
+  const file = `/tmp/${action}.json`;
+  const result = `/tmp/${action}-result.json`;
+  const canonicalPayload = JSON.stringify(example);
+  const examples = semanticExamples.map(({ description, payload }, index) => {
+    const encoded = JSON.stringify(payload);
+    if (index === 1 && !definition.meta.examples?.length) {
+      return `${description}: save ${encoded} as ${file}, then run: whats-proxy do ${action} ${file}`;
+    }
+    if (index === 2 && !definition.meta.examples?.length) {
+      return `${description}: whats-proxy do ${action} '${encoded}' -o ${result}`;
+    }
+    return `${description}: whats-proxy do ${action} '${encoded}'`;
+  });
+  const policy = policyFor(action);
+  if (policy) {
+    examples.push(`Review path: whats-proxy do ${action} '${canonicalPayload}'  # local HITL opens; rejection or timeout is fail-closed`);
+  }
+  if (policy?.preflight) {
+    examples.push(`Preflight path: use the same target only after it exists in the local Store or remote WhatsApp resource; an unknown destructive target is rejected before HITL.`);
+  }
+  const required = definition.meta.arguments.filter((argument) => argument.required);
+  if (required.length > 0) {
+    examples.push(`Validation path: whats-proxy do ${action} '{}'  # rejected before daemon execution: missing ${required.map((argument) => argument.name).join(", ")}`);
+  }
+  if (!definition.meta.arguments.length) {
+    examples.push(`Table display: whats-proxy do ${action} '{}' -f table`);
+  }
+  return examples;
+}
 
 /** Compact help: one line per action (used by `whats-proxy do --help`). */
 export function getCompactHelp(registry: ActionRegistry): string {
@@ -26,7 +86,22 @@ export function getCompactHelp(registry: ActionRegistry): string {
   return lines.join("\n");
 }
 
-/** Full help for one action: description, arguments, example, schema. */
+/**
+ * Render full help for one action: description, arguments, and executable examples.
+ *
+ * Args:
+ *   name: Kebab-case action name selected by the CLI.
+ *   registry: Complete action registry used for lookup.
+ *
+ * Returns:
+ *   Formatted help text, or a readable unknown-action error.
+ *
+ * Examples:
+ *   getActionHelp("chat-list", REGISTRY).includes("Examples:")
+ *   // => true
+ *   getActionHelp("missing", REGISTRY)
+ *   // => "Unknown action: missing"
+ */
 export function getActionHelp(name: string, registry: ActionRegistry): string {
   const def: ActionDef | undefined = registry[name];
   if (!def) return `Unknown action: ${name}`;
@@ -50,9 +125,12 @@ export function getActionHelp(name: string, registry: ActionRegistry): string {
     lines.push("");
   }
 
-  if (meta.example) {
-    lines.push("Example:");
-    lines.push(`  whats-proxy do ${name} '${JSON.stringify(meta.example)}'`);
+  const examples = getActionExamples(def);
+  if (examples.length > 0) {
+    lines.push("Examples:");
+    for (const [index, example] of examples.entries()) {
+      lines.push(`  ${index + 1}. ${example}`);
+    }
     lines.push("");
   }
 

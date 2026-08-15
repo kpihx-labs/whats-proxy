@@ -111,6 +111,11 @@ export default [
         { name: "until", description: "Unix timestamp: only include messages at or before this time.", required: false },
       ],
       example: { query: "stage" },
+      examples: [
+        { description: "Global token search", payload: { query: "stage", limit: 20 } },
+        { description: "One-chat phrase search", payload: { query: "project review", jid: "33612345678", limit: 10 } },
+        { description: "Multi-chat time-bounded search", payload: { query: "deadline", jids: ["33612345678", "120363000000000@g.us"], since: 1786550400, limit: 50 } },
+      ],
       returns: "{ query, count, messages }",
     },
     handler: async ({ query, jid, jids, limit, since, until }, { store }) => {

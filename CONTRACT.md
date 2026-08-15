@@ -1,352 +1,141 @@
 # whats-proxy — Architecture Contract
 
-> **Status:** 🟡 DESIGN — Complete refonte of `whats-mcp` (MCP server) into a non-MCP CLI proxy, mirroring `tg-proxy` exactly in structure and interface.
-
----
+> **Status:** 🟢 **IMPLEMENTED — 65 actions.** `../tick_proxy/` is the sole standard reference for
+> proxy behavior. This contract defines its faithful Bun/Baileys adaptation where WhatsApp requires
+> a persistent local daemon and Store.
 
 ## Mission
 
-Refonte totale du MCP `whats-mcp` (`~/Work/AI/MCPs/whats_mcp`) suivant exactement le modèle non-MCP de `tg-proxy` (`~/KpihX-Labs/tg_proxy`):
+`whats-proxy` turns the complete `whats-mcp` catalogue into one local, non-MCP CLI:
 
-- **CLI JSON-RPC 2.0** — `whats-proxy do <action> [payload|file] [--output-file/-o] [--format/-f json|table] [--help/-h]`
-- **Namespaces `do` + `admin`** — `whats-proxy admin setup|status|stop` (admin = toujours JSON, pas de `--format`)
-- **Sortie `meta` + `data`** — every response has the envelope
-- **Implémentation en Bun** (contrairement à tg-proxy qui est Python/uv/typer)
-- **Écosystème préservé** — the 65 whats-mcp tools are preserved as flat `do` actions; `k-whatsapp` skill keeps working (CLI instead of MCP transport)
-
----
-
-## Mantras
-
-- **0 Hardcoding · 100% Flexibility:** No hardcoded paths, no hardcoded phone numbers, no per-env config.
-- **0 Magic · 100% Transparency:** Every API call is explicit; state directory and config are visible and documented.
-- **0 Trust · 100% Control:** The session/auth artifacts live in the user's state directory; the daemon is user-controlled.
-
----
-
-## Design — Single Binary, Namespaced CLI (mirrors tg-proxy v2)
-
-```
-whats-proxy
-   │
-   ├── admin <action>                      # ALWAYS JSON — Baileys session lifecycle
-   │   ├── setup                           # First-time auth: QR or pairing code (interactive)
-   │   └── status                          # Connection status, account info, store stats
-   │
-   └── do <action> [payload|file] [--output-file/-o] [--format/-f] [--help/-h]
-                                            # RPC — flat actions, JSON payload (inline or file)
+```text
+whats-proxy admin setup|status|stop       # always JSON
+whats-proxy do <action> [payload|file]    # 65 flat kebab-case RPC actions
 ```
 
-### `whats-proxy admin` — Admin (ALWAYS JSON to stdout — hardcoded, no --format)
+It preserves `tick-proxy` invariants: registry-only actions, pure JSON stdout, `meta` + `data`,
+dynamic action help, autosave, no Docker, stderr diagnostics, structural HITL policy, preflighted
+destructive writes, and explicit verification proofs. Bun owns package installation and testing;
+Node.js runs the production CLI and Baileys daemon because Bun 1.3.11 lacks the `ws` upgrade events
+required for a reliable WhatsApp handshake. A daemon remains necessary because WhatsApp history
+lives in a continuously synchronized local Store.
 
-| Command | Role | Output | Interactive | Backend |
-|---------|------|--------|:-----------:|---------|
-| `whats-proxy admin setup` | First-time auth — QR in terminal OR pairing code via `--phone` | JSON (final) | ✅ | Baileys |
-| `whats-proxy admin status` | Connection + account + store summary | JSON | ❌ | Baileys (fresh probe) |
-| `whats-proxy admin stop` | Stop the daemon cleanly (store snapshot persisted, session creds kept) | JSON | ✅ | RPC shutdown |
+## Non-negotiable invariants
 
-### `whats-proxy do` — RPC Actions (JSON default, table via `--format/-f`)
+1. **Registry only:** every action is one `ActionDef` in a category module and is aggregated once by
+   `actions/registry.ts`. Duplicate names crash at import.
+2. **Envelope always:** every response is
+   `{"meta":{"status","comment","edited"},"data":…}`. Failures exit 1; CLI misuse exits 2.
+3. **Stdout is machine-safe:** diagnostics, daemon notices, and HITL URLs use stderr. JSON is safe to
+   pipe; table format is an explicit `do -f table` presentation option.
+4. **One config surface:** optional environment overrides are in
+   `$HOME/.config/whats-proxy/.env`. `config.ts` owns documented defaults; no `config.json` exists.
+5. **No file logging:** diagnostics are stderr-only. There is no proxy log file or log-level setting.
+6. **Daemon ownership:** `O_CREAT|O_EXCL` lockfile decides the single owner, which binds the Unix
+   socket before connecting Baileys. Socket probing alone is never ownership arbitration.
+7. **No credential deletion:** `state/` contains Baileys authentication and is never removed by the
+   CLI. `admin stop` persists the Store but keeps authentication intact.
 
-**Meta options (ONLY for `do`, every `--` has its `-`):**
-- `--output-file <path>` / `-o <path>` — redirect output (path required)
-- `--format json|table` / `-f json|table` — display format (default: json)
-- `--help` / `-h` — show help with full docstring + schema
-- Payload (positional): inline JSON `'{"key":"val"}'` or file path `./payload.json`
+## Safety model
 
-**Output format — EVERY response has a `meta` section:**
+`src/whats_proxy/actions/policies.ts` is the single, executable safety contract. The registry applies
+each policy before exposing its handler; callers cannot bypass it with a CLI flag.
 
-```json
-{
-  "meta": {
-    "status": "ok" | "error",
-    "comment": "",
-    "edited": false
-  },
-  "data": { ... }
-}
+| Protection | Mechanism | Applies to |
+|---|---|---|
+| **Approval** | Local editable browser review, port `0`, 600-second fail-closed timeout | every send/edit, profile/group/channel mutation, contact blocking, business label mutation, media cleanup, and other consequential action |
+| **Preflight** | Read the local Store or WhatsApp resource before review, then lock declared identity fields | message deletion, destructive chat management, watchlist deletion, group leave/invite revocation, channel deletion, label deletion |
+| **Verification** | Post-write local Store read-back at `data.verification` | contact-tag and watchlist policy writes |
+
+For example, `delete-message` refuses to open HITL unless its `message_id` is in the local Store;
+`group-leave`, `channel-delete`, and Business-label deletion first read their remote target. A reviewer
+cannot change a preflighted identity such as `jid`, `message_id`, or `label_id`. A rejected or timed-out review returns
+`meta.status:"rejected"`, `data:null`, and exit 1. An approved write that fails remains
+`meta.status:"error"`; approval never masks a Baileys error.
+
+## HITL lifecycle
+
+1. Daemon validates and preflights the proposed payload.
+2. A local HTTP server binds directly to `127.0.0.1:0`; the actual OS port is printed to stderr and
+   opened with `xdg-open` when available.
+3. The reviewer may edit the complete JSON, approve, or reject with a comment.
+4. Locked preflight identities are compared after review, then the action executes once.
+5. Approved outputs carry `meta.status:"approved"`, comment, and edit state. No `meta.review` wrapper
+   exists. Required verification appears only under `data.verification`.
+
+## Daemon adaptation
+
+Unlike stateless TickTick REST calls, Baileys needs a durable socket and local Store:
+
+```text
+CLI do/admin ── JSON-RPC over Unix socket ── daemon
+                                             ├── Baileys session
+                                             ├── persistent Store snapshot
+                                             ├── 65-action registry + safety policies
+                                             └── O_EXCL lock + socket-first ownership
 ```
 
-**Pre-check (ALL `do` commands):** the daemon must be reachable. `whats-proxy do` auto-starts a detached daemon if none is running (transparent: logged, pidfile written, `admin status` reflects it). If auth is missing, the daemon refuses and `do` reports the error with a hint to run `admin setup`.
+`bin/whats-proxy.mjs` is the production Node.js + `tsx` launcher. This keeps the source TypeScript
+while avoiding Bun's incomplete `ws` upgrade-event shim in the Baileys connection path; Bun remains
+the dependency, typecheck, test, smoke, stress, and packaging toolchain.
 
----
+The daemon autostarts for `do`; `admin status` never starts it. Test isolation uses
+`WHATS_PROXY_STATE_DIR` and `WHATS_PROXY_CONFIG_DIR`; `make smoke` therefore never uses a real
+WhatsApp session.
 
-## Why a daemon? (WhatsApp ≠ Telegram)
+## Configuration
 
-`tg-proxy` is one-shot: every `do` opens a fresh Telethon session, queries, closes. Telegram has full server-side history, so one-shot reads are complete.
+The only optional override file is `$HOME/.config/whats-proxy/.env`. See `.env.example`: every line
+documents a valid value. It controls state placement, reconnect behavior, Store limits, QR rendering,
+and optional idle exit. Baileys credentials are session artifacts in `state/`, not environment secrets.
 
-**WhatsApp (Baileys) is different:**
-- The connection is a persistent WebSocket; the local **Store** is populated incrementally by live events (`chats.upsert`, `messages.upsert`, history sync).
-- There is **no server-side history dump**: reads like `get_messages`/`whatsup`/`daily_digest`/`search_messages` only work against the accumulated local store.
-- Reconnecting a fresh session per command would lose the store → reads would return empty. Not acceptable.
+## Commands and quality gates
 
-**Solution (transparent, documented, no magic):** `whats-proxy` runs a **background daemon** that owns the Baileys socket + Store. The `do` CLI is a thin **JSON-RPC 2.0 client** over a local Unix socket:
-
-```
-┌──────────────┐   JSON-RPC 2.0 (Unix socket)   ┌──────────────────────────┐
-│  whats-proxy │ ──────────────────────────────▶ │  whats-proxy daemon      │
-│  do <action> │                                 │  ├── Baileys socket       │
-│  (client)    │ ◀────────────────────────────── │  ├── Store (analytics…)   │
-└──────────────┘         response                │  └── action dispatcher    │
-                                                └──────────────────────────┘
-```
-
-- `whats-proxy do` — if the daemon socket is alive → send JSON-RPC request → print `meta`+`data` → exit.
-- `whats-proxy do` — if no daemon → **spawn a detached daemon** (`admin serve` in background), wait for readiness, then send the request.
-- `whats-proxy admin status` — independent probe (short-lived socket OR daemon state) — always works, even when the daemon is down.
-- Daemon lifecycle is fully transparent: pidfile + log in the state dir; `admin status` shows daemon state.
-- **Single-owner daemon lock** — ownership is decided by an `O_CREAT|O_EXCL` lockfile (`whats-proxy.lock`, kernel-atomic: exactly one winner). Unix sockets CANNOT arbitrate races (a second `listen()` on the same path silently binds an orphaned inode — empirically verified). The winner binds the socket FIRST, then connects WhatsApp; losers exit. A stale lock (crashed owner) is recovered via a socket probe. Stress-proven: 48 simultaneous spawns → exactly 1 survivor, 0 orphans (`make stress`).
-- **Spawn guard** — `startDaemon` acquires the lock before anything else; concurrent `do` invocations therefore never spawn competing daemons (the loser exits(0) instantly).
-
----
-
-## Actions — FLAT, ONE level after `do` (65 actions — full whats-mcp catalog)
-
-### Messaging (14)
-
-| Action | Tool (whats-mcp) | Notes |
-|--------|------------------|-------|
-| `send-text` | `send_text` | jid + text + quoted_id + mentions |
-| `send-image` | `send_image` | source: URL/base64/path + caption |
-| `send-video` | `send_video` | + gif_playback, ptv |
-| `send-audio` | `send_audio` | + ptt (voice note) |
-| `send-document` | `send_document` | + filename, mimetype |
-| `send-sticker` | `send_sticker` | WebP |
-| `send-location` | `send_location` | lat/long + name/address |
-| `send-contact` | `send_contact` | vCards array |
-| `send-reaction` | `send_reaction` | emoji or empty to remove |
-| `send-poll` | `send_poll` | question + options |
-| `edit-message` | `edit_message` | jid + message_id + new_text |
-| `delete-message` | `delete_message` | jid + message_id (+ from_me/participant) |
-| `forward-message` | `forward_message` | to_jid + message_id |
-| `batch-send-text` | `batch_send_text` | jids[] + text + delay_ms |
-
-### Chats (5)
-
-| Action | Tool | Notes |
-|--------|------|-------|
-| `chat-list` | `list_chats` | limit/offset/filter (all/groups/contacts/unread) |
-| `chat-read` | `get_messages` | limit/before_id/fetch_history/since/until/types — pagination |
-| `chat-manage` | `manage_chat` | archive/pin/mute/mark_read/delete/clear… |
-| `chat-star` | `star_message` | star/unstar |
-| `chat-disappearing` | `set_disappearing` | 0/86400/604800/7776000 |
-
-### Contacts (6)
-
-| Action | Tool | Notes |
-|--------|------|-------|
-| `contact-check` | `check_phone_number` | phones[] → on WhatsApp? |
-| `contact-info` | `get_contact_info` | name/about/picture |
-| `contact-picture` | `get_profile_picture` | jid or 'me' + type |
-| `contact-block` | `manage_block` | block/unblock/list |
-| `contact-business` | `get_business_profile` | business profile |
-| `contact-list` | `list_contacts` | limit/offset/name/tag filters |
-
-### Groups (10)
-
-| Action | Tool | Notes |
-|--------|------|-------|
-| `group-create` | `create_group` | subject + participants[] |
-| `group-info` | `get_group_info` | full metadata + history |
-| `group-list` | `list_groups` | limit |
-| `group-subject` | `update_group_subject` | rename |
-| `group-description` | `update_group_description` | update/clear |
-| `group-participants` | `manage_group_participants` | add/remove/promote/demote |
-| `group-leave` | `leave_group` | leave |
-| `group-invite` | `manage_group_invite` | get/revoke/join |
-| `group-settings` | `update_group_settings` | announce/locked/ephemeral/… |
-| `group-picture` | `set_group_picture` | source |
-
-### Channels (5)
-
-| Action | Tool | Notes |
-|--------|------|-------|
-| `channel-create` | `create_channel` | name + desc/picture |
-| `channel-info` | `get_channel_info` | jid or invite link |
-| `channel-manage` | `manage_channel` | follow/unfollow/mute/unmute |
-| `channel-update` | `update_channel` | name/desc/picture/remove |
-| `channel-delete` | `delete_channel` | irreversible |
-
-### Labels (3)
-
-| Action | Tool | Notes |
-|--------|------|-------|
-| `label-manage` | `manage_label` | create/edit/delete/list (Business only) |
-| `label-chat` | `manage_chat_label` | add/remove chat label |
-| `label-message` | `manage_message_label` | add/remove message label |
-
-### Profile (4)
-
-| Action | Tool | Notes |
-|--------|------|-------|
-| `profile-name` | `update_display_name` | max 25 chars |
-| `profile-about` | `update_about` | max 139 chars |
-| `profile-picture` | `update_profile_picture` | source or 'remove' |
-| `profile-privacy` | `manage_privacy` | get/set settings |
-
-### Analytics (5)
-
-| Action | Tool | Notes |
-|--------|------|-------|
-| `analytics-overview` | `analytics_overview` | totals, top chats/tokens/senders, trends |
-| `analytics-top-chats` | `analytics_top_chats` | sortable ranking |
-| `analytics-chat-insights` | `analytics_chat_insights` | per-chat detail |
-| `analytics-timeline` | `analytics_timeline` | daily activity |
-| `analytics-search` | `analytics_search` | ranked search w/ time range |
-
-### Digest / Overview (4)
-
-| Action | Tool | Notes |
-|--------|------|-------|
-| `whatsup` | `whatsup` | daily overview, watchlist-first, needs-reply |
-| `find-messages` | `find_messages` | smart semantic search w/ topic expansion |
-| `messages-multi` | `get_messages_multi` | multi-chat read (jids[] or watchlist) |
-| `daily-digest` | `daily_digest` | structured daily digest |
-
-### Tags / Watchlists (2)
-
-| Action | Tool | Notes |
-|--------|------|-------|
-| `contact-tags` | `manage_contact_tags` | set/add/remove/get/list/list_by_tag |
-| `watchlist` | `manage_watchlist` | set/add/remove/get/list/delete |
-
-### Utilities (7)
-
-| Action | Tool | Notes |
-|--------|------|-------|
-| `connection-status` | `connection_status` | works even disconnected |
-| `guide` | `whatsapp_guide` | category help |
-| `presence` | `send_presence` | available/unavailable/composing/recording/paused |
-| `read-messages` | `read_messages` | mark read (receipts) |
-| `search-messages` | `search_messages` | local store search |
-| `media-download` | `download_media` | save media to `$HOME/.cache/whats_media/` |
-| `media-cleanup` | `cleanup_media` | clear media cache |
-
----
-
-## Config — `~/.config/whats-proxy/`
-
-```
-~/.config/whats-proxy/
-├── config.json     # non-sensitive settings (see below)
-├── .env            # optional env overrides (WHATS_PROXY_STATE_DIR, WHATS_PROXY_LOG_LEVEL)
-├── state/          # Baileys auth artifacts (creds.json, session files) — NEVER committed
-├── store.json      # persistent Store snapshot (chats/contacts/messages/analytics)
-├── whats-proxy.pid # daemon pidfile
-├── whats-proxy.log # daemon + CLI log (rotating)
-├── whats-proxy.lock # daemon single-owner lock (O_EXCL — atomic race arbiter)
-└── whats-proxy.sock # daemon Unix socket (JSON-RPC 2.0)
+```bash
+make help       # discover canonical targets
+make check      # typecheck + tests + isolated daemon smoke
+make stress     # concurrent daemon ownership proof
+make install    # Bun development link
+make git-push   # both github and gitlab remotes
 ```
 
-**config.json (defaults):**
-```json
-{
-  "state_directory": "~/.config/whats-proxy",
-  "connection": {
-    "reconnect_interval_ms": 3000,
-    "max_reconnect_attempts": 10,
-    "mark_online_on_connect": false,
-    "sync_full_history": true,
-    "refresh_app_state": true
-  },
-  "store": {
-    "max_messages_per_chat": 5000,
-    "max_chats": 1000,
-    "persist": true
-  },
-  "logging": {
-    "level": "info"
-  },
-  "watchlists": {}
-}
+`scripts/live.ts` is deliberately outside `make check`: it requires an operator to pair a physical
+WhatsApp device. Authentication failures are fail-closed; never invent a browser workaround.
+
+## Action catalogue
+
+The 65 action names remain registry-derived and are discoverable from the executable source:
+
+```bash
+whats-proxy do --help
+whats-proxy do send-text --help
+whats-proxy do send-text '{"jid":"33600000000","text":"Hello"}'
 ```
 
-**No secrets in config.json.** WhatsApp auth is a session artifact (creds.json) inside `state/`, created by `admin setup`. The only "secret" is the state directory itself.
+Every per-action `--help` page contains at least three executable examples generated from that
+action's central `meta.example`: inline JSON, a payload-file invocation, and result capture with
+`-o`. Required-argument actions additionally show fail-fast validation; HITL actions show the
+review path; destructive actions show their preflight condition; zero-argument reads show table
+rendering. `WaClient.raw()` is internal-only and explicitly documented with three lifecycle
+examples; it cannot bypass a registered `do` action's safety policy.
 
----
+Categories: messaging (14), chats (5), contacts (6), groups (10), channels (5), labels (3), profile
+(4), analytics (5), overview (2), digest (2), tags (1), watchlists (1), utilities (7).
 
-## Architecture
+## Project shape
 
+```text
+src/whats_proxy/
+├── cli.ts                 # one binary: do/admin/hidden daemon
+├── config.ts              # defaults + one .env override surface
+├── client.ts daemon.ts    # JSON-RPC lifecycle + Baileys owner
+├── hitl.ts                # local editable approval server
+├── actions/
+│   ├── registry.ts        # one registry map, duplicate detection
+│   ├── policies.ts        # approval/preflight/verification source of truth
+│   └── <domain>.ts        # ActionDefs and domain handlers
+├── admin/                 # setup, status, stop
+└── store.ts               # synchronized local WhatsApp state
+tests/                     # unit, policy, and local HTTP HITL coverage
+scripts/                   # isolated smoke, race stress, explicit live pairing
 ```
-whats-proxy
-   │
-   ├── admin setup|status|stop               # Baileys auth + status + daemon stop (ALWAYS JSON)
-   └── do <action> [payload] [-o file] [-f fmt]
-       │
-       ▼
-┌──────────────────────────────────────┐
-│  src/whats_proxy/                    │
-│  ├── index.ts        # entry point   │
-│  ├── cli.ts          # CLI dispatch  │
-│  ├── client.ts       # WaClient — Baileys + 65 actions + raw
-│  ├── store.ts        # persistent Store (analytics, watchlists)
-│  ├── helpers.ts      # JID helpers, media resolution, formatting
-│  ├── config.ts       # ~/.config/whats-proxy/config.json + env loader
-│  ├── display.ts      # print_json / print_table (meta+data envelope)
-│  ├── doc.ts          # dynamic --help injection (tg-proxy doc.py equivalent)
-│  ├── exceptions.ts   # WhatsProxyError (ts_proxy style)
-│  ├── logger.ts       # rotating file + stderr logger
-│  ├── daemon.ts       # background daemon: socket + store + RPC dispatch
-│  └── admin/          # setup (QR/pairing) + status
-└──────────────────────────────────────┘
-```
-
-### Doc system (tg-proxy doc.py equivalent)
-
-Each `WaClient` method has a **structured JSDoc** with mandatory sections:
-
-```
-Description of what this method does.
-More detail about behavior, edge cases, and limitations.
-
-Parameters:
-    - param (type): Description.
-
-Examples:
-    - whats-proxy do send-text '{"jid":"33612345678","text":"Hello"}'
-    - whats-proxy do send-text ./payload.json
-    - whats-proxy do send-text '{"jid":"@g.us","text":"Hi"}' -o result.json -f table
-```
-
-`doc.ts` extracts these at import time and injects them into CLI help (tg-proxy `apply_dynamic_docs()` pattern). The JSON schema appears inline in `--help`.
-
-**Result:** `whats-proxy do send-text --help` shows full docstring + exact payload schema — both **human-readable** and **agent-parseable**.
-
-### Store persistence
-
-- The Store mirrors whats-mcp `store.js` (chats, contacts, messages, analytics index, watchlists, contact tags).
-- On daemon exit / SIGTERM → snapshot to `store.json`. On daemon start → load snapshot. Sessions survive restarts; `admin setup` re-auths only when creds are missing/expired.
-- Analytics are rebuilt incrementally from events (same logic as whats-mcp `store.js`).
-
----
-
-## Error model
-
-| Case | Behavior |
-|------|----------|
-| Daemon not running | `do` spawns detached daemon, waits (≤30s), retries request once |
-| Auth missing | `do`/`admin status` → `{"meta":{"status":"error"},"data":{"error":"..."}}` + hint `whats-proxy admin setup`, exit 1 |
-| Invalid JSON / file not found | `WhatsProxyError` → same error envelope, exit 1 |
-| Action validation error | Same error envelope listing missing/unknown fields, exit 1 |
-| Action runtime error (Baileys) | Error envelope with Baileys message, exit 1 |
-| `admin` commands | Never accept `--format`/`--output-file`; ignore-with-error if passed |
-
----
-
-## Ecosystem preservation
-
-- `k-whatsapp` skill procedure ("What's up" slice, open threads, group index, JIDs, closure hygiene) is **transport-agnostic** — it works against `whats-proxy do chat-read` etc. exactly as it did against MCP tools. The skill file itself does NOT need changes (it references tool behavior, and the CLI is a drop-in).
-- JID conventions preserved: phone → `@s.whatsapp.net`, groups `@g.us`, channels `@newsletter`, `status@broadcast` skipped.
-- Topic expansion map (FR/EN) from `overview.js` preserved inside `find-messages`.
-
----
-
-## Deliverables
-
-- [x] Full whats-mcp catalog extraction (65 tools + schemas)
-- [x] CONTRACT.md (this file)
-- [x] `package.json` (bin: `whats-proxy`), `tsconfig.json`
-- [x] `src/whats_proxy/` — cli, client, store, helpers, config, display, doc, exceptions, logger, daemon, admin/
-- [x] `README.md`, `AGENTS.md`, `Makefile` (check/smoke/install/uninstall/git-push/release), `.env.example`, `scripts/install.sh`, `scripts/uninstall.sh`
-- [x] Tests (bun:test — 31 cases) + smoke test (44 checks)
-- [x] Version single-sourced via `version.ts` ← `package.json`; `admin stop` lifecycle; spawn guard for daemon races
-- [ ] Final verification: `admin setup` (QR), `admin status`, `do` against live daemon

@@ -2,7 +2,7 @@
  * whats-proxy — Shared types.
  *
  * The Output envelope is the single contract of every `do` and `admin`
- * command: `{ meta, data }`. Mirrors tg-proxy's OutputMeta/Output model.
+ * command: `{ meta, data }`, shared with the tick-proxy standard.
  */
 
 export type OutputStatus = "ok" | "approved" | "rejected" | "error";
@@ -15,7 +15,7 @@ export interface OutputMeta {
 
 export interface Output {
   meta: OutputMeta;
-  data: Record<string, unknown>;
+  data: Record<string, unknown> | null;
 }
 
 /** Connection states of the Baileys socket (mirrors whats-mcp connection.js). */

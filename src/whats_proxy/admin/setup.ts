@@ -7,6 +7,8 @@
  *
  * Runs a short-lived login socket (does NOT touch the daemon), saves auth
  * to the state directory, and returns the Output envelope (admin = JSON).
+ * It is deliberately executed by Node.js through the package launcher: Baileys
+ * depends on `ws` client upgrade events unavailable in Bun 1.3.11.
  */
 
 import {
@@ -88,6 +90,7 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
     sock.ev.on("creds.update", saveCreds);
 
     let codeRequested = false;
+    let receivedQr = false;
     let pairingCode: string | null = null;
 
     return await new Promise<Output>((resolve) => {
@@ -100,6 +103,7 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
+          receivedQr = true;
           if (opts.code && !codeRequested) {
             codeRequested = true;
             try {
@@ -154,6 +158,10 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
             clearTimeout(timeout);
             sock.end(undefined);
             resolve(errResult("Connection replaced by another session (440)."));
+          } else if (!receivedQr && !codeRequested) {
+            clearTimeout(timeout);
+            sock.end(undefined);
+            resolve(errResult(`Pairing connection closed before QR generation${statusCode ? ` (status ${statusCode})` : ""}. Check network access and retry.`));
           }
           // Other transient closes: keep waiting (reconnect handled by Baileys).
         }

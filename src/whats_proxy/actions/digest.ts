@@ -51,7 +51,7 @@ export default [
         "Get messages from multiple chats in one call. Specify JIDs directly or use a named watchlist from config. Supports time range and message type filters.",
       arguments: [
         { name: "jids", description: "Array of chat JIDs or phone numbers to fetch messages from.", required: false },
-        { name: "watchlist", description: "Name of a watchlist defined in config.json (e.g. 'groups', 'family'). Used if jids is empty.", required: false },
+        { name: "watchlist", description: "Name of a watchlist defined in the local Store or .env-backed defaults (e.g. 'groups', 'family'). Used if jids is empty.", required: false },
         { name: "limit_per_chat", description: "Max messages per chat (default 50, max 200).", required: false },
         { name: "since", description: "Unix timestamp: only include messages at or after this time.", required: false },
         { name: "until", description: "Unix timestamp: only include messages at or before this time.", required: false },

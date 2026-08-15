@@ -1,13 +1,9 @@
 /**
  * whats-proxy — Logger.
  *
- * Writes to the state-dir log file (whats-proxy.log) AND stderr.
- * stdout is RESERVED for JSON output (envelope) — never log to stdout.
- * Level is configurable via config.logging.level.
+ * Writes to stderr only. stdout is RESERVED for JSON output (envelope) and
+ * file logging is deliberately excluded, matching the proxy standard.
  */
-
-import { appendFileSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
 
 export type LogLevel = "debug" | "info" | "warn" | "error" | "silent";
 
@@ -21,55 +17,96 @@ const LEVEL_ORDER: Record<LogLevel, number> = {
 
 export class Logger {
   private level: LogLevel;
-  logFile: string | null;
 
-  constructor(level: LogLevel = "info", logFile?: string) {
+  /**
+   * Create a stderr-only diagnostic logger.
+   *
+   * Args:
+   *   level: Minimum severity emitted to stderr.
+   *
+   * Returns:
+   *   A logger instance that never writes to stdout or a file.
+   *
+   * Examples:
+   *   new Logger("silent").info("hidden")
+   *   // => no output
+   *   new Logger("info").error("connection failed")
+   *   // => "[... ] [ERROR] connection failed" on stderr
+   */
+  constructor(level: LogLevel = "info") {
     this.level = level;
-    this.logFile = logFile ?? null;
-    if (this.logFile) {
-      mkdirSync(dirname(this.logFile), { recursive: true });
-    }
   }
 
-  setLevel(level: LogLevel) {
+  /**
+   * Change the minimum stderr severity for subsequent messages.
+   *
+   * Args:
+   *   level: Minimum severity to retain.
+   *
+   * Returns:
+   *   Nothing; the logger state changes in place.
+   *
+   * Examples:
+   *   const log = new Logger(); log.setLevel("error")
+   *   // => subsequent info diagnostics are omitted
+   *   const log = new Logger("silent"); log.setLevel("debug")
+   *   // => debug diagnostics become visible
+   */
+  setLevel(level: LogLevel): void {
     this.level = level;
   }
 
+  /**
+   * Decide whether a severity passes the configured threshold.
+   *
+   * Args:
+   *   level: Severity being considered for emission.
+   *
+   * Returns:
+   *   True when the message is eligible for stderr output.
+   *
+   * Examples:
+   *   new Logger("warn").enabled("info")
+   *   // => false
+   *   new Logger("warn").enabled("error")
+   *   // => true
+   */
   private enabled(level: LogLevel): boolean {
     return LEVEL_ORDER[level] >= LEVEL_ORDER[this.level];
   }
 
-  private write(level: LogLevel, msg: string) {
+  /**
+   * Emit one formatted diagnostic to stderr when its severity is enabled.
+   *
+   * Args:
+   *   level: Severity label displayed in the diagnostic prefix.
+   *   msg: Human-readable diagnostic text.
+   *
+   * Returns:
+   *   Nothing; stdout remains untouched for JSON envelopes.
+   *
+   * Examples:
+   *   new Logger().write("info", "daemon started")
+   *   // => "[... ] [INFO] daemon started" on stderr
+   *   new Logger("error").write("debug", "details")
+   *   // => no output
+   */
+  private write(level: LogLevel, msg: string): void {
     if (!this.enabled(level)) return;
     const line = `[${new Date().toISOString()}] [${level.toUpperCase()}] ${msg}`;
 
     // stderr only (stdout stays pure JSON)
     process.stderr.write(line + "\n");
-
-    // File (append, rotates by being truncated on daemon start)
-    if (this.logFile) {
-      try {
-        appendFileSync(this.logFile, line + "\n", "utf-8");
-      } catch {
-        /* logging must never crash the process */
-      }
-    }
   }
 
-  debug(msg: string) { this.write("debug", msg); }
-  info(msg: string) { this.write("info", msg); }
-  warn(msg: string) { this.write("warn", msg); }
-  error(msg: string) { this.write("error", msg); }
-}
-
-/** Truncate/rotate the log file (called on daemon start). */
-export function rotateLogFile(file: string) {
-  try {
-    mkdirSync(dirname(file), { recursive: true });
-    appendFileSync(file, "", "utf-8"); // touch
-  } catch {
-    /* ignore */
-  }
+  /** Emit a debug diagnostic to stderr. Args: msg is the diagnostic text. Returns: nothing. Examples: logger.debug("retry 1") → stderr debug line; logger.debug("payload parsed") → stderr debug line. */
+  debug(msg: string): void { this.write("debug", msg); }
+  /** Emit an informational diagnostic to stderr. Args: msg is the diagnostic text. Returns: nothing. Examples: logger.info("daemon ready") → stderr info line; logger.info("QR received") → stderr info line. */
+  info(msg: string): void { this.write("info", msg); }
+  /** Emit a warning diagnostic to stderr. Args: msg is the diagnostic text. Returns: nothing. Examples: logger.warn("retrying") → stderr warning line; logger.warn("session expired") → stderr warning line. */
+  warn(msg: string): void { this.write("warn", msg); }
+  /** Emit an error diagnostic to stderr. Args: msg is the diagnostic text. Returns: nothing. Examples: logger.error("connection failed") → stderr error line; logger.error("invalid response") → stderr error line. */
+  error(msg: string): void { this.write("error", msg); }
 }
 
 export const logger = new Logger();

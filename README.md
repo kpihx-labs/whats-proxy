@@ -1,8 +1,8 @@
 # whats-proxy
 
-Non-MCP CLI proxy for WhatsApp — the full `whats-mcp` tool catalog (65 actions) exposed as a flat JSON-RPC CLI with a local background daemon, in the exact spirit and structure of [`tg-proxy`](https://github.com/KpihX/tg-proxy).
+Non-MCP CLI proxy for WhatsApp — the full `whats-mcp` tool catalog (65 actions) exposed as a flat JSON-RPC CLI with a local background daemon. Its sole proxy-standard reference is the sibling [`tick_proxy`](../tick_proxy/); Bun + Baileys are retained only for WhatsApp's persistent local Store.
 
-Built with **Bun** + **Baileys** (`@whiskeysockets/baileys`), mirroring `tg-proxy`'s interface contract: `meta`+`data` envelope, `do`/`admin` namespaces, `--format json|table`, `--output-file`, and autosave.
+Built with **Bun** + **Baileys** (`@whiskeysockets/baileys`): `meta`+`data` envelope, `do`/`admin` namespaces, `--format json|table`, `--output-file`, autosave, declarative mandatory HITL, destructive preflight identity locks, and local read-back proofs. Bun owns package/test operations; the installed TypeScript CLI is launched through Node.js + bundled `tsx` because Baileys needs Node-compatible WebSocket upgrade events.
 
 ## Why
 
@@ -19,7 +19,7 @@ No MCP runtime required. One binary, one daemon, full catalog.
 ## Install
 
 ```bash
-make install          # or: ./scripts/install.sh
+make install
 ```
 
 Requires [Bun](https://bun.sh) >= 1.1.
@@ -53,7 +53,8 @@ whats-proxy --version
 - **`admin stop`** — cleanly stops the daemon: store snapshot persisted, session credentials kept (`state/auth/` untouched). Next `do` auto-spawns it again.
 - Every response is an envelope: `{ "meta": { "status": "ok"|"error", "comment": "", "edited": false }, "data": {...} }`.
 - Errors exit `1` with the envelope on stderr. Autosave writes each call to `/tmp/whats-proxy-autosave/`.
-- **Idle exit** — set `daemon.max_idle_minutes` in `config.json` (or `WHATS_PROXY_MAX_IDLE_MINUTES`) to make the daemon exit after that long without RPC activity (`ping` does NOT count — it's a liveness probe, not user activity). `0` (default) = stay forever (session-holder).
+- **Idle exit** — set `WHATS_PROXY_MAX_IDLE_MINUTES` in `$HOME/.config/whats-proxy/.env` to make the daemon exit after that long without RPC activity (`ping` does NOT count — it's a liveness probe, not user activity). `0` (default) = stay forever (session-holder).
+- **Mandatory review** — consequential `do` actions open a local editable review page and fail closed after 600 seconds. Destructive actions preflight local targets and lock their identifiers; no bypass exists.
 
 ### Table format
 
@@ -79,7 +80,7 @@ whats-proxy (CLI, Bun)                daemon (detached background process)
                           JSON-RPC    └───────────────────────────────────┘
 ```
 
-- **State**: `~/.config/whats-proxy/` — `config.json`, `.env`, `state/auth/` (Baileys creds), `store.json`, `whats-proxy.{pid,log,sock}`.
+- **State**: `$HOME/.config/whats-proxy/` — `.env`, `state/` (Baileys credentials), `store.json`, `whats-proxy.{pid,lock,sock}`. Diagnostics are stderr-only; there is no log file.
 - **Daemon**: owns the Baileys session, snapshots the store to `store.json` (500 ms debounce), restores it on startup, reconnects with exponential backoff (1.5x, capped 30 s).
 - **Dispatch**: action handlers receive `{ args, store, config, sock, registry }` and return the full envelope.
 - **Isolation for tests**: `WHATS_PROXY_STATE_DIR` / `WHATS_PROXY_CONFIG_DIR` point the whole stack at a temp dir.
@@ -102,7 +103,12 @@ whats-proxy (CLI, Bun)                daemon (detached background process)
 | watchlists (1) | watchlist-list |
 | utils (7) | connection-status, guide, presence, read-messages, search-messages, media-download, media-cleanup |
 
-Run `whats-proxy do --help` or `whats-proxy do guide` for the live catalog; `whats-proxy do <action> -h` for per-action help.
+Run `whats-proxy do --help` or `whats-proxy do guide` for the live catalog; `whats-proxy do <action> -h` for per-action help. Every one of the 65 `do` pages renders at least three concrete executable forms from its action-owned payload: inline JSON, a payload file, and captured JSON output. Actions with required fields, local HITL, destructive preflight, or zero-argument table display show their additional branch explicitly. `WaClient.raw()` remains an internal lifecycle API rather than a public `do` escape hatch, so it cannot bypass validation or safety policies.
+
+The complex families also own distinct semantic scenarios: direct/group/reply text; local/remote/reply
+media; broadcast recipient mixes and delays; group participant roles and invite lifecycle; and scoped
+analytics search. `make check` validates the universal three-example contract and these distinct
+complex branches entirely offline. Pairing and a real WhatsApp account are intentionally excluded.
 
 ## Development
 
@@ -114,7 +120,8 @@ make smoke       # end-to-end: spawn daemon, RPC, CLI catalog
 make stress      # race test: N simultaneous daemon spawns → exactly 1 survives
 ```
 
-Shell completions (zsh + bash) for the 65 actions live in `completions/` — `make install` symlinks them automatically; manually: `completions/_whats-proxy` → `$fpath` (zsh) or `completions/whats-proxy.bash` → bash-completion dir.
+Like `tick-proxy`, this project deliberately ships no separately maintained shell-completion layer.
+The registry-derived `whats-proxy do --help` and per-action `--help` remain the single discovery surface.
 
 Layout:
 
@@ -126,20 +133,21 @@ src/whats_proxy/
 ├── daemon.ts       # Baileys session + Unix-socket JSON-RPC server
 ├── store.ts        # in-memory WhatsApp store (chats/contacts/messages/…)
 ├── helpers.ts      # formatting, JID utils, ok/err envelope builders
-├── config.ts       # config.json/.env/env loading (WHATS_PROXY_*)
+├── config.ts       # documented defaults + one .env override surface (WHATS_PROXY_*)
 ├── logger.ts       # pino to stderr + log file (stdout stays pure JSON)
 ├── display.ts      # print_json / print_table / output_result
 ├── doc.ts          # compact help, per-action help
 ├── version.ts      # reads version from package.json (single source)
 ├── exceptions.ts   # WhatsProxyError hierarchy
 ├── types.ts        # ActionDef, ActionContext, Output envelope
-├── actions/        # 13 category modules + history.ts + registry.ts (65 actions)
+├── hitl.ts         # local editable review page; port 0, 600-second fail-closed timeout
+├── actions/        # 13 category modules + registry.ts + policies.ts (65 actions)
 └── admin/          # setup (QR/pairing code) + status (independent probe)
 ```
 
 ## Contract
 
-[`CONTRACT.md`](CONTRACT.md) is the design reference — envelope, RPC protocol, daemon lifecycle, catalog mapping to `whats-mcp`, and every porting decision.
+[`CONTRACT.md`](CONTRACT.md) is the authoritative implementation contract — safety, envelope, daemon lifecycle, configuration, and catalog surface.
 
 ## License
 

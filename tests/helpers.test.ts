@@ -60,7 +60,7 @@ describe("result helpers", () => {
     const r = errResult("boom");
     expect(r.meta.status).toBe("error");
     expect(r.meta.comment).toBe("boom");
-    expect(r.data.error).toBe("boom");
+     expect((r.data as Record<string, unknown>).error).toBe("boom");
   });
 });
 

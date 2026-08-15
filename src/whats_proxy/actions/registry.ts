@@ -6,6 +6,7 @@
  */
 
 import type { ActionDef, ActionRegistry } from "./types.ts";
+import { policyFor, protectAction } from "./policies.ts";
 
 import messaging from "./messaging.ts";
 import chats from "./chats.ts";
@@ -42,7 +43,7 @@ for (const def of ALL) {
   if (REGISTRY[def.meta.action]) {
     throw new Error(`Duplicate action: ${def.meta.action}`);
   }
-  REGISTRY[def.meta.action] = def;
+  REGISTRY[def.meta.action] = protectAction(def, policyFor(def.meta.action));
 }
 
 export const ACTION_COUNT = ALL.length;

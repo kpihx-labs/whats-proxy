@@ -277,6 +277,11 @@ export default [
         { name: "participants", description: "Array of participant JIDs or phone numbers.", required: true },
       ],
       example: { jid: "120363000000000@g.us", action: "add", participants: ["33612345678"] },
+      examples: [
+        { description: "Add a participant", payload: { jid: "120363000000000@g.us", action: "add", participants: ["33612345678"] } },
+        { description: "Promote an admin", payload: { jid: "120363000000000@g.us", action: "promote", participants: ["33612345678"] } },
+        { description: "Remove a participant", payload: { jid: "120363000000000@g.us", action: "remove", participants: ["33612345678"] } },
+      ],
       returns: "{ status, jid, participants }",
     },
     handler: async ({ jid, action, participants }, { sock }) => {
@@ -320,6 +325,11 @@ export default [
         { name: "code", description: "Invite code or full link (required for 'join'). E.g. 'ABcdEfGhIjK' or 'https://chat.whatsapp.com/ABcdEfGhIjK'.", required: false },
       ],
       example: { action: "get", jid: "120363000000000@g.us" },
+      examples: [
+        { description: "Read the current invite", payload: { action: "get", jid: "120363000000000@g.us" } },
+        { description: "Revoke and rotate an invite", payload: { action: "revoke", jid: "120363000000000@g.us" } },
+        { description: "Join from an invite link", payload: { action: "join", code: "https://chat.whatsapp.com/ABcdEfGhIjK" } },
+      ],
       returns: "{ jid, invite_code, invite_link } | { status, jid }",
     },
     handler: async ({ action, jid, code }, { sock }) => {

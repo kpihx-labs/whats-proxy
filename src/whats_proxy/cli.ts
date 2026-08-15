@@ -1,10 +1,10 @@
 /**
  * whats-proxy — CLI dispatch.
  *
- * Mirrors tg-proxy cli.py: `main` → `do` (65 RPC actions) + `admin`
+ * Mirrors tick-proxy: `main` → `do` (65 RPC actions) + `admin`
  * (setup/status, ALWAYS JSON) + hidden `daemon` command (used by the
  * auto-spawn path). Hand-rolled argv parsing — no CLI framework dependency,
- * matching the tg-proxy interface exactly.
+ * while retaining the Bun/Baileys daemon required by WhatsApp state.
  *
  *   whats-proxy do <action> [payload|file] [-o file] [-f json|table] [-h]
  *   whats-proxy admin setup [--code] [--phone N]
@@ -13,7 +13,7 @@
  *   whats-proxy --version
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { mkdirSync, writeFileSync } from "node:fs";
 
@@ -23,11 +23,12 @@ import { print_json, output_result, print_error } from "./display.ts";
 import { getCompactHelp, getActionHelp } from "./doc.ts";
 import { WhatsProxyError } from "./exceptions.ts";
 import { REGISTRY } from "./actions/registry.ts";
+import { validateRequiredArguments } from "./actions/types.ts";
 import WaClient from "./client.ts";
 import type { Output } from "./types.ts";
 import { VERSION } from "./version.ts";
 
-// ── Payload parsing (tg-proxy parse_payload equivalent) ─────────────────────
+// ── Payload parsing ──────────────────────────────────────────────────────────
 
 /** Convert a JSON string or file path to a dict (ts_proxy style RPC). */
 function parsePayload(payload: string | undefined): Record<string, unknown> {
@@ -41,8 +42,7 @@ function parsePayload(payload: string | undefined): Record<string, unknown> {
   } catch {
     // Not JSON → try file path
     if (existsSync(payload)) {
-      const fs = require("node:fs");
-      const raw = fs.readFileSync(payload, "utf-8");
+       const raw = readFileSync(payload, "utf-8");
       try {
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
@@ -57,16 +57,16 @@ function parsePayload(payload: string | undefined): Record<string, unknown> {
   }
 }
 
-// ── Autosave (tg-proxy _write_and_display pattern) ──────────────────────────
+// ── Autosave ─────────────────────────────────────────────────────────────────
 
-const AUTOSAVE_DIR = "/tmp/whats-proxy-autosave";
+const AUTOSAVE_DIR = join(process.env.TMPDIR || "/tmp", "whats-proxy-autosave");
 
 function writeJson(path: string, data: Output) {
   mkdirSync(join(path, ".."), { recursive: true });
   writeFileSync(path, JSON.stringify(data, null, 2) + "\n", "utf-8");
 }
 
-/** Centralized output handling (tg-proxy `_write_and_display` pattern). */
+/** Centralized output handling for every `do` execution. */
 function writeAndDisplay(
   result: Output,
   outputFile: string | undefined,
@@ -200,6 +200,20 @@ async function cmdDo(argv: string[]): Promise<number> {
     return 1;
   }
 
+  const definition = REGISTRY[action];
+  if (!definition) {
+    throw new Error(`Registry lost validated action: ${action}`);
+  }
+  const validationError = validateRequiredArguments(definition, args);
+  if (validationError) {
+    const output: Output = {
+      meta: { status: "error", comment: validationError, edited: false },
+      data: { error: validationError },
+    };
+    writeAndDisplay(output, outputFile, fmt, action);
+    return 1;
+  }
+
   // Execute against the daemon (auto-spawns if needed)
   const client = new WaClient();
   try {
@@ -274,11 +288,9 @@ async function cmdAdmin(argv: string[]): Promise<number> {
 export async function main(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv;
 
-  // Setup logging (stderr + state-dir file; stdout stays pure JSON)
+   // Setup stderr-only logging; stdout stays pure JSON for automation.
   const cfg = loadConfig();
-  const logFile = join(cfg.state_directory, "whats-proxy.log");
-  logger.logFile = logFile;
-  logger.setLevel((cfg.logging?.level as never) || "info");
+   logger.setLevel("info");
 
   switch (cmd) {
     case "do":

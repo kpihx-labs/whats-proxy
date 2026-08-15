@@ -12,8 +12,21 @@ import { loadConfig, statePaths } from "../config.ts";
 import type { Output } from "../types.ts";
 
 /**
- * Stop the running daemon via its Unix socket.
- * Always returns the standard envelope (admin = JSON only).
+ * Stop the running daemon via its Unix socket without removing the WhatsApp session.
+ *
+ * Args:
+ *   None.
+ *
+ * Returns:
+ *   A JSON envelope whose data reports whether the daemon received shutdown.
+ *
+ * Examples:
+ *   await adminStop()
+ *   // => { meta: { status: "ok", ... }, data: { stopped: true, pid: 1234, ... } }
+ *   await adminStop()
+ *   // => { meta: { status: "ok", ... }, data: { stopped: false, reason: "no socket" } }
+ *   await adminStop()
+ *   // => { meta: { status: "error", ... }, data: { stopped: false, pid: 1234 } }
  */
 export async function adminStop(): Promise<Output> {
   const paths = statePaths(loadConfig());

@@ -3,9 +3,8 @@
  *
  * Load order (mirrors whats-mcp config.js):
  *   1. Built-in defaults
- *   2. ~/.config/whats-proxy/config.json (deep merge)
- *   3. ~/.config/whats-proxy/.env (optional, only sets unset vars)
- *   4. Process environment (WHATS_PROXY_*)
+ *   2. ~/.config/whats-proxy/.env (optional, only sets unset vars)
+ *   3. Process environment (WHATS_PROXY_*)
  *
  * No secrets live here — auth artifacts are session files under state/.
  */
@@ -39,9 +38,6 @@ export interface AppConfig {
     max_chats: number;
     persist: boolean;
   };
-  logging: {
-    level: string;
-  };
   watchlists: Record<string, string[]>;
 }
 
@@ -67,9 +63,6 @@ const DEFAULTS: AppConfig = {
     max_chats: 1000,
     persist: true,
   },
-  logging: {
-    level: "info",
-  },
   watchlists: {},
 };
 
@@ -83,12 +76,44 @@ export function configDir(): string {
   return expandHome(process.env.WHATS_PROXY_CONFIG_DIR || DEFAULTS.state_directory);
 }
 
-/** Resolve the state directory (default = config dir). */
+/**
+ * Resolve the state directory, defaulting to the configured proxy directory.
+ *
+ * Args:
+ *   cfg: Fully loaded application configuration.
+ *
+ * Returns:
+ *   Expanded absolute state directory path.
+ *
+ * Examples:
+ *   stateDir({ state_directory: "$HOME/.config/whats-proxy" } as AppConfig)
+ *   // => "/home/example/.config/whats-proxy"
+ *   stateDir({ state_directory: "/tmp/whats-state" } as AppConfig)
+ *   // => "/tmp/whats-state"
+ *   stateDir({ state_directory: "~/state" } as AppConfig)
+ *   // => "/home/example/state"
+ */
 export function stateDir(cfg: AppConfig): string {
   return expandHome(cfg.state_directory);
 }
 
-/** Key paths inside the state directory. */
+/**
+ * Build all canonical paths inside the configured proxy state directory.
+ *
+ * Args:
+ *   cfg: Fully loaded application configuration.
+ *
+ * Returns:
+ *   Directory, auth, Store, PID, socket, lock, and autosave paths.
+ *
+ * Examples:
+ *   statePaths({ state_directory: "/tmp/ws" } as AppConfig).sockFile
+ *   // => "/tmp/ws/whats-proxy.sock"
+ *   statePaths({ state_directory: "/tmp/ws" } as AppConfig).auth
+ *   // => "/tmp/ws/state"
+ *   statePaths({ state_directory: "/tmp/ws" } as AppConfig).lockFile
+ *   // => "/tmp/ws/whats-proxy.lock"
+ */
 export function statePaths(cfg: AppConfig) {
   const dir = stateDir(cfg);
   return {
@@ -96,39 +121,35 @@ export function statePaths(cfg: AppConfig) {
     auth: join(dir, "state"),
     storeFile: join(dir, "store.json"),
     pidFile: join(dir, "whats-proxy.pid"),
-    logFile: join(dir, "whats-proxy.log"),
     sockFile: join(dir, "whats-proxy.sock"),
     lockFile: join(dir, "whats-proxy.lock"),
     autosaveDir: "/tmp/whats-proxy-autosave",
   };
 }
 
-/** Ensure the config + state directories exist. */
+/**
+ * Create the required state, auth, and autosave directories idempotently.
+ *
+ * Args:
+ *   cfg: Fully loaded application configuration.
+ *
+ * Returns:
+ *   The same canonical path object used by callers after directories exist.
+ *
+ * Examples:
+ *   ensureDirs({ state_directory: "/tmp/ws" } as AppConfig).dir
+ *   // => "/tmp/ws"
+ *   ensureDirs({ state_directory: "/tmp/ws" } as AppConfig).auth
+ *   // => "/tmp/ws/state"
+ *   ensureDirs({ state_directory: "/tmp/ws" } as AppConfig).autosaveDir
+ *   // => "/tmp/whats-proxy-autosave"
+ */
 export function ensureDirs(cfg: AppConfig) {
   const p = statePaths(cfg);
   mkdirSync(p.dir, { recursive: true });
   mkdirSync(p.auth, { recursive: true });
   mkdirSync(p.autosaveDir, { recursive: true });
   return p;
-}
-
-// ── Merge + env loading (ported from whats-mcp config.js) ───────────────────
-
-function _merge(a: Record<string, any>, b: Record<string, any>): Record<string, any> {
-  for (const key of Object.keys(b)) {
-    if (
-      a[key] &&
-      typeof a[key] === "object" &&
-      !Array.isArray(a[key]) &&
-      typeof b[key] === "object" &&
-      !Array.isArray(b[key])
-    ) {
-      _merge(a[key], b[key]);
-    } else {
-      a[key] = b[key];
-    }
-  }
-  return a;
 }
 
 function _loadEnvFile(dir: string) {
@@ -151,49 +172,26 @@ export function loadConfig(): AppConfig {
   _loadEnvFile(configDir());
 
   const config = JSON.parse(JSON.stringify(DEFAULTS)) as AppConfig;
+  const bool = (name: string, current: boolean): boolean => process.env[name] === undefined ? current : process.env[name] !== "false";
+  const number = (name: string, current: number): number => {
+    const parsed = Number(process.env[name]);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : current;
+  };
 
-  const configFile = join(configDir(), "config.json");
-  if (existsSync(configFile)) {
-    const fileConfig = JSON.parse(readFileSync(configFile, "utf-8"));
-    _merge(config as unknown as Record<string, any>, fileConfig);
-  }
-
-  // Environment variable overrides
+  // Environment overrides — one documented .env file, no config.json layer.
   if (process.env.WHATS_PROXY_STATE_DIR) {
     config.state_directory = process.env.WHATS_PROXY_STATE_DIR;
   }
-  if (process.env.WHATS_PROXY_LOG_LEVEL) {
-    config.logging.level = process.env.WHATS_PROXY_LOG_LEVEL;
-  }
-
-  if (process.env.WHATS_PROXY_MAX_IDLE_MINUTES !== undefined) {
-    const v = Number(process.env.WHATS_PROXY_MAX_IDLE_MINUTES);
-    if (!Number.isNaN(v) && v >= 0) config.daemon.max_idle_minutes = v;
-  }
-  if (process.env.WHATS_PROXY_MAX_RECONNECT) {
-    config.connection.max_reconnect_attempts = parseInt(process.env.WHATS_PROXY_MAX_RECONNECT, 10);
-  }
-  if (process.env.WHATS_PROXY_PRINT_QR !== undefined) {
-    config.connection.print_qr_in_terminal = process.env.WHATS_PROXY_PRINT_QR !== "false";
-  }
-  if (process.env.WHATS_PROXY_SYNC_FULL_HISTORY !== undefined) {
-    config.connection.sync_full_history = process.env.WHATS_PROXY_SYNC_FULL_HISTORY !== "false";
-  }
-  if (process.env.WHATS_PROXY_REFRESH_APP_STATE !== undefined) {
-    config.connection.refresh_app_state = process.env.WHATS_PROXY_REFRESH_APP_STATE !== "false";
-  }
-  if (process.env.WHATS_PROXY_MARK_ONLINE !== undefined) {
-    config.connection.mark_online_on_connect = process.env.WHATS_PROXY_MARK_ONLINE !== "false";
-  }
-  if (process.env.WHATS_PROXY_PERSIST_STORE !== undefined) {
-    config.store.persist = process.env.WHATS_PROXY_PERSIST_STORE !== "false";
-  }
-  if (process.env.WHATS_PROXY_MAX_MESSAGES_PER_CHAT) {
-    config.store.max_messages_per_chat = parseInt(process.env.WHATS_PROXY_MAX_MESSAGES_PER_CHAT, 10);
-  }
-  if (process.env.WHATS_PROXY_MAX_CHATS) {
-    config.store.max_chats = parseInt(process.env.WHATS_PROXY_MAX_CHATS, 10);
-  }
+  config.daemon.max_idle_minutes = number("WHATS_PROXY_MAX_IDLE_MINUTES", config.daemon.max_idle_minutes);
+  config.connection.reconnect_interval_ms = number("WHATS_PROXY_RECONNECT_INTERVAL_MS", config.connection.reconnect_interval_ms);
+  config.connection.max_reconnect_attempts = number("WHATS_PROXY_MAX_RECONNECT", config.connection.max_reconnect_attempts);
+  config.connection.print_qr_in_terminal = bool("WHATS_PROXY_PRINT_QR", config.connection.print_qr_in_terminal);
+  config.connection.sync_full_history = bool("WHATS_PROXY_SYNC_FULL_HISTORY", config.connection.sync_full_history);
+  config.connection.refresh_app_state = bool("WHATS_PROXY_REFRESH_APP_STATE", config.connection.refresh_app_state);
+  config.connection.mark_online_on_connect = bool("WHATS_PROXY_MARK_ONLINE", config.connection.mark_online_on_connect);
+  config.store.persist = bool("WHATS_PROXY_PERSIST_STORE", config.store.persist);
+  config.store.max_messages_per_chat = number("WHATS_PROXY_MAX_MESSAGES_PER_CHAT", config.store.max_messages_per_chat);
+  config.store.max_chats = number("WHATS_PROXY_MAX_CHATS", config.store.max_chats);
 
   // Normalise state_directory to absolute
   config.state_directory = resolve(expandHome(config.state_directory));

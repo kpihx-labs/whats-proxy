@@ -25,16 +25,16 @@ import {
 import pino from "pino";
 import qrcode from "qrcode";
 import { createServer, type Socket } from "node:net";
-import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync, openSync, closeSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync, openSync, closeSync, writeSync } from "node:fs";
 import { join } from "node:path";
 
 import { loadConfig, type AppConfig, statePaths, ensureDirs } from "./config.ts";
 import { Store } from "./store.ts";
-import { Logger, rotateLogFile } from "./logger.ts";
+import { Logger } from "./logger.ts";
 import { okResult, errResult } from "./helpers.ts";
 import { WhatsProxyError } from "./exceptions.ts";
 import { REGISTRY } from "./actions/registry.ts";
-import type { ActionContext } from "./actions/types.ts";
+import { validateRequiredArguments, type ActionContext } from "./actions/types.ts";
 import type { ConnectionInfo, Output } from "./types.ts";
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -257,9 +257,13 @@ async function handleRequest(req: RpcRequest): Promise<unknown> {
       const action = String(params.action || "");
       const args = (params.args as Record<string, unknown>) || {};
       const def = REGISTRY[action];
-      if (!def) {
-        return rpcError(id, -32601, `Unknown action: ${action}. Run 'whats-proxy do --help' for the catalog.`);
-      }
+       if (!def) {
+         return rpcError(id, -32601, `Unknown action: ${action}. Run 'whats-proxy do --help' for the catalog.`);
+       }
+       const validationError = validateRequiredArguments(def, args);
+       if (validationError) {
+         return { jsonrpc: "2.0", id, result: errResult(validationError) };
+       }
       try {
         // Wait for Baileys init (socket bound before createSocket now): the
         // client may dispatch in the tiny window while `sock` is still null.
@@ -288,16 +292,17 @@ async function handleRequest(req: RpcRequest): Promise<unknown> {
  * Acquire the exclusive daemon lock (O_CREAT|O_EXCL — kernel-atomic).
  *
  * Exactly one process can create the lock file; every other contender gets
- * EEXIST and loses the race. A stale lock (crashed daemon) is recovered by
- * probing the socket: if nothing answers, the lock is dead — steal it and
- * retry once.
+ * EEXIST and loses the race. The winning PID is written before the lock file
+ * is closed, so a contender never mistakes the lock-to-socket startup window
+ * for a stale owner. Only an absent PID plus an unreachable socket permits
+ * stale-lock recovery.
  */
 async function acquireLock(lockFile: string, sockFile: string): Promise<boolean> {
   const tryLock = (): boolean => {
     try {
       const fd = openSync(lockFile, "wx");
-      closeSync(fd);
-      writeFileSync(lockFile, String(process.pid));
+       writeSync(fd, String(process.pid));
+       closeSync(fd);
       return true;
     } catch {
       return false;
@@ -306,7 +311,20 @@ async function acquireLock(lockFile: string, sockFile: string): Promise<boolean>
 
   if (tryLock()) return true;
 
-  // Lock exists — is the owner alive? Probe the socket.
+  // Lock exists — an alive owning PID wins even before its socket is bound.
+  // This closes the former lock-to-socket TOCTOU window that could let a rival
+  // delete a brand-new lock and start a second daemon.
+  try {
+    const ownerPid = Number(readFileSync(lockFile, "utf-8").trim());
+    if (Number.isInteger(ownerPid) && ownerPid > 0) {
+      process.kill(ownerPid, 0);
+      return false;
+    }
+  } catch {
+    // Dead or malformed owner: socket probing below handles stale recovery.
+  }
+
+  // No live PID — is a socket owner nevertheless alive?
   const { connect } = await import("node:net");
   const alive = await new Promise<boolean>((resolve) => {
     const probe = connect(sockFile);
@@ -377,8 +395,7 @@ async function serveSocket(cfg: AppConfig, paths: ReturnType<typeof statePaths>)
 export async function startDaemon(): Promise<void> {
   config = loadConfig();
   const paths = ensureDirs(config);
-  rotateLogFile(paths.logFile);
-  log = new Logger((config.logging?.level as never) || "info", paths.logFile);
+  log = new Logger("info");
 
   // ── Atomic single-owner lock ─────────────────────────────────────────────
   // O_CREAT|O_EXCL is kernel-atomic: exactly one daemon wins. Unix sockets

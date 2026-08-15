@@ -13,6 +13,23 @@ import { okResult } from "../helpers.ts";
 import WaClient from "../client.ts";
 import type { Output } from "../types.ts";
 
+/**
+ * Inspect pairing artifacts, daemon reachability, and live connection state without starting it.
+ *
+ * Args:
+ *   None.
+ *
+ * Returns:
+ *   A JSON envelope containing daemon, auth, connection, state-directory, and version facts.
+ *
+ * Examples:
+ *   await adminStatus()
+ *   // => { meta: { status: "ok", ... }, data: { daemon: { running: false, ... }, auth: { present: false, ... }, ... } }
+ *   await adminStatus()
+ *   // => { meta: { status: "ok", ... }, data: { daemon: { running: true, pid: 1234, ... }, ... } }
+ *   await adminStatus()
+ *   // => { meta: { status: "ok", ... }, data: { auth: { present: true, auth_directory: "..." }, ... } }
+ */
 export async function adminStatus(): Promise<Output> {
   const cfg = loadConfig();
   const paths = statePaths(cfg);
@@ -48,7 +65,6 @@ export async function adminStatus(): Promise<Output> {
       running: daemonReachable,
       pid,
       socket: paths.sockFile,
-      log_file: paths.logFile,
     },
     auth: {
       present: authPresent,
@@ -59,7 +75,7 @@ export async function adminStatus(): Promise<Output> {
     },
     connection,
     state_directory: paths.dir,
-    config_file: join(cfg.state_directory, "config.json"),
+    config_file: join(cfg.state_directory, ".env"),
     version: cfg.server?.version,
   });
 }

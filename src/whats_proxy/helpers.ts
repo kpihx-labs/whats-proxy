@@ -3,7 +3,7 @@
  *
  * Faithful TypeScript port of whats-mcp `src/helpers.js`: JID formatting,
  * output envelope builders, media resolution, and message/chat formatting.
- * The output helpers return the `{ meta, data }` envelope (tg-proxy style)
+ * The output helpers return the `{ meta, data }` envelope (tick-proxy standard)
  * instead of the MCP `{ content, isError }` shape.
  */
 
