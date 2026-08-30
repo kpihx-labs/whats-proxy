@@ -92,6 +92,8 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
     let codeRequested = false;
     let receivedQr = false;
     let pairingCode: string | null = null;
+    let transientCloses = 0;
+    const MAX_TRANSIENT_CLOSES = 3;
 
     return await new Promise<Output>((resolve) => {
       const timeout = setTimeout(() => {
@@ -104,6 +106,7 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
 
         if (qr) {
           receivedQr = true;
+          transientCloses = 0; // QR received = connection works, reset counter
           if (opts.code && !codeRequested) {
             codeRequested = true;
             try {
@@ -159,10 +162,19 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
             sock.end(undefined);
             resolve(errResult("Connection replaced by another session (440)."));
           } else {
-            // Transient close (e.g. status 428, network blip) — log but let
-            // Baileys reconnect. The 180s top-level timeout will catch it if
-            // reconnection never produces a QR.
-            logger.info(`Transient connection close (status ${statusCode ?? "?"}), Baileys will reconnect...`);
+            // Transient close (e.g. status 428, network blip). Baileys
+            // reconnects automatically, but after MAX_TRANSIENT_CLOSES
+            // consecutive failures without a QR, give up cleanly.
+            transientCloses++;
+            logger.info(`Transient close (status ${statusCode ?? "?"}) ${transientCloses}/${MAX_TRANSIENT_CLOSES}`);
+            if (transientCloses >= MAX_TRANSIENT_CLOSES && !receivedQr && !codeRequested) {
+              clearTimeout(timeout);
+              sock.end(undefined);
+              resolve(errResult(
+                `Connection closed ${MAX_TRANSIENT_CLOSES} times before QR generation (last: status ${statusCode ?? "?"}). ` +
+                "Check network and retry."
+              ));
+            }
           }
         }
       });
