@@ -20,6 +20,7 @@ import { join } from "node:path";
 const WORK = mkdtempSync(join(tmpdir(), "whats-proxy-smoke-"));
 process.env.WHATS_PROXY_STATE_DIR = WORK;
 process.env.WHATS_PROXY_CONFIG_DIR = WORK;
+process.env.WHATS_PROXY_NO_BROWSER = "1"; // suppress xdg-open during tests
 
 const { main } = await import("../src/whats_proxy/cli.ts");
 

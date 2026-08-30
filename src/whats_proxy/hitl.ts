@@ -116,7 +116,10 @@ export async function requestApproval(action: string, payload: Record<string, un
       const port = typeof address === "object" && address ? address.port : 0;
       const url = `http://127.0.0.1:${port}/`;
       process.stderr.write(`\n🚀 [HITL] ACTION REVIEW REQUIRED\n   Action: ${action}\n   Review: ${url}\n   Timeout: ${TIMEOUT_MS / 1000}s\n`);
-      try { Bun.spawn(["xdg-open", url], { stdout: "ignore", stderr: "ignore" }); } catch { /* URL remains available on stderr. */ }
+      // Suppress auto-open in tests, CI, or headless environments.
+      if (!process.env.WHATS_PROXY_NO_BROWSER) {
+        try { Bun.spawn(["xdg-open", url], { stdout: "ignore", stderr: "ignore" }); } catch { /* URL remains available on stderr. */ }
+      }
     });
   });
 }

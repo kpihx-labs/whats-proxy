@@ -21,7 +21,7 @@ import {
 } from "@whiskeysockets/baileys";
 import pino from "pino";
 import qrcode from "qrcode";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 
@@ -73,6 +73,17 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
     const { version } = await fetchLatestBaileysVersion();
     logger.info(`Using WA Web version: ${version.join(".")}`);
     mkdirSync(paths.auth, { recursive: true });
+
+    // Fresh pairing: wipe stale creds that may conflict with the current
+    // Baileys version (rc.9 → rc.14 migration causes 428 if old creds are
+    // presented to WhatsApp's server). whats-mcp works because its creds
+    // are always empty — we replicate that by starting fresh here.
+    const authFiles = readdirSync(paths.auth);
+    if (authFiles.length > 0) {
+      logger.info(`Wiping ${authFiles.length} stale auth file(s) for fresh pairing.`);
+      rmSync(paths.auth, { recursive: true, force: true });
+      mkdirSync(paths.auth, { recursive: true });
+    }
 
     const { state, saveCreds } = await useMultiFileAuthState(paths.auth);
     const sock = makeWASocket({

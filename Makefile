@@ -1,4 +1,5 @@
 SHELL := /bin/zsh
+export WHATS_PROXY_NO_BROWSER := 1  # suppress xdg-open in tests/CI/pre-commit
 
 PKG_NAME      := whats-proxy
 PKG_DIR_NAME  := whats_proxy
