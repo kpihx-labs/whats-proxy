@@ -20,7 +20,7 @@
     "smoke": "bun run scripts/smoke.ts"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "7.0.0-rc.9",
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
     "pino": "^9.0.0",
     "qrcode": "^1.5.4",
     "zod": "^3.23.8",

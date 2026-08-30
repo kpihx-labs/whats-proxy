@@ -173,17 +173,18 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
             sock.end(undefined);
             resolve(errResult("Connection replaced by another session (440)."));
           } else {
-            // Transient close (e.g. status 428, network blip). Baileys
+            // Transient close (e.g. status 428, 515, network blip). Baileys
             // reconnects automatically, but after MAX_TRANSIENT_CLOSES
-            // consecutive failures without a QR, give up cleanly.
+            // consecutive failures, give up cleanly — whether QR was shown
+            // or not (post-scan failures like 515 are just as fatal).
             transientCloses++;
             logger.info(`Transient close (status ${statusCode ?? "?"}) ${transientCloses}/${MAX_TRANSIENT_CLOSES}`);
-            if (transientCloses >= MAX_TRANSIENT_CLOSES && !receivedQr && !codeRequested) {
+            if (transientCloses >= MAX_TRANSIENT_CLOSES) {
               clearTimeout(timeout);
               sock.end(undefined);
               resolve(errResult(
-                `Connection closed ${MAX_TRANSIENT_CLOSES} times before QR generation (last: status ${statusCode ?? "?"}). ` +
-                "Check network and retry."
+                `Connection failed ${MAX_TRANSIENT_CLOSES} times (last: status ${statusCode ?? "?"}). ` +
+                (receivedQr ? "QR was scanned but pairing was rejected — retry later." : "Check network and retry.")
               ));
             }
           }
