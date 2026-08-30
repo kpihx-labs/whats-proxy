@@ -130,7 +130,8 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   "profile-picture": { approval: always }, "profile-privacy": { approval: actionIs("set") },
   "contact-tags": { approval: mutatesLocalCollection, verify: verifyContactTags },
   "watchlist": { approval: mutatesLocalCollection, preflight: (args, context) => deletesWatchlist(args) ? requireWatchlist(args, context) : null, identityFields: ["name"], lockIdentity: deletesWatchlist, verify: verifyWatchlist },
-  "presence": { approval: always }, "read-messages": { approval: always }, "media-cleanup": { approval: always },
+  "presence": { approval: always }, "read-messages": { approval: always },
+  "media-download": { approval: always }, "media-cleanup": { approval: always },
 };
 
 /**
@@ -155,6 +156,14 @@ export function protectAction(definition: ActionDef, policy: ActionPolicy | unde
   return {
     ...definition,
     handler: async (args, context) => {
+      // Zod payload validation (safety net — before HITL).
+      if (definition.schema) {
+        const result = definition.schema.safeParse(args);
+        if (!result.success) {
+          return errResult(`Payload validation failed: ${result.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
+        }
+        args = result.data;
+      }
       const needsApproval = typeof policy.approval === "function" ? policy.approval(args) : policy.approval;
       if (needsApproval && policy.preflight) {
         const error = await policy.preflight(args, context);

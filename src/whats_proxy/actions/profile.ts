@@ -7,6 +7,7 @@
  */
 
 import type { ActionDef } from "./types.ts";
+import { profileNameSchema, profileAboutSchema, profilePictureSchema, profilePrivacySchema } from "./schemas.ts";
 import { resolveMedia, okResult, errResult } from "../helpers.ts";
 
 export default [
@@ -29,6 +30,7 @@ export default [
       await sock.updateProfileName(value);
       return okResult({ status: "updated", name: value });
     },
+    schema: profileNameSchema,
   },
   {
     meta: {
@@ -45,6 +47,7 @@ export default [
       await sock.updateProfileStatus(String(text || ""));
       return okResult({ status: "updated", about: text });
     },
+    schema: profileAboutSchema,
   },
   {
     meta: {
@@ -75,6 +78,7 @@ export default [
       await sock.updateProfilePicture((sock as any).user?.id, imgBuf);
       return okResult({ status: "updated" });
     },
+    schema: profilePictureSchema,
   },
   {
     meta: {
@@ -124,5 +128,6 @@ export default [
 
       return errResult(`Unknown action: ${action}`);
     },
+    schema: profilePrivacySchema,
   },
 ] satisfies ActionDef[];

@@ -7,6 +7,7 @@
  */
 
 import type { ActionDef } from "./types.ts";
+import { labelManageSchema, labelChatSchema, labelMessageSchema } from "./schemas.ts";
 import { phoneToJid, okResult, errResult } from "../helpers.ts";
 
 export default [
@@ -66,6 +67,7 @@ export default [
 
       return errResult(`Unknown action: ${action}`);
     },
+    schema: labelManageSchema,
   },
   {
     meta: {
@@ -92,6 +94,7 @@ export default [
       }
       return errResult(`Unknown action: ${action}`);
     },
+    schema: labelChatSchema,
   },
   {
     meta: {
@@ -119,5 +122,6 @@ export default [
       }
       return errResult(`Unknown action: ${action}`);
     },
+    schema: labelMessageSchema,
   },
 ] satisfies ActionDef[];

@@ -8,6 +8,60 @@
 
 import { policyFor } from "./actions/policies.ts";
 import type { ActionDef, ActionExample, ActionRegistry } from "./actions/types.ts";
+import type { Output } from "./types.ts";
+
+/**
+ * Parse a `returns` string and build a placeholder data object.
+ *
+ * Handles shapes like:
+ *   "{ status, jid, message_id, timestamp }"
+ *   "{ status, jid } | { count, blocked }"
+ *   "{ jid, subject, description, participants, announce, restrict, ... }"
+ *
+ * For union types (`|`), uses the first shape. Trailing `...` is dropped.
+ * Field names become keys with placeholder values: strings → "...", numbers → 0, booleans → false.
+ */
+function buildReturnData(returns?: string): Record<string, unknown> | null {
+  if (!returns) return null;
+  // Take the first shape in union types
+  const firstShape = returns.split("|")[0]!.trim();
+  // Extract content between { and }
+  const match = firstShape.match(/\{([^}]+)\}/);
+  if (!match) return null;
+  const fields = match[1]!
+    .split(",")
+    .map((f) => f.trim())
+    .filter((f) => f && f !== "...");
+  if (fields.length === 0) return null;
+  const data: Record<string, unknown> = {};
+  for (const field of fields) {
+    // Infer placeholder type from field name
+    if (field.endsWith("_id") || field.endsWith("_count") || field === "count" || field === "total" || field === "offset" || field === "timestamp" || field === "file_length" || field === "bytes_freed") {
+      data[field] = 0;
+    } else if (field === "edited" || field === "announce" || field === "restrict" || field === "on_whatsapp" || field.endsWith("_sync")) {
+      data[field] = false;
+    } else {
+      data[field] = "...";
+    }
+  }
+  return data;
+}
+
+/**
+ * Build a wrapped output envelope example line.
+ *
+ * Returns a line like:
+ *   → {"meta":{"status":"ok","comment":"","edited":false},"data":{...}}
+ */
+function buildEnvelopeLine(returns?: string): string {
+  const data = buildReturnData(returns);
+  if (!data) return "";
+  const envelope: Output = {
+    meta: { status: "ok", comment: "", edited: false },
+    data,
+  };
+  return `→ ${JSON.stringify(envelope)}`;
+}
 
 /**
  * Build the canonical executable examples for one action help page.
@@ -43,13 +97,17 @@ export function getActionExamples(definition: ActionDef): string[] {
   const canonicalPayload = JSON.stringify(example);
   const examples = semanticExamples.map(({ description, payload }, index) => {
     const encoded = JSON.stringify(payload);
+    let command: string;
     if (index === 1 && !definition.meta.examples?.length) {
-      return `${description}: save ${encoded} as ${file}, then run: whats-proxy do ${action} ${file}`;
+      command = `${description}: save ${encoded} as ${file}, then run: whats-proxy do ${action} ${file}`;
+    } else if (index === 2 && !definition.meta.examples?.length) {
+      command = `${description}: whats-proxy do ${action} '${encoded}' -o ${result}`;
+    } else {
+      command = `${description}: whats-proxy do ${action} '${encoded}'`;
     }
-    if (index === 2 && !definition.meta.examples?.length) {
-      return `${description}: whats-proxy do ${action} '${encoded}' -o ${result}`;
-    }
-    return `${description}: whats-proxy do ${action} '${encoded}'`;
+    // Append envelope output line showing what the CLI returns
+    const envelope = buildEnvelopeLine(definition.meta.returns);
+    return envelope ? `${command}\n   ${envelope}` : command;
   });
   const policy = policyFor(action);
   if (policy) {
@@ -137,6 +195,15 @@ export function getActionHelp(name: string, registry: ActionRegistry): string {
   if (meta.returns) {
     lines.push("Returns:");
     lines.push(`  ${meta.returns}`);
+    lines.push("");
+  }
+
+  // Output envelope format — shows agents what the CLI actually returns
+  const envelopeLine = buildEnvelopeLine(meta.returns);
+  if (envelopeLine) {
+    lines.push("Output envelope (every do action):");
+    lines.push(`  ${envelopeLine}`);
+    lines.push("");
   }
 
   return lines.join("\n");

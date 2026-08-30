@@ -10,6 +10,12 @@
 
 import type { ActionDef } from "./types.ts";
 import { phoneToJid, resolveMedia, okResult, errResult } from "../helpers.ts";
+import {
+  sendTextSchema, sendImageSchema, sendVideoSchema, sendAudioSchema,
+  sendDocumentSchema, sendStickerSchema, sendLocationSchema, sendContactSchema,
+  sendReactionSchema, sendPollSchema, editMessageSchema, deleteMessageSchema,
+  forwardMessageSchema, batchSendTextSchema,
+} from "./schemas.ts";
 import type { AnyMsg } from "../store.ts";
 
 function _buildSendOpts(args: Record<string, unknown>, store: { getMessage(id: string): AnyMsg | null }) {
@@ -64,6 +70,7 @@ export default [
       const result = await sock.sendMessage(to, content as any, opts as any);
       return _fmtSent(result, to);
     },
+    schema: sendTextSchema,
   },
   {
     meta: {
@@ -92,6 +99,7 @@ export default [
       const result = await sock.sendMessage(to, content as any, opts as any);
       return _fmtSent(result, to);
     },
+    schema: sendImageSchema,
   },
   {
     meta: {
@@ -124,6 +132,7 @@ export default [
       const result = await sock.sendMessage(to, content as any, opts as any);
       return _fmtSent(result, to);
     },
+    schema: sendVideoSchema,
   },
   {
     meta: {
@@ -147,6 +156,7 @@ export default [
       const result = await sock.sendMessage(to, content as any, opts as any);
       return _fmtSent(result, to);
     },
+    schema: sendAudioSchema,
   },
   {
     meta: {
@@ -181,6 +191,7 @@ export default [
       const result = await sock.sendMessage(to, content as any, opts as any);
       return _fmtSent(result, to);
     },
+    schema: sendDocumentSchema,
   },
   {
     meta: {
@@ -202,6 +213,7 @@ export default [
       const result = await sock.sendMessage(to, content as any, opts as any);
       return _fmtSent(result, to);
     },
+    schema: sendStickerSchema,
   },
   {
     meta: {
@@ -234,6 +246,7 @@ export default [
       const result = await sock.sendMessage(to, content as any, opts as any);
       return _fmtSent(result, to);
     },
+    schema: sendLocationSchema,
   },
   {
     meta: {
@@ -271,6 +284,7 @@ export default [
       const result = await sock.sendMessage(to, content as any, opts as any);
       return _fmtSent(result, to);
     },
+    schema: sendContactSchema,
   },
   {
     meta: {
@@ -306,6 +320,7 @@ export default [
         emoji: emoji || null,
       });
     },
+    schema: sendReactionSchema,
   },
   {
     meta: {
@@ -337,6 +352,7 @@ export default [
       const result = await sock.sendMessage(to, content as any);
       return _fmtSent(result, to);
     },
+    schema: sendPollSchema,
   },
   {
     meta: {
@@ -360,6 +376,7 @@ export default [
       await sock.sendMessage(to, content as any);
       return okResult({ status: "edited", jid: to, message_id });
     },
+    schema: editMessageSchema,
   },
   {
     meta: {
@@ -386,6 +403,7 @@ export default [
       await sock.sendMessage(to, { delete: key } as any);
       return okResult({ status: "deleted", jid: to, message_id });
     },
+    schema: deleteMessageSchema,
   },
   {
     meta: {
@@ -408,6 +426,7 @@ export default [
       const result = await sock.sendMessage(to, { forward: msg, force: true } as any);
       return _fmtSent(result, to);
     },
+    schema: forwardMessageSchema,
   },
   {
     meta: {
@@ -451,5 +470,6 @@ export default [
       const failed = results.filter((r) => r.status === "failed").length;
       return okResult({ total: list.length, sent, failed, results });
     },
+    schema: batchSendTextSchema,
   },
 ] satisfies ActionDef[];

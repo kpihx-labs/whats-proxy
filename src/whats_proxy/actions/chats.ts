@@ -7,6 +7,7 @@
  */
 
 import type { ActionDef } from "./types.ts";
+import { chatListSchema, chatReadSchema, chatManageSchema, chatStarSchema, chatDisappearingSchema } from "./schemas.ts";
 import { phoneToJid, isGroupJid, okResult, errResult, formatChat, formatMessage } from "../helpers.ts";
 import { fetchAdditionalHistory, type HistorySyncResult } from "./history.ts";
 
@@ -44,6 +45,7 @@ export default [
         chats: page.map(formatChat),
       });
     },
+    schema: chatListSchema,
   },
   {
     meta: {
@@ -111,6 +113,7 @@ export default [
         history_sync: historySync,
       });
     },
+    schema: chatReadSchema,
   },
   {
     meta: {
@@ -165,6 +168,7 @@ export default [
       await sock.chatModify(mod as any, chatJid);
       return okResult({ status: action, jid: chatJid });
     },
+    schema: chatManageSchema,
   },
   {
     meta: {
@@ -198,6 +202,7 @@ export default [
         message_id,
       });
     },
+    schema: chatStarSchema,
   },
   {
     meta: {
@@ -222,5 +227,6 @@ export default [
         disappearing: labels[Number(duration)] || `${duration}s`,
       });
     },
+    schema: chatDisappearingSchema,
   },
 ] satisfies ActionDef[];

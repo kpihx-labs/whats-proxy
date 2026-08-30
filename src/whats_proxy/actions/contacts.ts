@@ -8,6 +8,7 @@
  */
 
 import type { ActionDef } from "./types.ts";
+import { contactCheckSchema, contactInfoSchema, contactPictureSchema, contactBlockSchema, contactBusinessSchema, contactListSchema } from "./schemas.ts";
 import { phoneToJid, jidToPhone, isGroupJid, okResult, errResult } from "../helpers.ts";
 
 export default [
@@ -41,6 +42,7 @@ export default [
         results: formatted,
       });
     },
+    schema: contactCheckSchema,
   },
   {
     meta: {
@@ -80,6 +82,7 @@ export default [
 
       return okResult(info);
     },
+    schema: contactInfoSchema,
   },
   {
     meta: {
@@ -112,6 +115,7 @@ export default [
         throw err;
       }
     },
+    schema: contactPictureSchema,
   },
   {
     meta: {
@@ -145,6 +149,7 @@ export default [
       }
       return errResult(`Unknown action: ${action}`);
     },
+    schema: contactBlockSchema,
   },
   {
     meta: {
@@ -174,6 +179,7 @@ export default [
         });
       }
     },
+    schema: contactBusinessSchema,
   },
   {
     meta: {
@@ -217,5 +223,6 @@ export default [
         })),
       });
     },
+    schema: contactListSchema,
   },
 ] satisfies ActionDef[];

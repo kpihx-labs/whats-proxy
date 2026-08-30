@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0 — 2026-08-30
+
+- **Zod payload validation (P1+P3):** Every action now has a Zod schema (`schemas.ts`, 65 schemas)
+  that validates payloads before HITL and daemon dispatch. Catches type errors (e.g.
+  `priority: "banana"`) that previously passed silently. Validation runs at two levels: CLI
+  (pre-daemon, `cli.ts`) and daemon-side (`protectAction` in `policies.ts`).
+- **Auto-wrapped envelope examples (P4):** `--help` output now shows the full `{"meta":{...},"data":{...}}`
+  envelope for every example, so agents see exactly what they'll receive. `buildReturnData()`
+  parses `meta.returns` to construct placeholder output shapes.
+- **Registration audit tests (P2+P6):** New `tests/audit.test.ts` with 8 tests: action count,
+  kebab-case naming, meta.action consistency, ≥3 examples, help sections, registry↔policies
+  bidirectional coherence, and Zod schema completeness (every action has a schema, schema keys
+  match meta.arguments). Added `media-download` policy (was missing).
+- Validation order: `validateRequiredArguments` runs first (clear "Missing required: X, Y" message),
+  then Zod type validation (catches wrong types after presence check).
+
 ## 0.3.0 — 2026-08-12
 
 - Adopted `../tick_proxy/` as the sole proxy-standard reference while retaining the Bun/Baileys

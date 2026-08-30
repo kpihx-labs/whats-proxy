@@ -14,6 +14,10 @@ import { downloadMediaMessage } from "@whiskeysockets/baileys";
 import type { ActionDef, ActionContext } from "./types.ts";
 import { phoneToJid, okResult, errResult } from "../helpers.ts";
 import { VERSION } from "../version.ts";
+import {
+  connectionStatusSchema, guideSchema, presenceSchema, readMessagesSchema,
+  searchMessagesSchema, mediaDownloadSchema, mediaCleanupSchema,
+} from "./schemas.ts";
 
 export default [
   {
@@ -29,6 +33,7 @@ export default [
       const info = ctx.connectionInfo();
       return okResult(info as unknown as Record<string, unknown>);
     },
+    schema: connectionStatusSchema,
   },
   {
     meta: {
@@ -91,6 +96,7 @@ export default [
         })),
       });
     },
+    schema: guideSchema,
   },
   {
     meta: {
@@ -117,6 +123,7 @@ export default [
       await sock.sendPresenceUpdate(type as any, chatJid);
       return okResult({ status: type, jid: chatJid });
     },
+    schema: presenceSchema,
   },
   {
     meta: {
@@ -147,6 +154,7 @@ export default [
         count: ids.length,
       });
     },
+    schema: readMessagesSchema,
   },
   {
     meta: {
@@ -187,6 +195,7 @@ export default [
         messages: results,
       });
     },
+    schema: searchMessagesSchema,
   },
   {
     meta: {
@@ -270,6 +279,7 @@ export default [
         saved_to: filePath,
       });
     },
+    schema: mediaDownloadSchema,
   },
   {
     meta: {
@@ -306,5 +316,6 @@ export default [
         cache_dir: cacheDir,
       });
     },
+    schema: mediaCleanupSchema,
   },
 ] satisfies ActionDef[];

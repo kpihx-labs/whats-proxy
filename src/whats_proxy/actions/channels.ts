@@ -7,6 +7,7 @@
  */
 
 import type { ActionDef } from "./types.ts";
+import { channelCreateSchema, channelInfoSchema, channelManageSchema, channelUpdateSchema, channelDeleteSchema } from "./schemas.ts";
 import { newsletterJid, resolveMedia, okResult, errResult } from "../helpers.ts";
 
 function _fmtChannel(meta: any) {
@@ -57,6 +58,7 @@ export default [
         channel: _fmtChannel(result),
       });
     },
+    schema: channelCreateSchema,
   },
   {
     meta: {
@@ -82,6 +84,7 @@ export default [
       }
       return okResult({ channel: _fmtChannel(meta) });
     },
+    schema: channelInfoSchema,
   },
   {
     meta: {
@@ -116,6 +119,7 @@ export default [
       }
       return errResult(`Unknown action: ${action}`);
     },
+    schema: channelManageSchema,
   },
   {
     meta: {
@@ -168,6 +172,7 @@ export default [
       }
       return okResult({ status: "updated", jid: channelJid, updated: updates });
     },
+    schema: channelUpdateSchema,
   },
   {
     meta: {
@@ -185,5 +190,6 @@ export default [
       await (sock as any).newsletterDelete(channelJid);
       return okResult({ status: "deleted", jid: channelJid });
     },
+    schema: channelDeleteSchema,
   },
 ] satisfies ActionDef[];

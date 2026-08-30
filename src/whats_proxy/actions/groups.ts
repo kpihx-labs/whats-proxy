@@ -8,6 +8,7 @@
  */
 
 import type { ActionDef } from "./types.ts";
+import { groupCreateSchema, groupInfoSchema, groupListSchema, groupSubjectSchema, groupDescriptionSchema, groupParticipantsSchema, groupLeaveSchema, groupInviteSchema, groupSettingsSchema, groupPictureSchema } from "./schemas.ts";
 import { phoneToJid, groupJid, isGroupJid, jidToPhone, resolveMedia, okResult, errResult, formatMessage } from "../helpers.ts";
 import { fetchAdditionalHistory, type HistorySyncResult } from "./history.ts";
 
@@ -91,6 +92,7 @@ export default [
         participants: result.participants || jids.map((j) => ({ jid: j })),
       });
     },
+    schema: groupCreateSchema,
   },
   {
     meta: {
@@ -172,6 +174,7 @@ export default [
         participantLimit: participant_limit,
       }));
     },
+    schema: groupInfoSchema,
   },
   {
     meta: {
@@ -229,6 +232,7 @@ export default [
 
       return okResult({ count: results.length, groups: results });
     },
+    schema: groupListSchema,
   },
   {
     meta: {
@@ -247,6 +251,7 @@ export default [
       await sock.groupUpdateSubject(gJid, String(subject));
       return okResult({ status: "updated", jid: gJid, subject });
     },
+    schema: groupSubjectSchema,
   },
   {
     meta: {
@@ -265,6 +270,7 @@ export default [
       await sock.groupUpdateDescription(gJid, description ? String(description) : undefined);
       return okResult({ status: "updated", jid: gJid });
     },
+    schema: groupDescriptionSchema,
   },
   {
     meta: {
@@ -295,6 +301,7 @@ export default [
         participants: result || pJids.map((p) => ({ jid: p, status: "ok" })),
       });
     },
+    schema: groupParticipantsSchema,
   },
   {
     meta: {
@@ -312,6 +319,7 @@ export default [
       await sock.groupLeave(gJid);
       return okResult({ status: "left", jid: gJid });
     },
+    schema: groupLeaveSchema,
   },
   {
     meta: {
@@ -362,6 +370,7 @@ export default [
       }
       return errResult(`Unknown action: ${action}`);
     },
+    schema: groupInviteSchema,
   },
   {
     meta: {
@@ -410,6 +419,7 @@ export default [
       }
       return okResult({ status: "updated", jid: gJid, changes: updates });
     },
+    schema: groupSettingsSchema,
   },
   {
     meta: {
@@ -438,5 +448,6 @@ export default [
       await sock.updateProfilePicture(gJid, imgBuf);
       return okResult({ status: "updated", jid: gJid });
     },
+    schema: groupPictureSchema,
   },
 ] satisfies ActionDef[];

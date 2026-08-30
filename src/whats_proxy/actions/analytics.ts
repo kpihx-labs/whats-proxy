@@ -8,6 +8,7 @@
  */
 
 import type { ActionDef } from "./types.ts";
+import { analyticsOverviewSchema, analyticsTopChatsSchema, analyticsChatInsightsSchema, analyticsTimelineSchema, analyticsSearchSchema } from "./schemas.ts";
 import { phoneToJid, okResult, errResult } from "../helpers.ts";
 
 export default [
@@ -27,6 +28,7 @@ export default [
       returns: "{ totals, top_chats, top_tokens, top_senders, trends }",
     },
     handler: async (args, { store }) => okResult(store.getAnalyticsOverview(args)),
+    schema: analyticsOverviewSchema,
   },
   {
     meta: {
@@ -45,6 +47,7 @@ export default [
       count: Math.min(Number(limit) || 20, 200),
       chats: store.listAnalyticsTopChats({ limit: limit as number | undefined, sort_by: sort_by as string | undefined }),
     }),
+    schema: analyticsTopChatsSchema,
   },
   {
     meta: {
@@ -71,6 +74,7 @@ export default [
       }
       return okResult(result);
     },
+    schema: analyticsChatInsightsSchema,
   },
   {
     meta: {
@@ -95,6 +99,7 @@ export default [
       }
       return okResult(result);
     },
+    schema: analyticsTimelineSchema,
   },
   {
     meta: {
@@ -136,5 +141,6 @@ export default [
         messages,
       });
     },
+    schema: analyticsSearchSchema,
   },
 ] satisfies ActionDef[];

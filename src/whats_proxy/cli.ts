@@ -204,6 +204,8 @@ async function cmdDo(argv: string[]): Promise<number> {
   if (!definition) {
     throw new Error(`Registry lost validated action: ${action}`);
   }
+
+  // Required-argument check first (clear "Missing required argument(s): X, Y" message).
   const validationError = validateRequiredArguments(definition, args);
   if (validationError) {
     const output: Output = {
@@ -212,6 +214,21 @@ async function cmdDo(argv: string[]): Promise<number> {
     };
     writeAndDisplay(output, outputFile, fmt, action);
     return 1;
+  }
+
+  // Zod payload validation (type safety net — catches wrong types after required check).
+  if (definition.schema) {
+    const result = definition.schema.safeParse(args);
+    if (!result.success) {
+      const error = `Payload validation failed: ${result.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; ")}`;
+      const output: Output = {
+        meta: { status: "error", comment: error, edited: false },
+        data: { error },
+      };
+      writeAndDisplay(output, outputFile, fmt, action);
+      return 1;
+    }
+    args = result.data;
   }
 
   // Execute against the daemon (auto-spawns if needed)

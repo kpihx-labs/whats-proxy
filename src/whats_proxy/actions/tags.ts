@@ -7,6 +7,7 @@
  */
 
 import type { ActionDef } from "./types.ts";
+import { contactTagsSchema } from "./schemas.ts";
 import { phoneToJid, jidToPhone, okResult, errResult } from "../helpers.ts";
 
 export default [
@@ -85,5 +86,6 @@ export default [
           return errResult(`Unknown action: ${action}. Use: set, add, remove, get, list, list_by_tag.`);
       }
     },
+    schema: contactTagsSchema,
   },
 ] satisfies ActionDef[];

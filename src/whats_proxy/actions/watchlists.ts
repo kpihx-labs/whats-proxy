@@ -7,6 +7,7 @@
  */
 
 import type { ActionDef } from "./types.ts";
+import { watchlistSchema } from "./schemas.ts";
 import { phoneToJid, okResult, errResult } from "../helpers.ts";
 
 const VALID_ACTIONS = ["set", "add", "remove", "get", "list", "delete"];
@@ -101,5 +102,6 @@ export default [
       const updated = store.getWatchlist(wlName) || [];
       return okResult({ status: "removed", name: wlName, removed: resolvedJids.length, remaining: updated.length, chats: withNames(updated) });
     },
+    schema: watchlistSchema,
   },
 ] satisfies ActionDef[];

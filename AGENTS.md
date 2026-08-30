@@ -13,8 +13,9 @@ Non-MCP CLI proxy for WhatsApp. Full `whats-mcp` catalog (65 actions) as flat JS
   CLI uses Node.js because Baileys needs `ws` upgrade events Bun 1.3.11 lacks.
 - **All envelope shapes**: `{ meta: { status, comment, edited }, data }` — errors and rejected/timeout HITL exit 1; admin misuse exits 2.
 - **Isolated state for tests**: `WHATS_PROXY_STATE_DIR` + `WHATS_PROXY_CONFIG_DIR` point at a temp dir (see `scripts/smoke.ts`).
-- **Actions must be registered** in `src/whats_proxy/actions/registry.ts` (duplicate detection on boot; registry test asserts 65 actions).
+- **Actions must be registered** in `src/whats_proxy/actions/registry.ts` (duplicate detection on boot; registry test asserts 65 actions; audit test asserts 65 schemas).
 - **Safety is declarative**: `actions/policies.ts` is the only source for required approval, preflight locks, and verification. Never call `requestApproval()` inside a domain action or add a CLI bypass.
+- **Zod validation**: Every action has a Zod schema in `actions/schemas.ts`. Validation runs at CLI (pre-daemon) and daemon-side (`protectAction`). Required-argument check runs first, then Zod type validation.
 - **Baileys quirks**: `sock.end(undefined)`, `ev.removeAllListeners` needs a cast, `lastDisconnect.error` is `Boom | Error | undefined`, `downloadMediaMessage` needs `msg as any`.
 
 ## Commands
@@ -45,11 +46,11 @@ activity; `ping` does NOT count as activity (liveness probe, not user input).
 src/whats_proxy/          # all source
 ├── index.ts cli.ts client.ts daemon.ts store.ts helpers.ts
 ├── config.ts logger.ts display.ts doc.ts version.ts exceptions.ts types.ts hitl.ts
-├── actions/              # 13 category modules + history.ts + registry.ts + policies.ts
+├── actions/              # 13 category modules + schemas.ts + history.ts + registry.ts + policies.ts
 └── admin/                # setup.ts + status.ts + stop.ts
 scripts/smoke.ts          # 50-check end-to-end smoke (CLI edge paths, spawn guard, hermetic sweep)
 scripts/stress.ts         # daemon race stress test (default 8 spawns, `make stress`)
-tests/                    # bun test: helpers, store, display
+tests/                    # bun test: helpers, store, display, policies, audit
 ```
 
 ## Porting Status

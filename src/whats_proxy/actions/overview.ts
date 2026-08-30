@@ -8,6 +8,7 @@
  */
 
 import type { ActionDef } from "./types.ts";
+import { whatsupSchema, findMessagesSchema } from "./schemas.ts";
 import { phoneToJid, isGroupJid, okResult, errResult, formatMessage } from "../helpers.ts";
 
 // ── Topic expansion map (French + English) ───────────────────────────────────
@@ -241,6 +242,7 @@ export default [
         needs_reply: needsReplyChats,
       });
     },
+    schema: whatsupSchema,
   },
   {
     meta: {
@@ -345,5 +347,6 @@ export default [
         chats: chatResults,
       });
     },
+    schema: findMessagesSchema,
   },
 ] satisfies ActionDef[];

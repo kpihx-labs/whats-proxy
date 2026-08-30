@@ -7,6 +7,7 @@
  */
 
 import type { ActionDef } from "./types.ts";
+import { messagesMultiSchema, dailyDigestSchema } from "./schemas.ts";
 import { phoneToJid, isGroupJid, okResult, errResult, formatMessage } from "../helpers.ts";
 import type { FormattedMessage } from "../helpers.ts";
 
@@ -101,6 +102,7 @@ export default [
         chats,
       });
     },
+    schema: messagesMultiSchema,
   },
   {
     meta: {
@@ -196,5 +198,6 @@ export default [
         chats: chatDigests,
       });
     },
+    schema: dailyDigestSchema,
   },
 ] satisfies ActionDef[];
