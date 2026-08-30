@@ -158,12 +158,12 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
             clearTimeout(timeout);
             sock.end(undefined);
             resolve(errResult("Connection replaced by another session (440)."));
-          } else if (!receivedQr && !codeRequested) {
-            clearTimeout(timeout);
-            sock.end(undefined);
-            resolve(errResult(`Pairing connection closed before QR generation${statusCode ? ` (status ${statusCode})` : ""}. Check network access and retry.`));
+          } else {
+            // Transient close (e.g. status 428, network blip) — log but let
+            // Baileys reconnect. The 180s top-level timeout will catch it if
+            // reconnection never produces a QR.
+            logger.info(`Transient connection close (status ${statusCode ?? "?"}), Baileys will reconnect...`);
           }
-          // Other transient closes: keep waiting (reconnect handled by Baileys).
         }
       });
     });

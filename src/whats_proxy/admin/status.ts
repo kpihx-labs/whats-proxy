@@ -75,7 +75,6 @@ export async function adminStatus(): Promise<Output> {
     },
     connection,
     state_directory: paths.dir,
-    config_file: join(cfg.state_directory, ".env"),
     version: cfg.server?.version,
   });
 }

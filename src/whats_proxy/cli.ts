@@ -252,6 +252,17 @@ async function cmdDo(argv: string[]): Promise<number> {
 async function cmdAdmin(argv: string[]): Promise<number> {
   const sub = argv[0];
 
+  // --help / -h at the admin level → show usage
+  if (sub === "--help" || sub === "-h" || sub === undefined) {
+    process.stdout.write(
+      "Usage:\n" +
+      "  whats-proxy admin setup [--code] [--phone N]  Pair WhatsApp (QR or code)\n" +
+      "  whats-proxy admin status                      Daemon + auth status (JSON)\n" +
+      "  whats-proxy admin stop                        Stop the daemon\n",
+    );
+    return 0;
+  }
+
   // admin always returns JSON; reject --format/--output-file loudly
   if (argv.includes("--format") || argv.includes("-f") || argv.includes("--output-file") || argv.includes("-o")) {
     const output: Output = {
@@ -264,7 +275,15 @@ async function cmdAdmin(argv: string[]): Promise<number> {
 
   switch (sub) {
     case "setup": {
-      // whats-proxy admin setup [--code] [--phone N]  → Baileys pairing (QR or code)
+      if (argv.includes("--help") || argv.includes("-h")) {
+        process.stdout.write(
+          "Usage:\n" +
+          "  whats-proxy admin setup              QR code pairing (scan with phone)\n" +
+          "  whats-proxy admin setup --code       Numeric pairing code (8 digits)\n" +
+          "  whats-proxy admin setup --code --phone N  Pairing code for a specific number\n",
+        );
+        return 0;
+      }
       const { adminSetup } = await import("./admin/setup.ts");
       const result = await adminSetup({
         code: argv.includes("--code"),
