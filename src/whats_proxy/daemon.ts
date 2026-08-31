@@ -197,7 +197,7 @@ async function createSocket(authPath: string, cfg: AppConfig) {
           await new Promise((r) => setTimeout(r, delay));
           await createSocket(authPath, cfg);
         } else if (shouldReconnect) {
-          log.warn("Max reconnect attempts reached. Run 'whats-proxy admin daemon status' to inspect.");
+          log.warn("Max reconnect attempts reached. Run 'whats-proxy admin service status' to inspect.");
         }
       }
     });
@@ -490,5 +490,5 @@ export async function startDaemon(phone?: string): Promise<void> {
     }, checkMs);
   }
 
-  log.info("Daemon ready. Use 'whats-proxy do <action>' or 'whats-proxy admin daemon status'.");
+  log.info("Daemon ready. Use 'whats-proxy do <action>' or 'whats-proxy admin service status'.");
 }

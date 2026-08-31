@@ -18,7 +18,7 @@ import { okResult, errResult } from "../../helpers.ts";
 import { rpcCall, pingDaemon } from "../../client.ts";
 import type { Output } from "../../types.ts";
 
-interface DaemonRefreshOptions {
+interface ServiceRefreshOptions {
   phone?: string;
 }
 
@@ -63,7 +63,7 @@ async function refreshDaemon(
  *   await daemonRefresh({})
  *   // => { meta: { status: "ok", ... }, data: { results: [...], total: 2, refreshed_count: 1 } }
  */
-export async function daemonRefresh(opts: DaemonRefreshOptions): Promise<Output> {
+export async function serviceRefresh(opts: ServiceRefreshOptions): Promise<Output> {
   const cfg = loadConfig();
   const accounts = readAccounts(cfg);
   const allPhones = Object.keys(accounts.accounts);

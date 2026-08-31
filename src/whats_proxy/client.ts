@@ -3,7 +3,7 @@
  *
  * Thin JSON-RPC 2.0 client over the daemon's Unix socket. Auto-spawns a
  * detached daemon when none is running (transparent: logged to the state
- * dir, pidfile written, `admin daemon status` reflects it). Every method returns
+ * dir, pidfile written, `admin service status` reflects it). Every method returns
  * the full Output envelope (`meta` + `data`) — the tick-proxy standard.
  *
  * Multi-account: each phone number owns its own daemon, socket, and state
@@ -42,7 +42,7 @@ export async function rpcCall(
 ): Promise<RpcResponse> {
   if (!existsSync(sockFile)) {
     throw new WhatsProxyError(
-      `Daemon socket not found at ${sockFile}. Start the daemon or run 'whats-proxy admin daemon status'.`,
+      `Daemon socket not found at ${sockFile}. Start the daemon or run 'whats-proxy admin service status'.`,
       "DAEMON_NOT_RUNNING",
     );
   }
@@ -124,7 +124,7 @@ export async function spawnDaemon(
     if (await pingDaemon(paths)) return;
     if (Date.now() > deadline) {
       throw new WhatsProxyError(
-        `Daemon did not become ready within ${waitMs / 1000}s. Run 'whats-proxy admin daemon status' and inspect stderr diagnostics.`,
+        `Daemon did not become ready within ${waitMs / 1000}s. Run 'whats-proxy admin service status' and inspect stderr diagnostics.`,
         "DAEMON_START_TIMEOUT",
       );
     }
@@ -253,7 +253,7 @@ export class WaClient {
     return unwrap(resp);
   }
 
-  /** Connection info getter used by action contexts (admin daemon status). */
+  /** Connection info getter used by action contexts (admin service status). */
   get sockFile(): string {
     return this.paths.sockFile;
   }

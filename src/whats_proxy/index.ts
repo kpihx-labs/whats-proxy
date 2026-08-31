@@ -8,7 +8,7 @@
  *   whats-proxy do <action> [payload|file] [-o file] [-f json|table]
  *   whats-proxy admin auth login [--code] [--phone N]
  *   whats-proxy admin auth status|logout|use
- *   whats-proxy admin daemon status|stop|restart|logs|refresh
+ *   whats-proxy admin service start|stop|restart|logs|status|refresh <phone>
  *   whats-proxy daemon            (internal — auto-spawned by `do`)
  */
 

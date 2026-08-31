@@ -18,11 +18,8 @@
  *   whats-proxy admin auth status [phone]
  *   whats-proxy admin auth logout <phone>
  *   whats-proxy admin auth use <phone>
- *   whats-proxy admin daemon status [phone]
- *   whats-proxy admin daemon stop [phone]
- *   whats-proxy admin daemon restart [phone]
- *   whats-proxy admin daemon logs [phone]
- *   whats-proxy admin daemon refresh [phone]
+ *   whats-proxy admin service start|stop|restart|logs|status <phone>
+ *   whats-proxy admin service start|stop|restart|logs|status|refresh [phone]
  *   whats-proxy daemon --account <phone>
  *   whats-proxy --version
  */
@@ -327,9 +324,8 @@ async function cmdAdmin(argv: string[]): Promise<number> {
       "  whats-proxy admin setup                              Install service + config\n" +
       "  whats-proxy admin status                             Full installation status\n" +
       "  whats-proxy admin purge                              Remove everything\n" +
-      "  whats-proxy admin service start|stop|restart|status|logs <phone>  Service lifecycle\n" +
-      "  whats-proxy admin auth login|status|logout|use <phone>           Auth lifecycle\n" +
-      "  whats-proxy admin daemon status|stop|restart|logs|refresh <phone> Daemon lifecycle\n",
+      "  whats-proxy admin service start|stop|restart|status|logs|refresh <phone>\n" +
+      "  whats-proxy admin auth login|status|logout|use <phone>\n",
     );
     return 0;
   }
@@ -512,67 +508,20 @@ async function cmdAdmin(argv: string[]): Promise<number> {
         return result.meta.status === "error" ? 1 : 0;
       }
 
+      case "refresh": {
+        const phone = rest[0] ? canonicalPhone(rest[0]) : undefined;
+        const { serviceRefresh } = await import("./admin/service/refresh.ts");
+        const result = await serviceRefresh({ phone });
+        print_json(result);
+        return result.meta.status === "error" ? 1 : 0;
+      }
+
       default:
         print_json({
           meta: { status: "error", comment: `Unknown admin service subcommand: ${subsub ?? "(empty)"}`, edited: false },
           data: {
             error: `Unknown admin service subcommand: ${subsub ?? "(empty)"}`,
-            usage: "whats-proxy admin service start|stop|restart|logs|status <phone>",
-          },
-        } satisfies Output);
-        return 2;
-    }
-  }
-
-  // ── admin daemon ─────────────────────────────────────────────────────────
-
-  if (sub === "daemon") {
-    const subsub = argv[1];
-    const rest = argv.slice(2);
-    const phone = rest[0] ? canonicalPhone(rest[0]) : undefined;
-
-    switch (subsub) {
-      case "status": {
-        const { daemonStatus } = await import("./admin/daemon/status.ts");
-        const result = await daemonStatus({ phone });
-        print_json(result);
-        return result.meta.status === "error" ? 1 : 0;
-      }
-
-      case "stop": {
-        const { daemonStop } = await import("./admin/daemon/stop.ts");
-        const result = await daemonStop({ phone });
-        print_json(result);
-        return result.meta.status === "error" ? 1 : 0;
-      }
-
-      case "restart": {
-        const { daemonRestart } = await import("./admin/daemon/restart.ts");
-        const result = await daemonRestart({ phone });
-        print_json(result);
-        return result.meta.status === "error" ? 1 : 0;
-      }
-
-      case "logs": {
-        const { daemonLogs } = await import("./admin/daemon/logs.ts");
-        const result = await daemonLogs({ phone });
-        print_json(result);
-        return result.meta.status === "error" ? 1 : 0;
-      }
-
-      case "refresh": {
-        const { daemonRefresh } = await import("./admin/daemon/refresh.ts");
-        const result = await daemonRefresh({ phone });
-        print_json(result);
-        return result.meta.status === "error" ? 1 : 0;
-      }
-
-      default:
-        print_json({
-          meta: { status: "error", comment: `Unknown admin daemon subcommand: ${subsub ?? "(empty)"}`, edited: false },
-          data: {
-            error: `Unknown admin daemon subcommand: ${subsub ?? "(empty)"}`,
-            usage: "whats-proxy admin daemon status|stop|restart|logs|refresh [phone]",
+            usage: "whats-proxy admin service start|stop|restart|logs|status|refresh <phone>",
           },
         } satisfies Output);
         return 2;
@@ -584,7 +533,7 @@ async function cmdAdmin(argv: string[]): Promise<number> {
     meta: { status: "error", comment: `Unknown admin subcommand: ${sub}`, edited: false },
     data: {
       error: `Unknown admin subcommand: ${sub}`,
-      usage: "whats-proxy admin setup|status|purge|service|auth|daemon",
+        usage: "whats-proxy admin setup|status|purge|service|auth",
     },
   } satisfies Output);
   return 2;
@@ -633,12 +582,11 @@ export async function main(argv: string[]): Promise<number> {
           `  whats-proxy admin setup                              Install service + config\n` +
           `  whats-proxy admin status                             Full installation status\n` +
           `  whats-proxy admin purge                              Remove everything\n` +
-          `  whats-proxy admin service start|stop|restart|status|logs <phone>\n` +
+          `  whats-proxy admin service start|stop|restart|status|logs|refresh <phone>\n` +
           `  whats-proxy admin auth login [--code] [--phone N]\n` +
           `  whats-proxy admin auth status [phone]\n` +
           `  whats-proxy admin auth logout <phone>\n` +
           `  whats-proxy admin auth use <phone>\n` +
-          `  whats-proxy admin daemon status|stop|restart|logs|refresh [phone]\n` +
           `  whats-proxy daemon --account <phone>\n` +
           `  whats-proxy --version\n`,
       );

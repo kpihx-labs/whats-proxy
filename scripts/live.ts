@@ -13,8 +13,8 @@
  */
 
 import { authLogin } from "../src/whats_proxy/admin/auth/login.ts";
-import { daemonStatus } from "../src/whats_proxy/admin/daemon/status.ts";
-import { daemonStop } from "../src/whats_proxy/admin/daemon/stop.ts";
+import { serviceStatus } from "../src/whats_proxy/admin/service/status.ts";
+import { serviceStop } from "../src/whats_proxy/admin/service/stop.ts";
 import WaClient from "../src/whats_proxy/client.ts";
 import type { Output } from "../src/whats_proxy/types.ts";
 
@@ -45,8 +45,8 @@ if (sent.meta.status !== "ok") fail("send-text failed", sent.data);
 process.stdout.write(JSON.stringify(sent, null, 2) + "\n");
 
 // 3. Report final state, stop the daemon cleanly (session kept).
-const status = await daemonStatus({ phone: to });
-const stop = await daemonStop({ phone: to });
+const status = await serviceStatus({ phone: to });
+const stop = await serviceStop({ phone: to });
 process.stdout.write(JSON.stringify({ pairing: setup.data, send: sent.data, final: status.data, stop: stop.data }, null, 2) + "\n");
 console.log("[live] OK — paired, sent, daemon stopped (session credentials kept).");
 process.exit(0);

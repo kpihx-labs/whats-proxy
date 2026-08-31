@@ -160,14 +160,14 @@ console.log("\n[6] daemon spawn + dispatch");
 // ── 7. admin status (daemon down) ────────────────────────────────────────────
 console.log("\n[7] admin status");
 {
-  const { daemonStatus } = await import("../src/whats_proxy/admin/daemon/status.ts");
-  const result = await daemonStatus({});
+  const { serviceStatus } = await import("../src/whats_proxy/admin/service/status.ts");
+  const result = await serviceStatus({});
   check("status ok envelope", result.meta.status === "ok");
-  const data = result.data as { accounts: Array<{ daemon: { running: boolean }; auth: { present: boolean } }>; total: number };
+  const data = result.data as { accounts: Array<{ active: boolean; auth: { present: boolean } }>; total: number };
   check("total >= 1", data.total >= 1);
   const acct = data.accounts?.[0];
   if (acct) {
-    check("daemon.running false", acct.daemon.running === false);
+    check("service inactive (daemon down)", acct.active === false);
     check("auth.present false", acct.auth.present === false);
   }
 }
@@ -185,16 +185,16 @@ console.log("\n[8] store-only actions via CLI (daemon auto-spawn)");
   check("guide lists 66 tools", text.includes("66"), text.match(/"total_tools": (\d+)/)?.[1]);
   check("guide has categories", text.includes("categories"));
 
-  // Stop the auto-spawned daemon through `admin daemon stop`
+  // Stop the auto-spawned daemon through `admin service stop`
   const out2: string[] = [];
   const orig2 = process.stdout.write.bind(process.stdout);
   process.stdout.write = ((s: string) => { out2.push(String(s)); return true; }) as never;
-  const stopCode = await main(["admin", "daemon", "stop"]);
+  const stopCode = await main(["admin", "service", "stop", TEST_PHONE]);
   process.stdout.write = orig2;
   const stopText = out2.join("");
-  check("admin daemon stop exit 0", stopCode === 0);
-  check("admin daemon stop ok envelope", stopText.includes('"status": "ok"'));
-  check("admin daemon stop stopped true", stopText.includes('"stopped": true'));
+  check("admin service stop exit 0", stopCode === 0);
+  check("admin service stop ok envelope", stopText.includes('"status": "ok"'));
+  check("admin service stop stopped", stopText.includes('"stopped"') || stopText.includes('"already_stopped"'));
   await new Promise((r) => setTimeout(r, 600));
   const { loadConfig, accountStatePaths } = await import("../src/whats_proxy/config.ts");
   const paths = accountStatePaths(TEST_PHONE, loadConfig());

@@ -8,8 +8,8 @@
  * journal entries per account.
  */
 
+import { existsSync } from "node:fs";
 import { execSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -19,7 +19,8 @@ import {
   accountStatePaths,
 } from "../../config.ts";
 import { okResult, errResult } from "../../helpers.ts";
-import type { Output } from "../../types.ts";
+import { pingDaemon, rpcCall } from "../../client.ts";
+import type { ConnectionInfo, Output } from "../../types.ts";
 
 interface ServiceStatusOptions {
   phone?: string;
@@ -92,6 +93,17 @@ async function probeService(
   // Auth presence
   const authPresent = existsSync(join(paths.auth, "creds.json"));
 
+  // RPC connection state (if daemon answers)
+  let connection: ConnectionInfo = { state: "disconnected", user: null, store_stats: null, reconnect_attempts: 0 };
+  if (active) {
+    try {
+      const resp = await rpcCall(paths.sockFile, "connection-info", {}, 3000);
+      connection = (resp.result as ConnectionInfo) || connection;
+    } catch {
+      // daemon unreachable
+    }
+  }
+
   return {
     phone,
     default: isDefault,
@@ -102,6 +114,7 @@ async function probeService(
     memory,
     uptime,
     auth: { present: authPresent },
+    connection,
     recent_logs: recentLogs,
   };
 }
