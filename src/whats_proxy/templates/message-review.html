@@ -16,13 +16,13 @@
 
 <main class="hitl-container">
 
-  <!-- ===== Visual Editor (editable preview) ===== -->
+  <!-- ===== Visual Editor (editable, syncs with JSON) ===== -->
   <section class="hitl-card">
     <h2>✏️ Message Editor — edit directly below, changes sync to JSON</h2>
     <div class="hitl-card-body">
       <div class="editor-row">
         <label class="editor-label">To (JID)</label>
-        <input class="editor-input" id="ed-jid" type="text" placeholder="33612345678 or group@g.us">
+        <input class="editor-input" id="ed-jid" type="text">
       </div>
       <div class="editor-row">
         <label class="editor-label">Message</label>
@@ -36,205 +36,175 @@
           <button class="tb-btn" onclick="insertText('\n# ')" title="Title">#</button>
           <button class="tb-btn" onclick="insertText('\n---\n')" title="Separator">—</button>
         </div>
-        <textarea class="editor-textarea" id="ed-text" placeholder="Type your message here..." rows="6"></textarea>
+        <textarea class="editor-textarea" id="ed-text" rows="8"></textarea>
       </div>
       <div class="editor-row" id="ed-extra-fields"></div>
     </div>
   </section>
 
-  <!-- ===== Live Preview (read-only WhatsApp bubble) ===== -->
-  <section class="hitl-card">
-    <h2>👁️ Live Preview</h2>
-    <div class="hitl-card-body">
-      <div class="preview-bubble" id="preview-bubble">
-        <div class="preview-sender" id="preview-sender"></div>
-        <div class="preview-content" id="preview-content">Start typing above...</div>
-        <div class="preview-timestamp" id="preview-timestamp"></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===== Raw JSON Editor (always available) ===== -->
+  <!-- ===== Raw JSON Editor ===== -->
   <section class="hitl-card">
     <h2>🔧 Raw JSON — edit directly or sync from visual editor</h2>
     <div class="hitl-card-body">
-      <textarea class="hitl-input" id="payload" rows="12">{{PAYLOAD_JSON}}</textarea>
+      <textarea class="hitl-input" id="payload" rows="14"></textarea>
     </div>
   </section>
 
 </main>
 
 <footer class="hitl-footer">
-  <textarea class="hitl-input" id="comment" placeholder="Comment (optional) — e.g. 'Changed tone to formal'" rows="2"></textarea>
+  <textarea class="hitl-input" id="comment" placeholder="Comment (optional)" rows="2"></textarea>
 </footer>
 
 <script>
-const ORIGINAL = JSON.parse('{{PAYLOAD_JSON_SAFE}}');
-const payload = JSON.parse('{{PAYLOAD_JSON_SAFE}}');
+// ── Initialize from JSON safely ─────────────────────────────────────────────
+var ORIGINAL, payload;
+try {
+    ORIGINAL = JSON.parse(document.getElementById('payload').getAttribute('data-original') || '{{PAYLOAD_JSON_SAFE}}');
+    payload = ORIGINAL;
+} catch(e) {
+    ORIGINAL = {};
+    payload = {};
+}
 
-// ── Initialize visual editor from payload ───────────────────────────────────
-document.getElementById('ed-jid').value = payload.jid || payload.to || '';
-document.getElementById('ed-text').value = payload.text || payload.caption || payload.question || payload.name || payload.message || '';
+// Populate visual editor from payload
+function initEditor() {
+    document.getElementById('ed-jid').value = payload.jid || payload.to || payload.to_jid || '';
+    document.getElementById('ed-text').value = payload.text || payload.caption || payload.question || payload.name || payload.new_text || payload.message || '';
+    document.getElementById('payload').value = JSON.stringify(payload, null, 2);
 
-// Render extra fields (poll options, location, contact, etc.)
-const extra = document.getElementById('ed-extra-fields');
-const fields = [];
-if (payload.options) fields.push({ label: 'Poll options (one per line)', key: 'options', value: (payload.options || []).join('\n'), type: 'textarea' });
-if (payload.latitude != null) fields.push({ label: 'Latitude', key: 'latitude', value: payload.latitude, type: 'number' });
-if (payload.longitude != null) fields.push({ label: 'Longitude', key: 'longitude', value: payload.longitude, type: 'number' });
-if (payload.contacts) fields.push({ label: 'Contacts', key: 'contacts', value: JSON.stringify(payload.contacts, null, 2), type: 'textarea' });
-if (payload.source) fields.push({ label: 'Source / Path', key: 'source', value: payload.source, type: 'text', readonly: true });
-if (payload.message_id) fields.push({ label: 'Message ID', key: 'message_id', value: payload.message_id, type: 'text', readonly: true });
-if (payload.to_jid) fields.push({ label: 'Forward to', key: 'to_jid', value: payload.to_jid, type: 'text' });
-if (payload.new_text) fields.push({ label: 'New text (edit)', key: 'new_text', value: payload.new_text, type: 'textarea' });
+    // Extra fields
+    var extra = document.getElementById('ed-extra-fields');
+    extra.innerHTML = '';
+    if (payload.options) addField(extra, 'options', 'Poll options (one per line)', (payload.options||[]).join('\n'), 'textarea');
+    if (payload.latitude != null) addField(extra, 'latitude', 'Latitude', payload.latitude, 'number');
+    if (payload.longitude != null) addField(extra, 'longitude', 'Longitude', payload.longitude, 'number');
+    if (payload.contacts) addField(extra, 'contacts', 'Contacts', JSON.stringify(payload.contacts, null, 2), 'textarea');
+    if (payload.source) addField(extra, 'source', 'Source / Path', payload.source, 'text');
+    if (payload.new_text) addField(extra, 'new_text', 'New text (edit)', payload.new_text, 'textarea');
+    if (payload.to_jid) addField(extra, 'to_jid', 'Forward to', payload.to_jid, 'text');
 
-fields.forEach(f => {
-    const row = document.createElement('div');
+    // Attach sync listeners to all extra fields
+    extra.querySelectorAll('input, textarea').forEach(function(el) {
+        el.addEventListener('input', syncFromVisual);
+    });
+
+    renderPreview();
+}
+
+function addField(container, key, label, value, type) {
+    var row = document.createElement('div');
     row.className = 'editor-row';
-    const label = document.createElement('label');
-    label.className = 'editor-label';
-    label.textContent = f.label;
-    row.appendChild(label);
-    if (f.type === 'textarea') {
-        const ta = document.createElement('textarea');
+    var lbl = document.createElement('label');
+    lbl.className = 'editor-label';
+    lbl.textContent = label;
+    row.appendChild(lbl);
+    if (type === 'textarea') {
+        var ta = document.createElement('textarea');
         ta.className = 'editor-textarea';
-        ta.id = 'ed-' + f.key;
-        ta.value = f.value;
-        ta.rows = 4;
+        ta.id = 'ed-' + key;
+        ta.value = value;
+        ta.rows = 3;
         row.appendChild(ta);
     } else {
-        const inp = document.createElement('input');
+        var inp = document.createElement('input');
         inp.className = 'editor-input';
-        inp.id = 'ed-' + f.key;
-        inp.type = f.type;
-        inp.value = f.value;
-        if (f.readonly) inp.readOnly = true;
+        inp.id = 'ed-' + key;
+        inp.type = type;
+        inp.value = value;
         row.appendChild(inp);
     }
-    extra.appendChild(row);
-});
-
-// ── Live preview rendering ──────────────────────────────────────────────────
-function renderPreview() {
-    const text = document.getElementById('ed-text').value;
-    const jid = document.getElementById('ed-jid').value;
-    const bubble = document.getElementById('preview-content');
-    const sender = document.getElementById('preview-sender');
-    const ts = document.getElementById('preview-timestamp');
-
-    // WhatsApp-style formatting
-    let html = escapeHtml(text || '[empty message]');
-    html = html.replace(/\*(.+?)\*/g, '<strong>$1</strong>');
-    html = html.replace(/_(.+?)_/g, '<em>$1</em>');
-    html = html.replace(/~(.+?)~/g, '<del>$1</del>');
-    html = html.replace(/```(.+?)```/g, '<code>$1</code>');
-    html = html.replace(/\n/g, '<br>');
-
-    bubble.innerHTML = html || '<span style="opacity:0.5">[empty]</span>';
-    sender.textContent = jid || '(no recipient)';
-    ts.textContent = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    container.appendChild(row);
 }
 
 // ── Toolbar helpers ─────────────────────────────────────────────────────────
 function wrapText(before, after) {
-    const ta = document.getElementById('ed-text');
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd;
-    const sel = ta.value.substring(start, end);
-    ta.value = ta.value.substring(0, start) + before + sel + after + ta.value.substring(end);
+    var ta = document.getElementById('ed-text');
+    var s = ta.selectionStart, e = ta.selectionEnd;
+    var sel = ta.value.substring(s, e);
+    ta.value = ta.value.substring(0, s) + before + (sel||'text') + after + ta.value.substring(e);
     ta.focus();
-    ta.setSelectionRange(start + before.length, end + before.length);
+    ta.setSelectionRange(s + before.length, s + before.length + (sel ? sel.length : 4));
     syncFromVisual();
 }
 
 function insertText(text) {
-    const ta = document.getElementById('ed-text');
-    const pos = ta.selectionStart;
-    ta.value = ta.value.substring(0, pos) + text + ta.value.substring(pos);
+    var ta = document.getElementById('ed-text');
+    var p = ta.selectionStart;
+    ta.value = ta.value.substring(0, p) + text + ta.value.substring(p);
     ta.focus();
-    ta.setSelectionRange(pos + text.length, pos + text.length);
+    ta.setSelectionRange(p + text.length, p + text.length);
     syncFromVisual();
 }
 
-function escapeHtml(s) {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
+function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // ── Sync visual → JSON ─────────────────────────────────────────────────────
 function syncFromVisual() {
-    const updated = { ...payload };
+    var updated = JSON.parse(JSON.stringify(payload));
     updated.jid = document.getElementById('ed-jid').value || updated.jid;
     updated.to = updated.jid;
-    const text = document.getElementById('ed-text').value;
+    var text = document.getElementById('ed-text').value;
     if ('text' in updated) updated.text = text;
     else if ('caption' in updated) updated.caption = text;
     else if ('question' in updated) updated.question = text;
     else if ('name' in updated) updated.name = text;
-    else if ('message' in updated) updated.message = text;
+    else if ('new_text' in updated) updated.new_text = text;
 
-    // Extra fields
-    const optsEl = document.getElementById('ed-options');
+    var optsEl = document.getElementById('ed-options');
     if (optsEl && 'options' in updated) updated.options = optsEl.value.split('\n').filter(Boolean);
-    const latEl = document.getElementById('ed-latitude');
+    var latEl = document.getElementById('ed-latitude');
     if (latEl) updated.latitude = parseFloat(latEl.value) || 0;
-    const lngEl = document.getElementById('ed-longitude');
+    var lngEl = document.getElementById('ed-longitude');
     if (lngEl) updated.longitude = parseFloat(lngEl.value) || 0;
-    const contactsEl = document.getElementById('ed-contacts');
+    var contactsEl = document.getElementById('ed-contacts');
     if (contactsEl) { try { updated.contacts = JSON.parse(contactsEl.value); } catch {} }
-    const toJidEl = document.getElementById('ed-to_jid');
+    var toJidEl = document.getElementById('ed-to_jid');
     if (toJidEl) updated.to_jid = toJidEl.value;
-    const newTextEl = document.getElementById('ed-new_text');
+    var newTextEl = document.getElementById('ed-new_text');
     if (newTextEl) updated.new_text = newTextEl.value;
 
     document.getElementById('payload').value = JSON.stringify(updated, null, 2);
-    renderPreview();
 }
 
-// ── Sync JSON → visual (when user edits raw JSON) ──────────────────────────
+// ── Sync JSON → visual ─────────────────────────────────────────────────────
 function syncFromJson() {
     try {
-        const parsed = JSON.parse(document.getElementById('payload').value);
+        var parsed = JSON.parse(document.getElementById('payload').value);
         document.getElementById('ed-jid').value = parsed.jid || parsed.to || '';
-        document.getElementById('ed-text').value = parsed.text || parsed.caption || parsed.question || parsed.name || '';
-        const optsEl = document.getElementById('ed-options');
+        document.getElementById('ed-text').value = parsed.text || parsed.caption || parsed.question || parsed.name || parsed.new_text || '';
+        var optsEl = document.getElementById('ed-options');
         if (optsEl && parsed.options) optsEl.value = (parsed.options || []).join('\n');
-        const latEl = document.getElementById('ed-latitude');
+        var latEl = document.getElementById('ed-latitude');
         if (latEl && parsed.latitude != null) latEl.value = parsed.latitude;
-        const lngEl = document.getElementById('ed-longitude');
+        var lngEl = document.getElementById('ed-longitude');
         if (lngEl && parsed.longitude != null) lngEl.value = parsed.longitude;
-        const toJidEl = document.getElementById('ed-to_jid');
+        var toJidEl = document.getElementById('ed-to_jid');
         if (toJidEl && parsed.to_jid) toJidEl.value = parsed.to_jid;
-        const newTextEl = document.getElementById('ed-new_text');
+        var newTextEl = document.getElementById('ed-new_text');
         if (newTextEl && parsed.new_text) newTextEl.value = parsed.new_text;
-        renderPreview();
-    } catch {}
+        payload = parsed;
+    } catch(e) {}
 }
-
-// ── Bi-directional sync ─────────────────────────────────────────────────────
-document.getElementById('ed-jid').addEventListener('input', syncFromVisual);
-document.getElementById('ed-text').addEventListener('input', syncFromVisual);
-document.getElementById('payload').addEventListener('input', syncFromJson);
-document.querySelectorAll('[id^="ed-"]').forEach(el => el.addEventListener('input', syncFromVisual));
 
 // ── Submit ──────────────────────────────────────────────────────────────────
 async function submit(status) {
     syncFromVisual();
-    const raw = document.getElementById('payload').value;
-    let payload;
-    try { payload = JSON.parse(raw); } catch { payload = raw; }
-    const comment = document.getElementById('comment').value;
-    const edited = (JSON.stringify(payload) !== JSON.stringify(ORIGINAL));
-    const resp = await fetch('/submit', {
+    var raw = document.getElementById('payload').value;
+    var p;
+    try { p = JSON.parse(raw); } catch(e) { p = raw; }
+    var comment = document.getElementById('comment').value;
+    var edited = (JSON.stringify(p) !== JSON.stringify(ORIGINAL));
+    var resp = await fetch('/submit', {
         method: 'POST',
-        body: JSON.stringify({ id: '{{REQUEST_ID}}', status, comment, payload, edited })
+        body: JSON.stringify({ id: '{{REQUEST_ID}}', status: status, comment: comment, payload: p, edited: edited })
     });
     if (resp.ok) {
-        document.body.innerHTML = '<div class="hitl-done"><h2>✅ ' + status.toUpperCase() + '</h2><p>' + (status === 'approved' ? 'Message sent!' : 'Message rejected.') + '</p><p style="opacity:0.5">You can close this window.</p></div>';
+        document.body.innerHTML = '<div class="hitl-done"><h2>' + (status === 'approved' ? '✅ SENT' : '❌ REJECTED') + '</h2><p style="opacity:0.6">You can close this window.</p></div>';
     }
 }
 
 // ── Init ────────────────────────────────────────────────────────────────────
-renderPreview();
-document.getElementById('comment').value = payload.comment || '';
+initEditor();
 </script>
 </body></html>
