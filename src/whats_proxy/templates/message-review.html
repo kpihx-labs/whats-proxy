@@ -24,15 +24,9 @@
         <label class="editor-label">To (JID)</label>
         <input class="editor-input" id="ed-jid" type="text">
       </div>
-      <div class="editor-row">
-        <label class="editor-label">Message</label>
-        <div class="editor-toolbar">
-          <button class="tb-btn" onclick="wrap('*','*')" title="Bold">B</button>
-          <button class="tb-btn" onclick="wrap('_','_')" title="Italic"><i>I</i></button>
-          <button class="tb-btn" onclick="wrap('~','~')" title="Strikethrough"><s>S</s></button>
-          <button class="tb-btn" onclick="ins('\n• ')" title="Bullet">•</button>
-          <button class="tb-btn" onclick="ins('\n# ')" title="Title">#</button>
-        </div>
+      <div class="editor-row" id="ed-text-row">
+        <label class="editor-label" id="ed-text-label">Message</label>
+        <div class="editor-toolbar" id="toolbar"></div>
         <textarea class="editor-textarea" id="ed-text" rows="8"></textarea>
       </div>
       <div class="editor-row" id="ed-extra"></div>
@@ -61,6 +55,25 @@ try {
     ORIGINAL = {};
 }
 document.getElementById('ed-jid').value = payload.jid || payload.to || payload.to_jid || '';
+
+// Hide Message field + toolbar for actions without text content
+var hasText = 'text' in payload || 'caption' in payload || 'question' in payload || 'name' in payload || 'new_text' in payload;
+var isMediaOnly = !hasText && ('source' in payload || 'latitude' in payload || 'message_id' in payload);
+if (isMediaOnly) {
+  document.getElementById('ed-text-row').style.display = 'none';
+}
+// Only show toolbar for text-like actions
+if (hasText) {
+  document.getElementById('toolbar').innerHTML =
+    '<button class="tb-btn" onclick="wrap(\'*\',\'*\')" title="Bold">B</button>' +
+    '<button class="tb-btn" onclick="wrap(\'_\',\'_\')" title="Italic"><i>I</i></button>' +
+    '<button class="tb-btn" onclick="wrap(\'~\',\'~\')" title="Strikethrough"><s>S</s></button>' +
+    '<button class="tb-btn" onclick="ins(\'\\n• \')" title="Bullet">•</button>' +
+    '<button class="tb-btn" onclick="ins(\'\\n# \')" title="Title">#</button>';
+} else {
+  document.getElementById('toolbar').style.display = 'none';
+}
+
 document.getElementById('ed-text').value = payload.text || payload.caption || payload.question || payload.name || payload.new_text || '';
 document.getElementById('payload').value = JSON.stringify(payload, null, 2);
 
