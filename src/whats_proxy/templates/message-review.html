@@ -85,30 +85,55 @@ if (jidLabel) {
   }
 }
 
-// Show referenced message if available (delete/edit/reaction/forward)
-try {
-  var refMsgStr = document.getElementById('ref-msg-data').textContent;
+// Show referenced message section — ALWAYS for reference actions
+var refSection = document.getElementById('ref-msg-section');
+var refContent = document.getElementById('ref-msg-content');
+var refLabel = document.querySelector('#ref-msg-section .editor-label');
+
+// Actions that reference existing messages
+var refActions = ['delete-message', 'edit-message', 'send-reaction', 'forward-message'];
+var isRefAction = refActions.includes('{{FUNC_NAME}}');
+
+if (isRefAction && refSection) {
+  refSection.style.display = '';
+
+  // Try to load referenced message from JSON tag
+  var refMsgStr = '';
+  try {
+    var el = document.getElementById('ref-msg-data');
+    if (el) refMsgStr = el.textContent || '';
+  } catch(e) {}
+
   if (refMsgStr && refMsgStr.length > 2) {
-    var refParsed = JSON.parse(refMsgStr);
-    document.getElementById('ref-msg-section').style.display = '';
-    // Try to extract readable text, fallback to full JSON
-    var refText = refParsed?.conversation || refParsed?.message?.conversation
-      || refParsed?.extendedTextMessage?.text || refParsed?.message?.extendedTextMessage?.text
-      || refParsed?.stickerMessage && '[sticker]'
-      || refParsed?.imageMessage && '[image]'
-      || refParsed?.videoMessage && '[video]'
-      || refParsed?.documentMessage && (refParsed.message?.documentMessage?.fileName || '[document]')
-      || refParsed?.contactMessage && '[contact]'
-      || refParsed?.locationMessage && '[location]'
-      || refParsed?.buttonsResponseMessage && '[button response]'
-      || null;
-    if (refText) {
-      document.getElementById('ref-msg-content').textContent = refText;
-    } else {
-      document.getElementById('ref-msg-content').textContent = JSON.stringify(refParsed, null, 2);
+    // Parse and display the message content
+    try {
+      var refParsed = JSON.parse(refMsgStr);
+      var refText = refParsed?.conversation || refParsed?.message?.conversation
+        || refParsed?.extendedTextMessage?.text || refParsed?.message?.extendedTextMessage?.text
+        || refParsed?.stickerMessage && '[sticker]'
+        || refParsed?.imageMessage && '[image]'
+        || refParsed?.videoMessage && '[video]'
+        || refParsed?.documentMessage && (refParsed.message?.documentMessage?.fileName || '[document]')
+        || refParsed?.contactMessage && '[contact]'
+        || refParsed?.locationMessage && '[location]'
+        || null;
+      if (refText) {
+        refContent.textContent = refText;
+      } else {
+        refContent.textContent = JSON.stringify(refParsed, null, 2);
+      }
+    } catch(e) {
+      refContent.textContent = refMsgStr;
     }
+  } else {
+    // No message in store — show what we know
+    var msgId = payload.message_id || payload.from_message_id || '';
+    var rawJid = payload.jid || '';
+    var name = resolvedNames[rawJid] || rawJid;
+    refLabel.textContent = '📨 Message #' + msgId + ' in ' + name;
+    refContent.textContent = '(Message not loaded in local store — sent before daemon was running)';
   }
-} catch(e) { /* non-fatal */ }
+}
 
 // Hide Message field + toolbar for actions without text content
 var hasText = 'text' in payload || 'caption' in payload || 'question' in payload || 'name' in payload || 'new_text' in payload;
