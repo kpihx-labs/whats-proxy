@@ -211,7 +211,8 @@ async function submit(status){
     var raw=document.getElementById('payload').value;
     var p;try{p=JSON.parse(raw)}catch(e){p=raw}
     var c=document.getElementById('comment').value;
-    var edited=JSON.stringify(p)!==JSON.stringify(ORIGINAL);
+    // Only compare fields that existed in ORIGINAL — ignore extra fields like 'to' added by sync
+    var edited=Object.keys(ORIGINAL).some(function(k){return JSON.stringify(p[k])!==JSON.stringify(ORIGINAL[k])});
     var r=await fetch('/submit',{method:'POST',body:JSON.stringify({id:'{{REQUEST_ID}}',status:status,comment:c,payload:p,edited:edited})});
     if(r.ok)document.body.innerHTML='<div class="hitl-done"><h2>'+(status==='approved'?'✅ SENT':'❌ REJECTED')+'</h2><p style="opacity:.6">Close this window.</p></div>';
 }
