@@ -231,24 +231,24 @@ Examples:
       const groups: any[] = [];
       const lim = Number(limit) || 50;
 
+      // First pass: collect groups from groupMeta (has subject names).
+      for (const meta of store.groupMeta.values()) {
+        if (!meta?.id || seen.has(meta.id)) continue;
+        seen.add(meta.id);
+        groups.push({
+          id: meta.id,
+          name: meta.subject || meta.name || null,
+          conversationTimestamp: meta.subjectTime || meta.creation || 0,
+        });
+        if (groups.length >= lim) break;
+      }
+
+      // Second pass: fill from chats (groups without groupMeta).
       for (const chat of store.listChats(10000)) {
         if (!isGroupJid(chat.id) || seen.has(chat.id)) continue;
         seen.add(chat.id);
         groups.push(chat);
         if (groups.length >= lim) break;
-      }
-
-      if (groups.length < lim) {
-        for (const meta of store.groupMeta.values()) {
-          if (!meta?.id || seen.has(meta.id)) continue;
-          seen.add(meta.id);
-          groups.push({
-            id: meta.id,
-            name: meta.subject,
-            conversationTimestamp: meta.subjectTime || meta.creation || 0,
-          });
-          if (groups.length >= lim) break;
-        }
       }
 
       const results = [];

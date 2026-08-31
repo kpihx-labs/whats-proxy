@@ -282,6 +282,14 @@ Examples:
         contacts = contacts.filter((c: any) => !isGroupJid(c.id));
       }
 
+      // Build a name lookup from chats (pushName from last message) for contacts
+      // that don't have resolved names in the store.
+      const chatNameMap = new Map<string, string>();
+      for (const chat of store.listChats(10000)) {
+        const chatName = chat.name || chat.pushName || chat.notify;
+        if (chatName && chat.id) chatNameMap.set(chat.id, chatName);
+      }
+
       const total = contacts.length;
       const off = Number(offset || 0);
       const lim = Math.min(Number(limit) || 100, 1000);
@@ -294,7 +302,7 @@ Examples:
         contacts: page.map((c: any) => ({
           jid: c.id,
           phone: jidToPhone(c.id),
-          name: c.name || c.notify || c.verifiedName || null,
+          name: c.name || c.notify || c.verifiedName || chatNameMap.get(c.id) || null,
           short_name: c.short || null,
           tags: store.getContactTags(c.id),
         })),
