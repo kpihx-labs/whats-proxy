@@ -98,7 +98,12 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
       generateHighQualityLinkPreview: false,
       syncFullHistory: true,
     });
-    sock.ev.on("creds.update", saveCreds);
+    sock.ev.on("creds.update", (update) => {
+      if (update.advSecretKey) {
+        logger.info("advSecretKey rotated (companion_reg_refresh handler fired)");
+      }
+      saveCreds();
+    });
 
     let codeRequested = false;
     let receivedQr = false;
@@ -115,6 +120,7 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
 
       sock.ev.on("connection.update", async (update) => {
         const { connection, lastDisconnect, qr } = update;
+        logger.info(`[DEBUG] connection.update: connection=${connection} qr=${!!qr} receivedQr=${receivedQr}`);
 
         if (qr) {
           receivedQr = true;
