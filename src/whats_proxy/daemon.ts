@@ -470,8 +470,17 @@ export async function startDaemon(accountPhone?: string): Promise<void> {
     }
   };
   const shutdown = () => {
-    log.info("Daemon stopping; persisting store snapshot...");
-    schedulePersist();
+    log.info("Daemon stopping; persisting store...");
+    // Synchronous persist — NOT schedulePersist() which uses setTimeout(500ms)
+    // but process.exit(0) runs at 250ms. The old code lost messages on every restart.
+    try {
+      if (store && config && config.store?.persist !== false) {
+        const paths = phone ? accountStatePaths(phone, config) : statePaths(config);
+        store.saveSnapshot(paths.storeFile);
+      }
+    } catch (err) {
+      log.warn(`Failed to persist store: ${(err as Error).message}`);
+    }
     try {
       if (sock) {
         (sock.ev as unknown as { removeAllListeners: () => void }).removeAllListeners();
@@ -480,7 +489,7 @@ export async function startDaemon(accountPhone?: string): Promise<void> {
     } catch {
       /* ignore */
     }
-    setTimeout(() => process.exit(0), 250);
+    setTimeout(() => process.exit(0), 100);
   };
   process.on("exit", clearPid);
   process.on("SIGTERM", shutdown);
