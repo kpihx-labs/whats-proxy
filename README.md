@@ -80,8 +80,8 @@ whats-proxy (CLI, Bun)                daemon (detached background process)
                           JSON-RPC    └───────────────────────────────────┘
 ```
 
-- **State**: `$HOME/.config/whats-proxy/` — `.env`, `state/` (Baileys credentials), `store.json`, `whats-proxy.{pid,lock,sock}`. Diagnostics are stderr-only; there is no log file.
-- **Daemon**: owns the Baileys session, snapshots the store to `store.json` (500 ms debounce), restores it on startup, reconnects with exponential backoff (1.5x, capped 30 s).
+- **State**: `$HOME/.config/whats-proxy/` — `.env`, `state/` (Baileys credentials), `store.db` (SQLite), `whats-proxy.{pid,lock,sock}`. Diagnostics are stderr-only; there is no log file.
+- **Daemon**: owns the Baileys session, SQLite store auto-persists (WAL mode), restores on startup, reconnects with exponential backoff (1.5x, capped 30 s).
 - **Dispatch**: action handlers receive `{ args, store, config, sock, registry }` and return the full envelope.
 - **Isolation for tests**: `WHATS_PROXY_STATE_DIR` / `WHATS_PROXY_CONFIG_DIR` point the whole stack at a temp dir.
 

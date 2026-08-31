@@ -20,7 +20,9 @@
     "smoke": "bun run scripts/smoke.ts"
   },
   "dependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@whiskeysockets/baileys": "ayusc/Baileys",
+    "better-sqlite3": "^13.0.3",
     "pino": "^9.0.0",
     "qrcode": "^1.5.4",
     "tsx": "^4.20.6",

@@ -149,12 +149,12 @@ export async function adminDoctor(): Promise<Output> {
       checks.push({ path: `~/.local/share/whats-proxy/${phone}/state/creds.json`, status: "ok" });
     }
 
-    // 4d. <phone>/store.json (warn if missing — will be created on first dispatch)
-    const storePath = join(phoneDir, "store.json");
+    // 4d. <phone>/store.db (warn if missing — will be created on first dispatch)
+    const storePath = join(phoneDir, "store.db");
     if (!existsSync(storePath)) {
-      checks.push({ path: `~/.local/share/whats-proxy/${phone}/store.json`, status: "warn", detail: "will be created on first dispatch" });
+      checks.push({ path: `~/.local/share/whats-proxy/${phone}/store.db`, status: "warn", detail: "will be created on first dispatch" });
     } else {
-      checks.push({ path: `~/.local/share/whats-proxy/${phone}/store.json`, status: "ok" });
+      checks.push({ path: `~/.local/share/whats-proxy/${phone}/store.db`, status: "ok" });
     }
   }
 

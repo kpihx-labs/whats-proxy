@@ -79,7 +79,7 @@ tests/              # bun test: helpers, store, display, policies, audit
 ~/.local/share/whats-proxy/      # HEAVY DATA (per-account)
 └── <phone>/
     ├── state/                   # Baileys auth
-    ├── store.json               # messages, contacts, chats
+    ├── store.db                 # SQLite database (messages, contacts, chats)
     ├── daemon.sock              # daemon socket
     ├── daemon.lock              # O_EXCL lock
     └── daemon.pid               # daemon PID

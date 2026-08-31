@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -98,20 +98,55 @@ describe("Store chats/contacts/analytics", () => {
 });
 
 describe("Store persistence", () => {
-  test("saveSnapshot + loadSnapshot round-trip", () => {
+  test("saveSnapshot + loadSnapshot round-trip (SQLite)", () => {
     const dir = mkdtempSync(join(tmpdir(), "wa-store-"));
     try {
+      // Simulate daemon flow: create store, open DB, add data
       const store = new Store();
+      const dbPath = join(dir, "store.db");
+      // loadSnapshot creates the DB file if it doesn't exist (returns false = fresh DB)
+      store.loadSnapshot(dbPath);
       const jid = "3361@s.whatsapp.net";
       store.upsertMessages([makeMsg("1", jid, 100, "hello")]);
       store.upsertChats([{ id: jid, name: "Bob" }]);
-      const file = join(dir, "store.json");
-      expect(store.saveSnapshot(file)).toBe(true);
+      // saveSnapshot is a no-op for SQLite — data persists automatically
+      expect(store.saveSnapshot(dbPath)).toBe(true);
 
+      // Create a second store and load from the DB file
       const restored = new Store();
-      expect(restored.loadSnapshot(file)).toBe(true);
+      expect(restored.loadSnapshot(dbPath)).toBe(true);
       expect(restored.countMessages(jid)).toBe(1);
       expect(restored.getChat(jid)?.name).toBe("Bob");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("loadSnapshot migrates from store.json to store.db", () => {
+    const dir = mkdtempSync(join(tmpdir(), "wa-store-migrate-"));
+    try {
+      // Simulate an old store.json snapshot
+      const snapshot = {
+        chats: [{ id: "3361@s.whatsapp.net", name: "Bob" }],
+        contacts: [],
+        messages: [["3361@s.whatsapp.net", [makeMsg("1", "3361@s.whatsapp.net", 100, "hello")]]],
+        groupMeta: [],
+        contactTags: {},
+        watchlists: {},
+        lidPnMap: {},
+      };
+      const jsonPath = join(dir, "store.json");
+      writeFileSync(jsonPath, JSON.stringify(snapshot), "utf-8");
+
+      // loadSnapshot should detect the JSON, create SQLite, and migrate
+      const restored = new Store();
+      expect(restored.loadSnapshot(jsonPath)).toBe(true);
+      expect(restored.countMessages("3361@s.whatsapp.net")).toBe(1);
+      expect(restored.getChat("3361@s.whatsapp.net")?.name).toBe("Bob");
+      // Old JSON file should be deleted
+      expect(existsSync(jsonPath)).toBe(false);
+      // New DB file should exist
+      expect(existsSync(join(dir, "store.db"))).toBe(true);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

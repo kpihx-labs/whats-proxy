@@ -11,7 +11,7 @@
  *   ~/.local/share/whats-proxy/         # HEAVY DATA (per-account)
  *   └── <phone>/
  *       ├── state/                      # Baileys auth
- *       ├── store.json                  # messages, contacts, chats
+  *       ├── store.db                    # SQLite database (messages, contacts, chats)
  *       ├── daemon.sock                 # daemon socket
  *       ├── daemon.lock                 # O_EXCL lock
  *       └── daemon.pid                  # daemon PID
@@ -133,7 +133,7 @@ export function statePaths(cfg: AppConfig) {
   return {
     dir,
     auth: join(dir, "state"),
-    storeFile: join(dir, "store.json"),
+    storeFile: join(dir, "store.db"),
     pidFile: join(dir, "whats-proxy.pid"),
     sockFile: join(dir, "whats-proxy.sock"),
     lockFile: join(dir, "whats-proxy.lock"),
@@ -172,7 +172,7 @@ export function accountStatePaths(phone: string, cfg?: AppConfig) {
   return {
     dir,
     auth: join(dir, "state"),
-    storeFile: join(dir, "store.json"),
+    storeFile: join(dir, "store.db"),
     pidFile: join(dir, "daemon.pid"),
     sockFile: join(dir, "daemon.sock"),
     lockFile: join(dir, "daemon.lock"),
