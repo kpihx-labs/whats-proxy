@@ -31,7 +31,7 @@ function _buildSendOpts(args: Record<string, unknown>, store: { getMessage(id: s
   return opts;
 }
 
-function _fmtSent(result: any, jid: string) {
+function _fmtSent(result: any, jid: string, approvedPayload?: Record<string, unknown>) {
   return okResult({
     status: "sent",
     jid,
@@ -39,6 +39,8 @@ function _fmtSent(result: any, jid: string) {
     timestamp: result?.messageTimestamp
       ? Number(result.messageTimestamp)
       : Math.floor(Date.now() / 1000),
+    // Show what was actually sent (may differ from original if HITL edited it)
+    ...(approvedPayload ? { sent_payload: approvedPayload } : {}),
   });
 }
 
@@ -146,7 +148,7 @@ export default [
       const opts = _buildSendOpts({ quoted_id, mentions }, store);
       if (mentions) content.mentions = mentions;
       const result = await sock.sendMessage(to, content as any, opts as any);
-      return _fmtSent(result, to);
+      return _fmtSent(result, to, { jid, text, quoted_id, mentions });
     }),
     schema: sendTextSchema,
     docstring: `Send a text message to a contact or group. Supports @mentions and replying to a specific message via quoted_id.
@@ -193,7 +195,7 @@ Examples:
       if (caption) content.caption = caption;
       const opts = _buildSendOpts({ quoted_id }, store);
       const result = await sock.sendMessage(to, content as any, opts as any);
-      return _fmtSent(result, to);
+      return _fmtSent(result, to, { jid, source, caption, quoted_id });
     }),
     schema: sendImageSchema,
     docstring: `Send an image to a contact or group. Media source can be a URL, base64 data, or local file path.
@@ -244,7 +246,7 @@ Examples:
       if (ptv) content.ptv = true;
       const opts = _buildSendOpts({ quoted_id }, store);
       const result = await sock.sendMessage(to, content as any, opts as any);
-      return _fmtSent(result, to);
+      return _fmtSent(result, to, { jid, source, caption, gif_playback, ptv, quoted_id });
     }),
     schema: sendVideoSchema,
     docstring: `Send a video to a contact or group. Set gif_playback=true for a GIF, or ptv=true for a video note (circle).
@@ -288,7 +290,7 @@ Examples:
       if (ptt) content.ptt = true;
       const opts = _buildSendOpts({ quoted_id }, store);
       const result = await sock.sendMessage(to, content as any, opts as any);
-      return _fmtSent(result, to);
+      return _fmtSent(result, to, { jid, source, ptt, quoted_id });
     }),
     schema: sendAudioSchema,
     docstring: `Send an audio file or voice note. Set ptt=true to send as a voice note (push-to-talk style).
@@ -341,7 +343,7 @@ Examples:
       if (caption) content.caption = caption;
       const opts = _buildSendOpts({ quoted_id }, store);
       const result = await sock.sendMessage(to, content as any, opts as any);
-      return _fmtSent(result, to);
+      return _fmtSent(result, to, { jid, source, filename, mimetype, caption, quoted_id });
     }),
     schema: sendDocumentSchema,
     docstring: `Send a document/file to a contact or group. Supports any file type.
@@ -383,7 +385,7 @@ Examples:
       const content = { sticker: resolveMedia(String(source)) as any };
       const opts = _buildSendOpts({ quoted_id }, store);
       const result = await sock.sendMessage(to, content as any, opts as any);
-      return _fmtSent(result, to);
+      return _fmtSent(result, to, { jid, source, quoted_id });
     }),
     schema: sendStickerSchema,
     docstring: `Send a sticker (WebP format recommended).
@@ -433,7 +435,7 @@ Examples:
       if (address) loc.address = address;
       const opts = _buildSendOpts({ quoted_id }, store);
       const result = await sock.sendMessage(to, content as any, opts as any);
-      return _fmtSent(result, to);
+      return _fmtSent(result, to, { jid, latitude, longitude, name, address, quoted_id });
     }),
     schema: sendLocationSchema,
     docstring: `Send a GPS location pin.
@@ -491,7 +493,7 @@ Examples:
       };
       const opts = _buildSendOpts({ quoted_id }, store);
       const result = await sock.sendMessage(to, content as any, opts as any);
-      return _fmtSent(result, to);
+      return _fmtSent(result, to, { jid, contacts, quoted_id });
     }),
     schema: sendContactSchema,
     docstring: `Send one or more contact cards (vCards).
@@ -594,7 +596,7 @@ Examples:
         },
       };
       const result = await sock.sendMessage(to, content as any);
-      return _fmtSent(result, to);
+      return _fmtSent(result, to, { jid, question, options, selectable_count });
     }),
     schema: sendPollSchema,
     docstring: `Create a poll in a chat. By default single-select; set selectable_count > 1 for multi-select.
@@ -636,7 +638,7 @@ Examples:
         edit: { remoteJid: to, id: String(message_id), fromMe: true },
       };
       await sock.sendMessage(to, content as any);
-      return okResult({ status: "edited", jid: to, message_id });
+      return okResult({ status: "edited", jid: to, message_id, sent_payload: { jid, message_id, new_text } });
     }),
     schema: editMessageSchema,
     docstring: `Edit a previously sent message (text only). You can only edit messages you sent.
@@ -689,7 +691,7 @@ Examples:
         };
         if (participant) key.participant = participant;
         await sock.sendMessage(to, { delete: key } as any);
-        return okResult({ status: "deleted", jid: to, message_id });
+        return okResult({ status: "deleted", jid: to, message_id, sent_payload: { jid, message_id, from_me, participant } });
       }),
     ),
     schema: deleteMessageSchema,
@@ -731,7 +733,7 @@ Examples:
       }
       const to = phoneToJid(String(to_jid));
       const result = await sock.sendMessage(to, { forward: msg, force: true } as any);
-      return _fmtSent(result, to);
+      return _fmtSent(result, to, { to_jid, message_id });
     }),
     schema: forwardMessageSchema,
     docstring: `Forward an existing message to another chat.

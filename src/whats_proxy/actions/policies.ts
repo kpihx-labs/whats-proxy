@@ -251,6 +251,14 @@ export function protectAction(definition: ActionDef, policy: ActionPolicy | unde
           output.meta.status = "approved";
           output.meta.comment = review.comment;
           output.meta.edited = review.edited;
+          // Inject HITL traceability into data
+          const data = output.data as Record<string, unknown>;
+          data._hitl = {
+            original: args,
+            approved: approvedArgs,
+            edited: review.edited,
+            comment: review.comment,
+          };
         }
         if (policy.verify && output.meta.status !== "error") {
           const data = output.data as Record<string, unknown>;
