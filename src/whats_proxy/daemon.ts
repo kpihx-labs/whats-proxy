@@ -160,6 +160,27 @@ async function createSocket(authPath: string, cfg: AppConfig) {
             if (meta?.id) store!.setGroupMeta(meta.id, meta);
           }
           log.info(`Preloaded ${Object.keys(groups || {}).length} groups into store.`);
+
+          // Populate LID↔PN mappings from Baileys auth state
+          try {
+            const authDir = phone ? accountStatePaths(phone, cfg!).auth : statePaths(cfg!).auth;
+            const { readdirSync, readFileSync: readFile } = await import("node:fs");
+            const lidFiles = readdirSync(authDir).filter((f: string) => f.startsWith("lid-mapping-") && f.endsWith("_reverse.json"));
+            let lidCount = 0;
+            for (const file of lidFiles) {
+              try {
+                const lidId = file.replace("lid-mapping-", "").replace("_reverse.json", "");
+                const pn = JSON.parse(readFile(join(authDir, file), "utf-8"));
+                const lidJid = `${lidId}@lid`;
+                const pnJid = `${pn}@s.whatsapp.net`;
+                store!.lidPnMap.set(lidJid, { pn: pnJid });
+                lidCount++;
+              } catch { /* skip corrupt file */ }
+            }
+            log.info(`Loaded ${lidCount} LID→PN mappings from auth state.`);
+          } catch (err) {
+            log.warn(`Failed to load LID mappings: ${(err as Error).message}`);
+          }
         } catch (err) {
           log.warn(`Failed to preload groups after connect: ${(err as Error).message}`);
         }
