@@ -34,6 +34,12 @@
   to avoid 428 from version-mismatched credentials.
 - **CONTRACT.md rewritten:** Full architecture contract (709 lines), dense and complete,
   matching tick-proxy's documentation standard.
+- **New action `send-batch`:** Unified multi-recipient multi-part send. Sends any content type
+  (text, image, video, audio, document, sticker, location, contact, poll) to one or more
+  recipients in a single call. Each part becomes one WhatsApp message; every part is sent to
+  every recipient. Text parts support `@mentions`. Any part can override the global `quoted_id`
+  to reply to a different message. Return shape: `{ total, sent, failed, results }`. 66 actions
+  total (was 65).
 
 ## 0.4.0 — 2026-08-30
 

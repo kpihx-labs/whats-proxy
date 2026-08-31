@@ -44,8 +44,13 @@ function _fmtSent(result: any, jid: string) {
 /** Map a send-batch part to a Baileys content object. */
 function _mapPart(part: Record<string, unknown>): Record<string, unknown> {
   switch (part.type) {
-    case "text":
-      return { text: String(part.text) };
+    case "text": {
+      const c: Record<string, unknown> = { text: String(part.text) };
+      if (Array.isArray(part.mentions) && part.mentions.length > 0) {
+        c.mentions = part.mentions;
+      }
+      return c;
+    }
     case "image":
       return { image: resolveMedia(String(part.source)) as any, ...(part.caption ? { caption: part.caption } : {}) };
     case "video": {
@@ -549,18 +554,19 @@ export default [
     meta: {
       action: "send-batch",
       category: "messaging",
-      description: "Send multiple content types (text, image, video, audio, document, sticker, location, contact, poll) to one or more recipients in a single call. Each part becomes one WhatsApp message; every part is sent to every recipient. Returns a unified result with per-message success/failure.",
+      description: "Send multiple content types (text, image, video, audio, document, sticker, location, contact, poll) to one or more recipients in a single call. Each part becomes one WhatsApp message; every part is sent to every recipient. Text parts support @mentions. Any part can override the global quoted_id to reply to a different message. Returns a unified result with per-message success/failure.",
       arguments: [
         { name: "to", description: "Recipient(s): a single JID/phone string or an array of them.", required: true },
-        { name: "parts", description: "Array of content objects. Each must have a 'type' key (text, image, video, audio, document, sticker, location, contact, poll) plus the type-specific fields.", required: true },
-        { name: "quoted_id", description: "Optional: message ID to reply/quote on every sent message.", required: false },
+        { name: "parts", description: "Array of content objects. Each must have a 'type' key (text, image, video, audio, document, sticker, location, contact, poll) plus the type-specific fields. Text parts accept 'mentions'. Any part accepts 'quoted_id' to override the global reply target.", required: true },
+        { name: "quoted_id", description: "Optional: global message ID to reply/quote on every sent message (overridable per part).", required: false },
         { name: "delay_ms", description: "Delay in ms between individual sends. Default 500.", required: false },
       ],
       example: { to: ["33612345678", "120363000000000@g.us"], parts: [{ type: "text", text: "Hello!" }] },
       examples: [
         { description: "Text to two recipients", payload: { to: ["33612345678", "33600000000"], parts: [{ type: "text", text: "Meeting at 3pm." }] } },
         { description: "Image + text to a group", payload: { to: "120363000000000@g.us", parts: [{ type: "text", text: "Check this out" }, { type: "image", source: "/tmp/photo.jpg", caption: "Figure 1" }] } },
-        { description: "Multi-type broadcast", payload: { to: ["33612345678", "33600000000"], parts: [{ type: "text", text: "Report attached" }, { type: "document", source: "/tmp/report.pdf", filename: "report.pdf" }, { type: "poll", question: "Status?", options: ["OK", "Needs fix"] }] } },
+        { description: "Text with @mention", payload: { to: "120363000000000@g.us", parts: [{ type: "text", text: "@Alice please review", mentions: ["33600000000@s.whatsapp.net"] }] } },
+        { description: "Mixed parts with per-part reply targets", payload: { to: "33612345678", parts: [{ type: "text", text: "See attached" }, { type: "image", source: "/tmp/chart.png", quoted_id: "MSG123" }, { type: "document", source: "/tmp/report.pdf", quoted_id: "MSG456" }] } },
       ],
       returns: "{ total, sent, failed, results }",
     },
@@ -578,12 +584,16 @@ export default [
 
       const delay = delay_ms !== undefined ? Number(delay_ms) : 500;
 
-      // Resolve quoted message once (shared across all sends).
-      let quotedMsg: AnyMsg | undefined;
-      if (quoted_id) {
-        const m = store.getMessage(String(quoted_id));
-        if (m) quotedMsg = m as AnyMsg;
-      }
+      // Resolve the global quoted message once; parts can override with their own quoted_id.
+      const quotedCache = new Map<string, AnyMsg>();
+      const resolveQuoted = (qid: string | undefined): AnyMsg | undefined => {
+        if (!qid) return undefined;
+        if (quotedCache.has(qid)) return quotedCache.get(qid);
+        const m = store.getMessage(qid);
+        if (m) { quotedCache.set(qid, m as AnyMsg); return m as AnyMsg; }
+        return undefined;
+      };
+      const globalQuoted = quoted_id ? resolveQuoted(String(quoted_id)) : undefined;
 
       const results: Record<string, unknown>[] = [];
       let sent = 0;
@@ -596,8 +606,10 @@ export default [
         for (const part of partList) {
           try {
             const content = _mapPart(part);
+            // Per-part quoted_id overrides global; fallback to globalQuoted.
+            const partQuoted = part.quoted_id ? resolveQuoted(String(part.quoted_id)) : globalQuoted;
             const opts: Record<string, unknown> = {};
-            if (quotedMsg) opts.quoted = quotedMsg;
+            if (partQuoted) opts.quoted = partQuoted;
             const r: any = await sock.sendMessage(toJid, content as any, opts as any);
             results.push({
               jid: toJid,

@@ -109,15 +109,15 @@ export const batchSendTextSchema = z.object({
   delay_ms: z.number().optional(),
 });
 
-export const sendBatchPartText = z.object({ type: z.literal("text"), text: z.string(), mentions: z.array(z.string()).optional() });
-export const sendBatchPartImage = z.object({ type: z.literal("image"), source: z.string(), caption: z.string().optional() });
-export const sendBatchPartVideo = z.object({ type: z.literal("video"), source: z.string(), caption: z.string().optional(), gif_playback: z.boolean().optional(), ptv: z.boolean().optional() });
-export const sendBatchPartAudio = z.object({ type: z.literal("audio"), source: z.string(), ptt: z.boolean().optional() });
-export const sendBatchPartDocument = z.object({ type: z.literal("document"), source: z.string(), filename: z.string().optional(), mimetype: z.string().optional(), caption: z.string().optional() });
-export const sendBatchPartSticker = z.object({ type: z.literal("sticker"), source: z.string() });
-export const sendBatchPartLocation = z.object({ type: z.literal("location"), latitude: z.number(), longitude: z.number(), name: z.string().optional(), address: z.string().optional() });
-export const sendBatchPartContact = z.object({ type: z.literal("contact"), contacts: z.array(z.object({ name: z.string(), phone: z.string() })) });
-export const sendBatchPartPoll = z.object({ type: z.literal("poll"), question: z.string(), options: z.array(z.string()).min(2).max(12), selectable_count: z.number().optional() });
+export const sendBatchPartText = z.object({ type: z.literal("text"), text: z.string(), mentions: z.array(z.string()).optional(), quoted_id: z.string().optional() });
+export const sendBatchPartImage = z.object({ type: z.literal("image"), source: z.string(), caption: z.string().optional(), quoted_id: z.string().optional() });
+export const sendBatchPartVideo = z.object({ type: z.literal("video"), source: z.string(), caption: z.string().optional(), gif_playback: z.boolean().optional(), ptv: z.boolean().optional(), quoted_id: z.string().optional() });
+export const sendBatchPartAudio = z.object({ type: z.literal("audio"), source: z.string(), ptt: z.boolean().optional(), quoted_id: z.string().optional() });
+export const sendBatchPartDocument = z.object({ type: z.literal("document"), source: z.string(), filename: z.string().optional(), mimetype: z.string().optional(), caption: z.string().optional(), quoted_id: z.string().optional() });
+export const sendBatchPartSticker = z.object({ type: z.literal("sticker"), source: z.string(), quoted_id: z.string().optional() });
+export const sendBatchPartLocation = z.object({ type: z.literal("location"), latitude: z.number(), longitude: z.number(), name: z.string().optional(), address: z.string().optional(), quoted_id: z.string().optional() });
+export const sendBatchPartContact = z.object({ type: z.literal("contact"), contacts: z.array(z.object({ name: z.string(), phone: z.string() })), quoted_id: z.string().optional() });
+export const sendBatchPartPoll = z.object({ type: z.literal("poll"), question: z.string(), options: z.array(z.string()).min(2).max(12), selectable_count: z.number().optional(), quoted_id: z.string().optional() });
 
 export const sendBatchSchema = z.object({
   to: z.union([z.string(), z.array(z.string()).min(1)]),
