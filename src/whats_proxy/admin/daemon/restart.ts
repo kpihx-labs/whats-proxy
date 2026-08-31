@@ -47,10 +47,8 @@ async function restartDaemon(
   }
 
   // Spawn fresh daemon
-  // NOTE: spawnDaemon uses global statePaths (no per-account override).
-  // For multi-account, we rely on the daemon's own account discovery.
-  // If the daemon is account-aware, it will pick up the correct account
-  // from accounts.json. If not, this restart is a best-effort signal.
+  // NOTE: spawnDaemon requires phone and uses accountStatePaths.
+  // The daemon will own the per-account socket and state.
   try {
     await spawnDaemon(cfg, phone, 30_000);
     return { phone, restarted: true, was_running: wasRunning };

@@ -12,9 +12,9 @@
  * Exit codes: 0 = paired + sent, 1 = any failure (envelope on stdout).
  */
 
-import { adminSetup } from "../src/whats_proxy/admin/setup.ts";
-import { adminStatus } from "../src/whats_proxy/admin/status.ts";
-import { adminStop } from "../src/whats_proxy/admin/stop.ts";
+import { authLogin } from "../src/whats_proxy/admin/auth/login.ts";
+import { daemonStatus } from "../src/whats_proxy/admin/daemon/status.ts";
+import { daemonStop } from "../src/whats_proxy/admin/daemon/stop.ts";
 import WaClient from "../src/whats_proxy/client.ts";
 import type { Output } from "../src/whats_proxy/types.ts";
 
@@ -34,19 +34,19 @@ if (!/^\d{8,15}$/.test(to.replace(/[^\d]/g, ""))) fail(`Invalid phone: ${to}`);
 
 // 1. Pair (QR by default, or pairing code with --code).
 console.log(`[live] pairing${code ? " (code mode)" : " (QR mode)"}...`);
-const setup = await adminSetup({ code, phone: code ? to : undefined });
+const setup = await authLogin({ code, phone: code ? to : undefined });
 if (setup.meta.status !== "ok") fail("Pairing failed", setup.data);
 
 // 2. Send a test message via the daemon (auto-spawns).
 console.log("[live] sending test message...");
-const client = new WaClient();
+const client = new WaClient(to);
 const sent = await client.do("send-text", { to, text });
 if (sent.meta.status !== "ok") fail("send-text failed", sent.data);
 process.stdout.write(JSON.stringify(sent, null, 2) + "\n");
 
 // 3. Report final state, stop the daemon cleanly (session kept).
-const status = await adminStatus();
-const stop = await adminStop();
+const status = await daemonStatus({ phone: to });
+const stop = await daemonStop({ phone: to });
 process.stdout.write(JSON.stringify({ pairing: setup.data, send: sent.data, final: status.data, stop: stop.data }, null, 2) + "\n");
 console.log("[live] OK — paired, sent, daemon stopped (session credentials kept).");
 process.exit(0);

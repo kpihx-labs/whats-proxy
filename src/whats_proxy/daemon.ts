@@ -183,7 +183,7 @@ async function createSocket(authPath: string, cfg: AppConfig) {
             (shouldReconnect
               ? "Will reconnect..."
               : statusCode === DisconnectReason.loggedOut
-                ? "Logged out — run 'whats-proxy admin setup' to re-pair."
+                ? "Logged out — run 'whats-proxy admin auth login' to re-pair."
                 : "Connection replaced by another session."),
         );
 
@@ -197,7 +197,7 @@ async function createSocket(authPath: string, cfg: AppConfig) {
           await new Promise((r) => setTimeout(r, delay));
           await createSocket(authPath, cfg);
         } else if (shouldReconnect) {
-          log.warn("Max reconnect attempts reached. Run 'whats-proxy admin status' to inspect.");
+          log.warn("Max reconnect attempts reached. Run 'whats-proxy admin daemon status' to inspect.");
         }
       }
     });
@@ -394,7 +394,7 @@ async function serveSocket(cfg: AppConfig, paths: ReturnType<typeof statePaths>)
 
 export async function startDaemon(phone?: string): Promise<void> {
   config = loadConfig();
-  // Per-account daemon when phone is provided; legacy flat layout otherwise.
+  // Per-account daemon — phone is required for multi-account layout.
   const paths = phone ? (() => {
     const p = accountStatePaths(phone, config);
     mkdirSync(p.dir, { recursive: true });
@@ -490,5 +490,5 @@ export async function startDaemon(phone?: string): Promise<void> {
     }, checkMs);
   }
 
-  log.info("Daemon ready. Use 'whats-proxy do <action>' or 'whats-proxy admin status'.");
+  log.info("Daemon ready. Use 'whats-proxy do <action>' or 'whats-proxy admin daemon status'.");
 }

@@ -13,7 +13,7 @@
  * Uses an isolated state dir under /tmp so it never touches the real config.
  */
 
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -21,6 +21,15 @@ const WORK = mkdtempSync(join(tmpdir(), "whats-proxy-smoke-"));
 process.env.WHATS_PROXY_STATE_DIR = WORK;
 process.env.WHATS_PROXY_CONFIG_DIR = WORK;
 process.env.WHATS_PROXY_NO_BROWSER = "1"; // suppress xdg-open during tests
+const TEST_PHONE = "1234567890";
+process.env.WHATS_PROXY_ACCOUNT = TEST_PHONE;
+
+// Seed accounts.json so CLI resolution and daemons have a phone.
+mkdirSync(WORK, { recursive: true });
+writeFileSync(join(WORK, "accounts.json"), JSON.stringify({
+  default: TEST_PHONE,
+  accounts: { [TEST_PHONE]: { alias: null, created: new Date().toISOString(), last_active: null } },
+}, null, 2) + "\n", "utf-8");
 
 const { main } = await import("../src/whats_proxy/cli.ts");
 
@@ -114,11 +123,11 @@ console.log("\n[5] required payload validation");
 console.log("\n[6] daemon spawn + dispatch");
 {
   const { spawnDaemon, pingDaemon, rpcCall, ensureDaemon } = await import("../src/whats_proxy/client.ts");
-  const { loadConfig, statePaths } = await import("../src/whats_proxy/config.ts");
+  const { loadConfig, accountStatePaths } = await import("../src/whats_proxy/config.ts");
   const cfg = loadConfig();
-  const paths = statePaths(cfg);
+  const paths = accountStatePaths(TEST_PHONE, cfg);
 
-  await spawnDaemon(cfg, undefined, 30_000);
+  await spawnDaemon(cfg, TEST_PHONE, 30_000);
   check("daemon answers ping", await pingDaemon(paths));
 
   // connection-info
@@ -151,13 +160,16 @@ console.log("\n[6] daemon spawn + dispatch");
 // ── 7. admin status (daemon down) ────────────────────────────────────────────
 console.log("\n[7] admin status");
 {
-  const { adminStatus } = await import("../src/whats_proxy/admin/status.ts");
-  const result = await adminStatus();
+  const { daemonStatus } = await import("../src/whats_proxy/admin/daemon/status.ts");
+  const result = await daemonStatus({});
   check("status ok envelope", result.meta.status === "ok");
-  const data = result.data as { daemon: { running: boolean }; auth: { present: boolean; hint: string } };
-  check("daemon.running false", data.daemon.running === false);
-  check("auth.present false", data.auth.present === false);
-  check("hint mentions admin setup", String(data.auth.hint).includes("admin setup"));
+  const data = result.data as { accounts: Array<{ daemon: { running: boolean }; auth: { present: boolean } }>; total: number };
+  check("total >= 1", data.total >= 1);
+  const acct = data.accounts?.[0];
+  if (acct) {
+    check("daemon.running false", acct.daemon.running === false);
+    check("auth.present false", acct.auth.present === false);
+  }
 }
 
 // ── 8. guide + connection-status (store-only, daemon up) ────────────────────
@@ -173,20 +185,19 @@ console.log("\n[8] store-only actions via CLI (daemon auto-spawn)");
   check("guide lists 66 tools", text.includes("66"), text.match(/"total_tools": (\d+)/)?.[1]);
   check("guide has categories", text.includes("categories"));
 
-  // Stop the auto-spawned daemon through the real `admin stop` CLI path
-  // (clean exit: store persisted, session creds kept — no detached leak).
+  // Stop the auto-spawned daemon through `admin daemon stop`
   const out2: string[] = [];
   const orig2 = process.stdout.write.bind(process.stdout);
   process.stdout.write = ((s: string) => { out2.push(String(s)); return true; }) as never;
-  const stopCode = await main(["admin", "stop"]);
+  const stopCode = await main(["admin", "daemon", "stop"]);
   process.stdout.write = orig2;
   const stopText = out2.join("");
-  check("admin stop exit 0", stopCode === 0);
-  check("admin stop ok envelope", stopText.includes('"status": "ok"'));
-  check("admin stop stopped true", stopText.includes('"stopped": true'));
+  check("admin daemon stop exit 0", stopCode === 0);
+  check("admin daemon stop ok envelope", stopText.includes('"status": "ok"'));
+  check("admin daemon stop stopped true", stopText.includes('"stopped": true'));
   await new Promise((r) => setTimeout(r, 600));
-  const { loadConfig, statePaths } = await import("../src/whats_proxy/config.ts");
-  const paths = statePaths(loadConfig());
+  const { loadConfig, accountStatePaths } = await import("../src/whats_proxy/config.ts");
+  const paths = accountStatePaths(TEST_PHONE, loadConfig());
   check("daemon stopped after stop", !(await (await import("../src/whats_proxy/client.ts")).pingDaemon(paths)));
 }
 
@@ -195,8 +206,8 @@ console.log("\n[9] CLI edge paths");
 {
   const { writeFileSync, existsSync } = await import("node:fs");
   const { join } = await import("node:path");
-  const { loadConfig, statePaths } = await import("../src/whats_proxy/config.ts");
-  const paths = statePaths(loadConfig());
+  const { loadConfig, accountStatePaths } = await import("../src/whats_proxy/config.ts");
+  const paths = accountStatePaths(TEST_PHONE, loadConfig());
 
   // 9a. `do <action>` with NO payload (defaults apply)
   {
@@ -270,7 +281,7 @@ console.log("\n[9] CLI edge paths");
     await new Promise((r) => setTimeout(r, 600));
 
     const entry = join(import.meta.dir, "../src/whats_proxy/index.ts");
-    const child = spawn(process.execPath, [entry, "daemon"], {
+    const child = spawn(process.execPath, [entry, "daemon", "--account", TEST_PHONE], {
       detached: true,
       stdio: "ignore",
       env: process.env,
@@ -284,7 +295,7 @@ console.log("\n[9] CLI edge paths");
     check("direct daemon serves ping", up);
 
     // Second spawn must NOT hijack: the guard makes it exit(0) immediately.
-    const rival = spawn(process.execPath, [entry, "daemon"], {
+    const rival = spawn(process.execPath, [entry, "daemon", "--account", TEST_PHONE], {
       detached: true,
       stdio: "ignore",
       env: process.env,
@@ -324,7 +335,7 @@ console.log("\n[9] CLI edge paths");
     await new Promise((r) => setTimeout(r, 600));
 
     const entry = join(import.meta.dir, "../src/whats_proxy/index.ts");
-    const idleChild = spawn(process.execPath, [entry, "daemon"], {
+    const idleChild = spawn(process.execPath, [entry, "daemon", "--account", TEST_PHONE], {
       detached: true,
       stdio: "ignore",
       env: { ...process.env, WHATS_PROXY_MAX_IDLE_MINUTES: "0.05" }, // 3s idle

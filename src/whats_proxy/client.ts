@@ -3,7 +3,7 @@
  *
  * Thin JSON-RPC 2.0 client over the daemon's Unix socket. Auto-spawns a
  * detached daemon when none is running (transparent: logged to the state
- * dir, pidfile written, `admin status` reflects it). Every method returns
+ * dir, pidfile written, `admin daemon status` reflects it). Every method returns
  * the full Output envelope (`meta` + `data`) — the tick-proxy standard.
  *
  * Multi-account: each phone number owns its own daemon, socket, and state
@@ -18,7 +18,6 @@ import { dirname, join, resolve } from "node:path";
 
 import {
   loadConfig,
-  statePaths,
   accountStatePaths,
   canonicalPhone,
   getDefaultAccount,
@@ -43,7 +42,7 @@ export async function rpcCall(
 ): Promise<RpcResponse> {
   if (!existsSync(sockFile)) {
     throw new WhatsProxyError(
-      `Daemon socket not found at ${sockFile}. Start the daemon or run 'whats-proxy admin status'.`,
+      `Daemon socket not found at ${sockFile}. Start the daemon or run 'whats-proxy admin daemon status'.`,
       "DAEMON_NOT_RUNNING",
     );
   }
@@ -97,20 +96,20 @@ function daemonCommand(): { executable: string; args: string[] } {
  * Spawn a detached daemon process and wait until it answers ping
  * (up to `waitMs`, default 30s). Returns once the daemon is reachable.
  *
- * When `phone` is provided, passes `--account <phone>` to the daemon binary
- * so it starts the per-account daemon (state under <base>/<phone>/).
+ * Passes `--account <phone>` to the daemon binary so it starts the
+ * per-account daemon (state under <base>/<phone>/).
  */
 export async function spawnDaemon(
   cfg: AppConfig,
-  phone?: string,
+  phone: string,
   waitMs = 30_000,
 ): Promise<void> {
-  const paths = phone ? accountStatePaths(phone, cfg) : statePaths(cfg);
+  const paths = accountStatePaths(phone, cfg);
   mkdirSync(paths.dir, { recursive: true });
 
   // Detached: keeps running after the CLI exits; diagnostics remain on stderr.
   const command = daemonCommand();
-  const spawnArgs = phone ? [...command.args, "--account", phone] : [...command.args];
+  const spawnArgs = [...command.args, "--account", phone];
   const child = spawn(command.executable, spawnArgs, {
     detached: true,
     stdio: ["ignore", "ignore", "ignore"],
@@ -125,7 +124,7 @@ export async function spawnDaemon(
     if (await pingDaemon(paths)) return;
     if (Date.now() > deadline) {
       throw new WhatsProxyError(
-        `Daemon did not become ready within ${waitMs / 1000}s. Run 'whats-proxy admin status' and inspect stderr diagnostics.`,
+        `Daemon did not become ready within ${waitMs / 1000}s. Run 'whats-proxy admin daemon status' and inspect stderr diagnostics.`,
         "DAEMON_START_TIMEOUT",
       );
     }
@@ -134,7 +133,7 @@ export async function spawnDaemon(
 }
 
 /** Ping the daemon socket (1.5s timeout). True when it answers. */
-export async function pingDaemon(paths: ReturnType<typeof statePaths>): Promise<boolean> {
+export async function pingDaemon(paths: ReturnType<typeof accountStatePaths>): Promise<boolean> {
   if (!existsSync(paths.sockFile)) return false;
   try {
     const resp = await rpcCall(paths.sockFile, "ping", {}, 1500);
@@ -145,8 +144,8 @@ export async function pingDaemon(paths: ReturnType<typeof statePaths>): Promise<
 }
 
 /** Ensure the daemon is reachable; spawn it if needed. */
-export async function ensureDaemon(cfg: AppConfig, phone?: string): Promise<void> {
-  const paths = phone ? accountStatePaths(phone, cfg) : statePaths(cfg);
+export async function ensureDaemon(cfg: AppConfig, phone: string): Promise<void> {
+  const paths = accountStatePaths(phone, cfg);
   if (await pingDaemon(paths)) return;
   await spawnDaemon(cfg, phone);
 }
@@ -160,9 +159,9 @@ export async function ensureDaemon(cfg: AppConfig, phone?: string): Promise<void
  *   1. explicit `phone` parameter (-a / --account)
  *   2. WHATS_PROXY_ACCOUNT env var
  *   3. Default account from accounts.json
- *   4. null (caller decides: error or legacy flat layout)
+ *   4. Error if none resolved
  */
-function resolvePhone(explicit?: string): string | null {
+function resolvePhone(explicit?: string): string {
   // 1. Explicit --account flag
   if (explicit) return canonicalPhone(explicit);
 
@@ -171,7 +170,14 @@ function resolvePhone(explicit?: string): string | null {
   if (envPhone) return canonicalPhone(envPhone);
 
   // 3. Default account from accounts.json
-  return getDefaultAccount();
+  const defaultPhone = getDefaultAccount();
+  if (!defaultPhone) {
+    throw new WhatsProxyError(
+      "No phone number resolved. Use --account, WHATS_PROXY_ACCOUNT env, or register a default via 'whats-proxy admin auth use'.",
+      "NO_ACCOUNT",
+    );
+  }
+  return defaultPhone;
 }
 
 // ── WaClient ─────────────────────────────────────────────────────────────────
@@ -182,33 +188,29 @@ function resolvePhone(explicit?: string): string | null {
  * the daemon owns the Baileys socket and Store, so the client stays thin).
  *
  * Multi-account: pass a phone number to target a specific account's daemon.
- * Without a phone, the default account is used (or the legacy flat layout).
+ * Without a phone, the default account from accounts.json is used.
  */
 export class WaClient {
   private cfg: AppConfig;
-  private phone: string | null;
-  private paths: ReturnType<typeof statePaths>;
+  private phone: string;
+  private paths: ReturnType<typeof accountStatePaths>;
   private autoSpawn: boolean;
 
   constructor(phone?: string, cfg?: AppConfig, autoSpawn = true) {
     this.cfg = cfg || loadConfig();
     this.phone = resolvePhone(phone);
     this.autoSpawn = autoSpawn;
-
-    // Per-account paths when a phone is resolved; legacy flat layout otherwise.
-    this.paths = this.phone
-      ? accountStatePaths(this.phone, this.cfg)
-      : statePaths(this.cfg);
+    this.paths = accountStatePaths(this.phone, this.cfg);
   }
 
   /** The resolved phone number for this client instance. */
-  get account(): string | null {
+  get account(): string {
     return this.phone;
   }
 
   /** Execute one action against the daemon. Returns the Output envelope. */
   async do(action: string, args: Record<string, unknown> = {}): Promise<Output> {
-    if (this.autoSpawn) await ensureDaemon(this.cfg, this.phone ?? undefined);
+    if (this.autoSpawn) await ensureDaemon(this.cfg, this.phone);
     const resp = await rpcCall(this.paths.sockFile, "dispatch", { action, args });
     return unwrap(resp);
   }
@@ -222,7 +224,7 @@ export class WaClient {
    * bypassed.
    */
   async raw(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
-    if (this.autoSpawn) await ensureDaemon(this.cfg, this.phone ?? undefined);
+    if (this.autoSpawn) await ensureDaemon(this.cfg, this.phone);
     const resp = await rpcCall(this.paths.sockFile, method, params);
     return resp;
   }
@@ -251,7 +253,7 @@ export class WaClient {
     return unwrap(resp);
   }
 
-  /** Connection info getter used by action contexts (admin status). */
+  /** Connection info getter used by action contexts (admin daemon status). */
   get sockFile(): string {
     return this.paths.sockFile;
   }

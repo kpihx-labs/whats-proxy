@@ -8,18 +8,17 @@
  * Multi-account layout:
  *   ~/.config/whats-proxy/
  *   ├── accounts.json          # account registry + default
- *   ├── <phone>/               # one folder per WhatsApp account
- *   │   ├── state/             # Baileys auth
- *   │   ├── store.json         # messages, contacts, chats
- *   │   ├── daemon.sock        # daemon socket
- *   │   ├── daemon.lock        # O_EXCL lock
- *   │   └── daemon.pid         # daemon PID
- *   └── state/                 # LEGACY flat layout (auto-migrated)
+ *   └── <phone>/               # one folder per WhatsApp account
+ *       ├── state/             # Baileys auth
+ *       ├── store.json         # messages, contacts, chats
+ *       ├── daemon.sock        # daemon socket
+ *       ├── daemon.lock        # O_EXCL lock
+ *       └── daemon.pid         # daemon PID
  */
 
 import { VERSION } from "./version.ts";
 
-import { mkdirSync, existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -289,52 +288,4 @@ export function deleteAccountFiles(phone: string, cfg?: AppConfig): void {
   }
 }
 
-/**
- * Auto-migrate legacy flat layout (<base>/state/) to per-account layout.
- *
- * Detects creds.json at <base>/state/creds.json, reads the phone number
- * from it, moves the files to <base>/<phone>/state/, and registers the
- * account. No-op if migration already happened.
- */
-export function migrateLegacyState(cfg?: AppConfig): string | null {
-  const base = cfg ? stateDir(cfg) : configDir();
-  const legacyAuth = join(base, "state");
-  const legacyCreds = join(legacyAuth, "creds.json");
 
-  // No legacy state to migrate
-  if (!existsSync(legacyCreds)) return null;
-
-  // Already migrated (accounts.json exists and has entries)
-  const data = readAccounts(cfg);
-  if (Object.keys(data.accounts).length > 0) return null;
-
-  try {
-    const creds = JSON.parse(readFileSync(legacyCreds, "utf-8"));
-    const me = creds?.me;
-    if (!me?.id) return null;
-
-    const phone = canonicalPhone(me.id.split(":")[0]);
-    const targetDir = accountDir(phone, cfg);
-    const targetAuth = join(targetDir, "state");
-
-    // Create target and move
-    mkdirSync(targetAuth, { recursive: true });
-    renameSync(legacyAuth, targetAuth);
-
-    // Move store.json if it exists
-    const legacyStore = join(base, "store.json");
-    if (existsSync(legacyStore)) {
-      renameSync(legacyStore, join(targetDir, "store.json"));
-    }
-
-    // Register the account
-    registerAccount(phone, null, cfg);
-    setDefaultAccount(phone, cfg);
-
-    // Clean up empty legacy state dir (it was renamed, so it's gone)
-    return phone;
-  } catch {
-    // Migration failed — leave legacy state untouched
-    return null;
-  }
-}

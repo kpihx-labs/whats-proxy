@@ -9,7 +9,7 @@
  * Usage: bun run scripts/stress.ts [count]   (default 8)
  */
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn, execSync } from "node:child_process";
@@ -18,10 +18,19 @@ const COUNT = Number(process.argv[2] || 8);
 const WORK = mkdtempSync(join(tmpdir(), "whats-proxy-stress-"));
 process.env.WHATS_PROXY_STATE_DIR = WORK;
 process.env.WHATS_PROXY_CONFIG_DIR = WORK;
+const TEST_PHONE = "1234567890";
+process.env.WHATS_PROXY_ACCOUNT = TEST_PHONE;
+
+// Seed accounts.json so daemons have a phone.
+mkdirSync(WORK, { recursive: true });
+writeFileSync(join(WORK, "accounts.json"), JSON.stringify({
+  default: TEST_PHONE,
+  accounts: { [TEST_PHONE]: { alias: null, created: new Date().toISOString(), last_active: null } },
+}, null, 2) + "\n", "utf-8");
 
 const { pingDaemon, rpcCall } = await import("../src/whats_proxy/client.ts");
-const { loadConfig, statePaths } = await import("../src/whats_proxy/config.ts");
-const paths = statePaths(loadConfig());
+const { loadConfig, accountStatePaths } = await import("../src/whats_proxy/config.ts");
+const paths = accountStatePaths(TEST_PHONE, loadConfig());
 const entry = join(import.meta.dir, "../src/whats_proxy/index.ts");
 
 /**
@@ -55,7 +64,11 @@ const daemonsAlive = () => ownDaemonPids().length;
 
 // Fire COUNT daemons at the same instant — the race the guard must resolve.
 const children = Array.from({ length: COUNT }, () =>
-  spawn(process.execPath, [entry, "daemon"], { detached: true, stdio: "ignore", env: process.env }),
+  spawn(process.execPath, [entry, "daemon", "--account", TEST_PHONE], {
+    detached: true,
+    stdio: "ignore",
+    env: process.env,
+  }),
 );
 for (const c of children) c.unref();
 

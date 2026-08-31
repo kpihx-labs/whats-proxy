@@ -31,7 +31,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { mkdirSync, writeFileSync } from "node:fs";
 
-import { loadConfig, migrateLegacyState, getDefaultAccount, canonicalPhone, type AppConfig } from "./config.ts";
+import { loadConfig, getDefaultAccount, canonicalPhone, type AppConfig } from "./config.ts";
 import { logger } from "./logger.ts";
 import { print_json, output_result, print_error } from "./display.ts";
 import { getCompactHelp, getFullHelp, getCatalogHelp } from "./doc.ts";
@@ -109,10 +109,10 @@ function writeAndDisplay(
 // ── Account resolution ──────────────────────────────────────────────────────
 
 /**
- * Resolve phone from explicit flag, env, or default. Returns null for legacy
- * flat layout when no accounts are registered.
+ * Resolve phone from explicit flag, env, or default account.
+ * Errors if no phone can be resolved.
  */
-function resolveAccount(explicit?: string): string | null {
+function resolveAccount(explicit?: string): string {
   // 1. Explicit --account / -a flag
   if (explicit) return canonicalPhone(explicit);
 
@@ -120,8 +120,15 @@ function resolveAccount(explicit?: string): string | null {
   const envPhone = process.env.WHATS_PROXY_ACCOUNT;
   if (envPhone) return canonicalPhone(envPhone);
 
-  // 3. Default account from accounts.json (null = legacy flat layout)
-  return getDefaultAccount();
+  // 3. Default account from accounts.json
+  const defaultPhone = getDefaultAccount();
+  if (!defaultPhone) {
+    throw new WhatsProxyError(
+      "No phone number resolved. Use --account, WHATS_PROXY_ACCOUNT env, or register a default via 'whats-proxy admin auth use'.",
+      "NO_ACCOUNT",
+    );
+  }
+  return defaultPhone;
 }
 
 // ── `do` command ─────────────────────────────────────────────────────────────
@@ -272,9 +279,19 @@ async function cmdDo(argv: string[]): Promise<number> {
   }
 
   // Resolve account and execute against the daemon (auto-spawns if needed)
-  const resolvedPhone = resolveAccount(account);
+  let resolvedPhone: string;
+  try {
+    resolvedPhone = resolveAccount(account);
+  } catch (err) {
+    const output: Output = {
+      meta: { status: "error", comment: (err as Error).message, edited: false },
+      data: { error: (err as Error).message },
+    };
+    writeAndDisplay(output, outputFile, fmt, action ?? "unknown");
+    return 1;
+  }
 
-  const client = new WaClient(resolvedPhone ?? undefined);
+  const client = new WaClient(resolvedPhone);
   try {
     const result = await client.do(action, args);
     writeAndDisplay(result, outputFile, fmt, action);
@@ -290,10 +307,6 @@ async function cmdDo(argv: string[]): Promise<number> {
 }
 
 // ── `admin` commands ─────────────────────────────────────────────────────────
-
-function deprecationWarn(old: string, replacement: string) {
-  process.stderr.write(`⚠️  DEPRECATED: '${old}' is deprecated. Use '${replacement}' instead.\n`);
-}
 
 /** Parse --phone from argv (returns canonical digits or undefined). */
 function extractPhone(argv: string[]): string | undefined {
@@ -319,12 +332,7 @@ async function cmdAdmin(argv: string[]): Promise<number> {
       "  whats-proxy admin daemon stop [phone]                Stop daemon\n" +
       "  whats-proxy admin daemon restart [phone]             Restart daemon\n" +
       "  whats-proxy admin daemon logs [phone]                Tail daemon logs\n" +
-      "  whats-proxy admin daemon refresh [phone]             Refresh app state\n" +
-      "\n" +
-      "  Deprecated aliases (still work, emit warning):\n" +
-      "    whats-proxy admin setup [--code] [--phone N]  → admin auth login\n" +
-      "    whats-proxy admin status                      → admin daemon status\n" +
-      "    whats-proxy admin stop                        → admin daemon stop\n",
+      "  whats-proxy admin daemon refresh [phone]             Refresh app state\n",
     );
     return 0;
   }
@@ -339,7 +347,7 @@ async function cmdAdmin(argv: string[]): Promise<number> {
     return 2;
   }
 
-  // ── New routing: admin auth | admin daemon ──────────────────────────────
+  // ── admin auth ───────────────────────────────────────────────────────────
 
   if (sub === "auth") {
     const subsub = argv[1];
@@ -413,6 +421,8 @@ async function cmdAdmin(argv: string[]): Promise<number> {
     }
   }
 
+  // ── admin daemon ─────────────────────────────────────────────────────────
+
   if (sub === "daemon") {
     const subsub = argv[1];
     const rest = argv.slice(2);
@@ -466,50 +476,12 @@ async function cmdAdmin(argv: string[]): Promise<number> {
     }
   }
 
-  // ── Backward compatibility aliases ──────────────────────────────────────
-
-  if (sub === "setup") {
-    deprecationWarn("admin setup", "admin auth login");
-    if (argv.includes("--help") || argv.includes("-h")) {
-      process.stdout.write(
-        "Usage:\n" +
-        "  whats-proxy admin setup              QR code pairing (scan with phone)\n" +
-        "  whats-proxy admin setup --code       Numeric pairing code (8 digits)\n" +
-        "  whats-proxy admin setup --code --phone N  Pairing code for a specific number\n",
-      );
-      return 0;
-    }
-    const { authLogin } = await import("./admin/auth/login.ts");
-    const result = await authLogin({
-      code: argv.includes("--code"),
-      phone: extractPhone(argv),
-    });
-    print_json(result);
-    return result.meta.status === "error" ? 1 : 0;
-  }
-
-  if (sub === "status") {
-    deprecationWarn("admin status", "admin daemon status");
-    const { adminStatus } = await import("./admin/status.ts");
-    const result = await adminStatus();
-    print_json(result);
-    return result.meta.status === "error" ? 1 : 0;
-  }
-
-  if (sub === "stop") {
-    deprecationWarn("admin stop", "admin daemon stop");
-    const { adminStop } = await import("./admin/stop.ts");
-    const result = await adminStop();
-    print_json(result);
-    return result.meta.status === "error" ? 1 : 0;
-  }
-
   // Unknown admin subcommand
   print_json({
     meta: { status: "error", comment: `Unknown admin subcommand: ${sub}`, edited: false },
     data: {
       error: `Unknown admin subcommand: ${sub}`,
-      usage: "whats-proxy admin auth|daemon  (or: setup|status|stop — deprecated)",
+      usage: "whats-proxy admin auth|daemon",
     },
   } satisfies Output);
   return 2;
@@ -519,13 +491,6 @@ async function cmdAdmin(argv: string[]): Promise<number> {
 
 export async function main(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv;
-
-  // Auto-migrate legacy flat state to per-account layout (idempotent).
-  try {
-    migrateLegacyState();
-  } catch {
-    // Migration failure is non-fatal — old layout still works via legacy paths.
-  }
 
   // Setup stderr-only logging; stdout stays pure JSON for automation.
   const cfg = loadConfig();
