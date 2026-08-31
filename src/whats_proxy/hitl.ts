@@ -17,6 +17,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { exec as execCb } from "node:child_process";
 
 export interface HITLResponse {
   /** `approved` after a reviewer accepts, otherwise `rejected`. */
@@ -321,11 +322,14 @@ export function requestApproval(
 
       // Suppress auto-open in tests, CI, or headless environments
       if (!process.env.WHATS_PROXY_NO_BROWSER) {
-        try {
-          Bun.spawn(["xdg-open", url], { stdout: "ignore", stderr: "ignore" });
-        } catch {
-          /* URL remains available on stderr */
-        }
+        // Small delay to ensure the server is fully accepting connections
+        setTimeout(() => {
+          try {
+            execCb(`xdg-open '${url}'`, () => {});
+          } catch {
+            /* URL remains available on stderr */
+          }
+        }, 200);
       }
     });
   });
