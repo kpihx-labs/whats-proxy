@@ -3,7 +3,7 @@
  *
  * `whats-proxy admin status` — show the FULL installation state.
  *
- * Checks: binary, config dir, accounts file, service symlink, per-account
+ * Checks: binary, config dir, accounts file, service file, per-account
  * state dirs, auth presence, service active state, and emits warnings
  * for any permission or configuration issues.
  *
@@ -61,7 +61,7 @@ function checkDir(
  * Show the comprehensive installation status of whats-proxy.
  *
  * Checks every aspect: binary, config directory, accounts file,
- * service symlink, per-account state directories, auth presence,
+ * service file, per-account state directories, auth presence,
  * and systemd service state. Emits warnings for any issues found.
  *
  * Returns:
@@ -111,25 +111,14 @@ export async function adminStatus(): Promise<Output> {
     }
   }
 
-  // Service symlink
+  // Service file installed
   const serviceTarget = join(
     process.env.HOME || "/home/kpihx",
     ".config", "systemd", "user", "whats-proxy@.service",
   );
   const serviceInstalled = existsSync(serviceTarget);
-  let linkedFrom = "";
-  if (serviceInstalled) {
-    try {
-      const { readlinkSync } = await import("node:fs");
-      linkedFrom = readlinkSync(serviceTarget);
-    } catch {
-      linkedFrom = "(not a symlink)";
-    }
-    if (!linkedFrom) {
-      warnings.push("⚠️ Service symlink not found. Run: whats-proxy admin setup");
-    }
-  } else {
-    warnings.push("⚠️ Service symlink not found. Run: whats-proxy admin setup");
+  if (!serviceInstalled) {
+    warnings.push("⚠️ Service file not found. Run: whats-proxy admin setup");
   }
 
   // Per-account probes
@@ -235,7 +224,7 @@ export async function adminStatus(): Promise<Output> {
     service: {
       installed: serviceInstalled,
       path: serviceTarget,
-      linked_from: linkedFrom || null,
+      service: { installed: serviceInstalled, path: serviceTarget },
     },
     accounts: accountProbes,
     default: defaultPhone,

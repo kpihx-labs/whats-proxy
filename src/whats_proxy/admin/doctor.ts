@@ -8,7 +8,7 @@
  *   - ~/.config/whats-proxy/accounts.json  (accounts registry, 0o600)
  *   - ~/.local/share/whats-proxy/     (heavy data, 0o700)
  *   - Per-account dirs and auth files
- *   - Service symlink
+ *   - Service file
  *
  * Creates missing directories/files with correct permissions.
  * Warns on missing auth creds (actionable: "run admin auth login").
@@ -71,7 +71,7 @@ function ensureDir(expectedMode: number, label: string, ...segments: string[]): 
 
 /**
  * Health-check the whats-proxy installation: verify directories, permissions,
- * accounts, auth credentials, and service symlink. Auto-fixes missing dirs.
+ * accounts, auth credentials, and service file. Auto-fixes missing dirs.
  *
  * Returns:
  *   A JSON envelope with the full health report.
@@ -158,12 +158,12 @@ export async function adminDoctor(): Promise<Output> {
     }
   }
 
-  // 5. Service symlink
+  // 5. Service file
   const { homedir } = await import("node:os");
   const serviceTarget = join(homedir(), ".config", "systemd", "user", "whats-proxy@.service");
   const serviceInstalled = existsSync(serviceTarget);
   if (!serviceInstalled) {
-    warnings.push("Service symlink not installed. Run: whats-proxy admin setup");
+    warnings.push("Service file not installed. Run: whats-proxy admin setup");
   }
 
   return okResult({

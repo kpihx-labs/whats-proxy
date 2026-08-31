@@ -5,7 +5,7 @@
  *
  * 1. Stops all running services
  * 2. Disables all services
- * 3. Removes the service symlink from ~/.config/systemd/user/
+ * 3. Removes the service file from ~/.config/systemd/user/
  * 4. Runs systemctl --user daemon-reload
  * 5. Removes ~/.config/whats-proxy/ (accounts.json)
  * 6. Removes ~/.local/share/whats-proxy/ (all heavy data)
@@ -26,7 +26,7 @@ import type { Output } from "../types.ts";
 /**
  * Completely remove whats-proxy: services, config, and state.
  *
- * Stops all running services, removes the service symlink, reloads
+ * Stops all running services, removes the service file, reloads
  * systemd, and deletes the config directory. The binary itself is NOT
  * removed (use `bun unlink` or `uv tool uninstall whats-proxy`).
  *
@@ -72,13 +72,13 @@ export async function adminPurge(): Promise<Output> {
     }
   }
 
-  // 2. Remove the service symlink
+  // 2. Remove the service file
   if (existsSync(serviceTarget)) {
     try {
       unlinkSync(serviceTarget);
-      removed.push(`symlink:${serviceTarget}`);
+      removed.push(`service:${serviceTarget}`);
     } catch (err) {
-      warnings.push(`Failed to remove service symlink: ${(err as Error).message}`);
+      warnings.push(`Failed to remove service file: ${(err as Error).message}`);
     }
   }
 
