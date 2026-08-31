@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.5.0 — 2026-08-31
+
+- **Baileys fork switch:** Replaced npm `@whiskeysockets/baileys@^7.0.0-rc14` with
+  `ayusc/Baileys` fork that merges upstream PRs #2608 (empty link_code_companion_reg ack),
+  #2749 (pre-login ack crash), #2765 (companion_reg_refresh handler). Fork is tested and
+  confirmed by author on local + cloud (Koyeb). Remove when upstream merges these PRs.
+- **Fix pairing — reconnect on 515 restartRequired:** The decisive fix. After WhatsApp accepts
+  a QR scan or pairing code, it sends 515 (restartRequired) to ask the client to reconnect
+  with freshly-issued session credentials. The old socket is dead; `makeWASocket` is one-shot.
+  `admin setup` previously did `return;` assuming Baileys auto-reconnects (it does not). Fixed
+  by extracting socket creation into a re-usable `connect()` function that re-reads auth from
+  disk and creates a NEW socket on 515 — mirroring the daemon's own reconnect loop. Without
+  this, `pair-success` never arrives and the phone shows "couldn't link device".
+- **Admin --help:** `whats-proxy admin --help` and `whats-proxy admin setup --help` now show
+  proper usage (was "Unknown admin subcommand: --help").
+- **admin status:** Removed stale `config_file`/`.env` field — whats-proxy has no `.env`.
+- **No .env file:** Removed `.env.example` entirely. Defaults live in `config.ts`. Only 2 env
+  overrides remain (both for operational/test needs): `WHATS_PROXY_STATE_DIR`,
+  `WHATS_PROXY_MAX_IDLE_MINUTES`. Default `max_idle_minutes` changed from 0 to 30 (safe default).
+- **Zod payload validation (P1+P3):** 65 Zod schemas in `schemas.ts`, validated at CLI
+  (pre-daemon) and daemon-side (`protectAction`). Required-argument check runs first, then
+  Zod type validation.
+- **Auto-wrapped envelope examples (P4):** `--help` output now shows full `{"meta":{...},"data":{...}}`
+  envelope for every example.
+- **Registration audit tests (P2+P6):** `tests/audit.test.ts` — 8 tests: count, kebab-case,
+  meta.action, ≥3 examples, help sections, registry↔policies coherence, schema completeness.
+- **HITL xdg-open guard:** `WHATS_PROXY_NO_BROWSER` env var suppresses browser auto-open
+  during tests/CI (was opening Edge tabs during `make check`).
+- **Teardown noise suppressed:** `resolved` flag + `finish()` helper prevent spurious
+  "Transient close" logs after deliberate socket teardown.
+- **setup.ts stale auth wipe:** `admin setup` wipes stale auth files before fresh pairing
+  to avoid 428 from version-mismatched credentials.
+- **CONTRACT.md rewritten:** Full architecture contract (709 lines), dense and complete,
+  matching tick-proxy's documentation standard.
+
 ## 0.4.0 — 2026-08-30
 
 - **Zod payload validation (P1+P3):** Every action now has a Zod schema (`schemas.ts`, 65 schemas)
