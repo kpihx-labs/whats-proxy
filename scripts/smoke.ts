@@ -3,7 +3,7 @@
  * whats-proxy — smoke test.
  *
  * Real end-to-end verification without touching a live WhatsApp account:
- *   1. `do --help` catalog (66 actions)
+ *   1. `do --help` catalog (67 actions)
  *   2. per-action help
  *   3. daemon spawn + ping
  *   4. RPC dispatch against a stub store (chat-list, connection-status, guide)
@@ -183,7 +183,7 @@ console.log("\n[8] store-only actions via CLI (daemon auto-spawn)");
   process.stdout.write = orig;
   const text = out.join("");
   check("guide exit 0", code === 0);
-  check("guide lists 66 tools", text.includes("66"), text.match(/"total_tools": (\d+)/)?.[1]);
+  check("guide lists 67 tools", text.includes("67"), text.match(/"total_tools": (\d+)/)?.[1]);
   check("guide has categories", text.includes("categories"));
 
   // Stop the auto-spawned daemon through `admin service stop`

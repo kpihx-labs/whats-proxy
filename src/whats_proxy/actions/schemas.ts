@@ -461,6 +461,8 @@ export const mediaDownloadSchema = z.object({
 
 export const mediaCleanupSchema = z.object({});
 
+export const syncChatSchema = z.object({});
+
 // ── Schema registry (action name → schema) — used by audit tests ───────────
 
 export const SCHEMAS: Record<string, z.ZodObject<Record<string, z.ZodTypeAny>>> = {
@@ -543,4 +545,5 @@ export const SCHEMAS: Record<string, z.ZodObject<Record<string, z.ZodTypeAny>>> 
   "search-messages": searchMessagesSchema,
   "media-download": mediaDownloadSchema,
   "media-cleanup": mediaCleanupSchema,
+  "sync-chat": syncChatSchema,
 };

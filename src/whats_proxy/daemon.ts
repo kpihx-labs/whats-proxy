@@ -253,6 +253,27 @@ async function handleRequest(req: RpcRequest): Promise<unknown> {
       setTimeout(() => process.exit(0), 100);
       return { jsonrpc: "2.0", id, result: { shutting_down: true } };
 
+    case "resync": {
+      if (!sock) return { jsonrpc: "2.0", id, result: errResult("Daemon not connected.") };
+      log.info("Resync requested via RPC.");
+      try {
+        await sock.resyncAppState(ALL_WA_PATCH_NAMES, true);
+        const groups = await sock.groupFetchAllParticipating();
+        let groupCount = 0;
+        for (const meta of Object.values(groups || {})) {
+          if (meta?.id) { store!.setGroupMeta(meta.id, meta); groupCount++; }
+        }
+        schedulePersist();
+        return { jsonrpc: "2.0", id, result: okResult({
+          status: "resynced",
+          groups_preloaded: groupCount,
+          stats: store!.stats(),
+        }) };
+      } catch (err) {
+        return { jsonrpc: "2.0", id, result: errResult(`Resync failed: ${(err as Error).message}`) };
+      }
+    }
+
     case "dispatch": {
       const action = String(params.action || "");
       const args = (params.args as Record<string, unknown>) || {};

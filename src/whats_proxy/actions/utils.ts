@@ -1,8 +1,8 @@
 /**
- * whats-proxy — Utility actions (7).
+ * whats-proxy — Utility actions (8).
  *
  * connection-status, guide, presence, read-messages, search-messages,
- * media-download, media-cleanup.
+ * media-download, media-cleanup, sync-chat.
  *
  * Faithful port of whats-mcp `utils.js`.
  */
@@ -15,9 +15,11 @@ import type { ActionDef, ActionContext } from "./types.ts";
 import { requireApproval } from "../decorators.ts";
 import { phoneToJid, okResult, errResult } from "../helpers.ts";
 import { VERSION } from "../version.ts";
+import { rpcCall } from "../client.ts";
 import {
   connectionStatusSchema, guideSchema, presenceSchema, readMessagesSchema,
   searchMessagesSchema, mediaDownloadSchema, mediaCleanupSchema,
+  syncChatSchema,
 } from "./schemas.ts";
 
 export default [
@@ -433,5 +435,63 @@ Examples:
     - Cache directory doesn't exist:
         \`whats-proxy do media-cleanup '{}'\`
         → {"status":"skipped","message":"Cache directory does not exist."}`,
+  },
+
+  // ── sync-chat: force resync store ────────────────────────────────────────
+
+  {
+    meta: {
+      action: "sync-chat",
+      category: "utilities",
+      description: "Force a WhatsApp state resync — re-fetches chats, contacts, groups, and recent messages. Use when the store is stale or after a long idle period.",
+      arguments: [],
+      example: {},
+      examples: [
+        { description: "Full resync", payload: {} },
+        { description: "After daemon restart", payload: {} },
+        { description: "Check store freshness after long idle", payload: {} },
+      ],
+      returns: "{ status, groups_preloaded, stats }",
+    },
+    handler: async (_args, { sock, store }) => {
+      if (!sock) return errResult("Daemon not connected to WhatsApp.");
+      try {
+        const { ALL_WA_PATCH_NAMES } = await import("@whiskeysockets/baileys");
+        await sock.resyncAppState(ALL_WA_PATCH_NAMES, true);
+        const groups = await sock.groupFetchAllParticipating();
+        let groupCount = 0;
+        for (const meta of Object.values(groups || {})) {
+          const m = meta as unknown as Record<string, unknown>;
+          if (m?.id) { store.setGroupMeta(m.id as string, m); groupCount++; }
+        }
+        const stats = store.stats();
+        return okResult({
+          status: "resynced",
+          groups_preloaded: groupCount,
+          stats,
+        });
+      } catch (err) {
+        return errResult(`Sync failed: ${(err as Error).message}`);
+      }
+    },
+    schema: syncChatSchema,
+    docstring: `Force a WhatsApp state resync — re-fetches chats, contacts, groups, and recent messages.
+
+Use when the store is stale, after a long idle period, or when new data is expected
+but not appearing. The daemon calls resyncAppState() and preloads all group metadata.
+
+Parameters:
+    (none)
+
+Examples:
+    - Full resync after a daemon restart:
+        \`whats-proxy do sync-chat '{}'\`
+        → {"meta":{"status":"ok","comment":"","edited":false},"data":{"status":"resynced","groups_preloaded":86,"stats":{"chats":353,"contacts":3949,"messages":920,"groups":86}}}
+    - Force refresh when store seems stale:
+        \`whats-proxy do sync-chat '{}'\`
+        → {"meta":{"status":"ok","comment":"","edited":false},"data":{"status":"resynced","groups_preloaded":86,"stats":{"chats":353,"contacts":3949,"messages":1050,"groups":86}}}
+    - After adding new groups or contacts:
+        \`whats-proxy do sync-chat '{}'\`
+        → {"meta":{"status":"ok","comment":"","edited":false},"data":{"status":"resynced","groups_preloaded":87,"stats":{"chats":354,"contacts":3950,"messages":921,"groups":87}}}`,
   },
 ] satisfies ActionDef[];
