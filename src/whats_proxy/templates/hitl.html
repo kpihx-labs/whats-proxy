@@ -30,10 +30,10 @@
 <script>
 var ORIGINAL, payload;
 try {
-    ORIGINAL = JSON.parse(atob('{{PAYLOAD_B64}}'));
+    var jsonStr = document.getElementById('payload').value;
+    ORIGINAL = JSON.parse(jsonStr);
     payload = ORIGINAL;
 } catch(e) { ORIGINAL = {}; payload = {}; }
-document.getElementById('payload').value = JSON.stringify(payload, null, 2);
 
 async function submit(status) {
     const raw = document.getElementById('payload').value;

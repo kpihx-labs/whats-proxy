@@ -66,10 +66,6 @@ function renderTemplate(
     payloadDisplay = String(payload);
   }
 
-  // Base64-encode the JSON payload for safe transport through the template.
-  // This avoids ALL escaping issues with \n, \t, quotes, backticks, emojis, etc.
-  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64");
-
   let html: string;
   try {
     html = readFileSync(templatePath, "utf-8");
@@ -79,7 +75,6 @@ function renderTemplate(
 
   html = html.replace(/\{\{FUNC_NAME\}\}/g, action);
   html = html.replace(/\{\{PAYLOAD_JSON\}\}/g, payloadDisplay);
-  html = html.replace(/\{\{PAYLOAD_B64\}\}/g, payloadB64);
   html = html.replace(/\{\{REQUEST_ID\}\}/g, requestId);
   return html;
 }

@@ -46,7 +46,7 @@
   <section class="hitl-card">
     <h2>🔧 Raw JSON — edit directly or sync from visual editor</h2>
     <div class="hitl-card-body">
-      <textarea class="hitl-input" id="payload" rows="14"></textarea>
+      <textarea class="hitl-input" id="payload" rows="14">{{PAYLOAD_JSON}}</textarea>
     </div>
   </section>
 
@@ -57,11 +57,10 @@
 </footer>
 
 <script>
-// ── Initialize from base64-encoded payload (safe transport) ────────────────
+// ── Initialize from textarea (already contains {{PAYLOAD_JSON}}) ────────────
 var ORIGINAL, payload;
 try {
-    var b64 = '{{PAYLOAD_B64}}';
-    var jsonStr = atob(b64);
+    var jsonStr = document.getElementById('payload').value;
     ORIGINAL = JSON.parse(jsonStr);
     payload = ORIGINAL;
 } catch(e) {
