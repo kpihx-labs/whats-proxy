@@ -42,6 +42,7 @@ import type { ConnectionInfo, Output } from "./types.ts";
 let sock: WASocket | null = null;
 let store: Store | null = null;
 let config: AppConfig | null = null;
+let phone: string | null = null;
 let log: Logger;
 let connectionState: "disconnected" | "connecting" | "open" | "closing" = "disconnected";
 let reconnectAttempts = 0;
@@ -213,7 +214,8 @@ function schedulePersist() {
   if (persistStoreTimer) clearTimeout(persistStoreTimer);
   persistStoreTimer = setTimeout(() => {
     try {
-      store!.saveSnapshot(statePaths(config!).storeFile);
+      const paths = phone ? accountStatePaths(phone, config!) : statePaths(config!);
+      store!.saveSnapshot(paths.storeFile);
     } catch (err) {
       log.warn(`Failed to persist store snapshot: ${(err as Error).message}`);
     }
@@ -413,8 +415,9 @@ async function serveSocket(cfg: AppConfig, paths: ReturnType<typeof statePaths>)
 
 // ── Daemon lifecycle ─────────────────────────────────────────────────────────
 
-export async function startDaemon(phone?: string): Promise<void> {
+export async function startDaemon(accountPhone?: string): Promise<void> {
   config = loadConfig();
+  phone = accountPhone || null;
   // Per-account daemon — phone is required for multi-account layout.
   const paths = phone ? (() => {
     const p = accountStatePaths(phone, config);
@@ -472,8 +475,9 @@ export async function startDaemon(phone?: string): Promise<void> {
   });
   if (config.store?.persist !== false) {
     try {
-      if (store.loadSnapshot(paths.storeFile)) {
-        log.info(`Restored store snapshot from ${paths.storeFile}`);
+      const snapshotPaths = phone ? accountStatePaths(phone, config!) : statePaths(config!);
+      if (store.loadSnapshot(snapshotPaths.storeFile)) {
+        log.info(`Restored store snapshot from ${snapshotPaths.storeFile}`);
       }
     } catch (err) {
       log.warn(`Failed to restore store snapshot: ${(err as Error).message}`);
