@@ -46,6 +46,8 @@ export class Store {
   messageIndex = new Map<string, AnyMsg>();
   contactTags = new Map<string, string[]>();
   watchlists = new Map<string, string[]>();
+  /** LID ↔ PN mappings: LID JID → { pn, name } */
+  lidPnMap = new Map<string, { pn: string; name?: string }>();
 
   private analyticsCache: any = null;
 
@@ -386,20 +388,84 @@ export class Store {
     return this.groupMeta.get(jid) || null;
   }
 
+  // ── LID resolution ────────────────────────────────────────────────────────
+
+  /** Resolve a LID JID to its phone number. Returns null if no mapping. */
+  resolveLidToPhone(lid: string): string | null {
+    return this.lidPnMap.get(lid)?.pn || null;
+  }
+
+  /** Resolve a contact JID to a display name. Tries contact name → chat name → LID mapping. */
+  resolveContactName(jid: string): string | null {
+    // 1. Direct contact lookup
+    const contact = this.contacts.get(jid);
+    const contactName = contact?.name || contact?.notify || contact?.verifiedName;
+    if (contactName) return contactName;
+
+    // 2. Chat name lookup (pushName from last message)
+    const chat = this.chats.get(jid);
+    const chatName = chat?.name || chat?.pushName;
+    if (chatName) return chatName;
+
+    // 3. LID → PN → contact name
+    if (jid.endsWith("@lid")) {
+      const mapping = this.lidPnMap.get(jid);
+      if (mapping?.pn) {
+        const pnContact = this.contacts.get(mapping.pn);
+        const pnName = pnContact?.name || pnContact?.notify || mapping.name;
+        if (pnName) return pnName;
+        const pnChat = this.chats.get(mapping.pn);
+        if (pnChat?.name) return pnChat.name;
+      }
+    }
+
+    return null;
+  }
+
   // ── History sync ─────────────────────────────────────────────────────────
 
   /** Handle the `messaging-history.set` event. */
-  handleHistorySync({ chats, contacts, messages }: {
+  handleHistorySync({ chats, contacts, messages, lidPnMappings }: {
     chats?: AnyChat[];
     contacts?: AnyContact[];
     messages?: AnyMsg[];
+    lidPnMappings?: { lid: string; pn: string }[];
   }) {
     if (chats) this.upsertChats(chats);
-    if (contacts) this.upsertContacts(contacts);
+    if (contacts) {
+      this.upsertContacts(contacts);
+      // Extract LID→PN mappings from contacts that have both lid and phoneNumber
+      for (const c of contacts) {
+        if (c.lid && c.phoneNumber) {
+          const existing = this.lidPnMap.get(c.lid);
+          this.lidPnMap.set(c.lid, {
+            pn: c.phoneNumber,
+            name: c.name || c.notify || existing?.name || undefined,
+          });
+        }
+        // Also store name from history sync contacts
+        if (c.name && c.id) {
+          const existing = this.contacts.get(c.id);
+          if (existing && !existing.name) {
+            existing.name = c.name;
+          }
+        }
+      }
+    }
+    // Process LID↔PN mappings from the history sync payload
+    if (lidPnMappings && Array.isArray(lidPnMappings)) {
+      for (const mapping of lidPnMappings) {
+        if (mapping.lid && mapping.pn) {
+          const existing = this.lidPnMap.get(mapping.lid);
+          this.lidPnMap.set(mapping.lid, { pn: mapping.pn, name: existing?.name });
+        }
+      }
+    }
     if (messages) {
       const flat = messages.map((m) => m.message || m).filter(Boolean);
       this.upsertMessages(flat);
     }
+    this._notifyChanged();
   }
 
   // ── Snapshot persistence ─────────────────────────────────────────────────
@@ -413,6 +479,7 @@ export class Store {
         groupMeta: Array.from(this.groupMeta.entries()),
         contactTags: Object.fromEntries(this.contactTags),
         watchlists: Object.fromEntries(this.watchlists),
+        lidPnMap: Object.fromEntries(this.lidPnMap),
       };
       writeFileSync(filePath, JSON.stringify(snapshot), "utf-8");
       return true;
@@ -432,6 +499,7 @@ export class Store {
     this.groupMeta = new Map(snapshot.groupMeta || []);
     this.contactTags = new Map(Object.entries(snapshot.contactTags || {}));
     this.watchlists = new Map(Object.entries(snapshot.watchlists || {}));
+    this.lidPnMap = new Map(Object.entries(snapshot.lidPnMap || {}));
     this.messageIndex = new Map();
 
     for (const msgList of this.messages.values()) {
@@ -612,7 +680,31 @@ export class Store {
     sock.ev.on("chats.delete", (ids: string[]) => this.deleteChats(ids));
     sock.ev.on("contacts.upsert", (contacts: AnyContact[]) => this.upsertContacts(contacts));
     sock.ev.on("contacts.update", (updates: AnyContact[]) => this.updateContacts(updates));
-    sock.ev.on("messages.upsert", ({ messages }: { messages: AnyMsg[] }) => this.upsertMessages(messages));
+    sock.ev.on("messages.upsert", ({ messages }: { messages: AnyMsg[] }) => {
+      this.upsertMessages(messages);
+      // Capture pushName from incoming messages to resolve contact names
+      for (const msg of messages) {
+        if (msg.pushName && msg.key) {
+          const jid = msg.key.remoteJid;
+          if (jid) {
+            const contact = this.contacts.get(jid);
+            if (contact && !contact.notify) {
+              contact.notify = msg.pushName;
+            }
+            // Also try LID → PN resolution
+            if (jid.endsWith("@lid")) {
+              const pn = this.lidPnMap.get(jid)?.pn;
+              if (pn) {
+                const pnContact = this.contacts.get(pn);
+                if (pnContact && !pnContact.notify) {
+                  pnContact.notify = msg.pushName;
+                }
+              }
+            }
+          }
+        }
+      }
+    });
     sock.ev.on("messages.delete", (info: { keys?: { remoteJid: string; id: string }[] }) => {
       if (info.keys) this.deleteMessages(info.keys);
     });
@@ -623,6 +715,14 @@ export class Store {
       for (const u of updates) {
         const existing = this.getGroupMeta(u.id) || {};
         this.setGroupMeta(u.id, { ...existing, ...u });
+      }
+    });
+    // Capture LID↔PN mappings from Baileys
+    sock.ev.on("lid-mapping.update", ({ lid, pn }: { lid: string; pn: string }) => {
+      if (lid && pn) {
+        const existing = this.lidPnMap.get(lid);
+        this.lidPnMap.set(lid, { pn, name: existing?.name });
+        this._notifyChanged();
       }
     });
   }
