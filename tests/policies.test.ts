@@ -111,4 +111,32 @@ describe("ACTION_POLICIES", () => {
       process.stderr.write = originalWrite;
     }
   });
+
+  test("helper fields added by the template (e.g. `to`) are NOT flagged as edits", async () => {
+    const stderr: string[] = [];
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string) => { stderr.push(String(chunk)); return true; }) as never;
+    try {
+      const review = requestApproval("send-text", { jid: "33600000000", text: "original" });
+      for (let attempt = 0; attempt < 20 && stderr.length === 0; attempt++) {
+        await Bun.sleep(10);
+      }
+      const url = stderr.join("").match(/🔗 (http:\/\/127\.0\.0\.1:\d+\/review\?id=[a-f0-9-]+)\n/)?.[1];
+      expect(url).toBeDefined();
+      const page = await fetch(url!);
+      const html = await page.text();
+      const id = html.match(/id:\s*'([^']+)'/)?.[1];
+      // Reviewer approves without changing anything, but the template's sync()
+      // injected a `to` helper field — same values, extra key only.
+      const submitted = await fetch(`${url!.split("/review?")[0]}/submit`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id, status: "approved", payload: { jid: "33600000000", text: "original", to: "33600000000" }, comment: "" }),
+      });
+      expect(submitted.status).toBe(200);
+      expect(await review).toEqual({ status: "approved", payload: { jid: "33600000000", text: "original", to: "33600000000" }, edited: false, comment: "" });
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+  });
 });

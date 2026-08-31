@@ -22,9 +22,13 @@
   <section class="hitl-card">
     <h2>✏️ Editor</h2>
     <div class="hitl-card-body">
-      <div class="editor-row">
-        <label class="editor-label">To (JID)</label>
+      <div class="editor-row" id="ed-jid-row">
+        <label class="editor-label" id="ed-jid-label">To (JID)</label>
         <input class="editor-input" id="ed-jid" type="text">
+      </div>
+      <div class="editor-row" id="ed-jids-row" style="display:none">
+        <label class="editor-label" id="ed-jids-label">To (one JID per line)</label>
+        <textarea class="editor-textarea" id="ed-jids" rows="4"></textarea>
       </div>
       <div class="editor-row" id="ed-text-row">
         <label class="editor-label" id="ed-text-label">Message</label>
@@ -37,8 +41,9 @@
 
   <!-- ===== Referenced message (for delete/edit/reaction/forward) ===== -->
   <section class="hitl-card" id="ref-msg-section" style="display:none">
-    <h2>📨 Message à modifier</h2>
+    <h2 id="ref-msg-title">📨 Message à modifier</h2>
     <div class="hitl-card-body">
+      <div id="ref-media-preview"></div>
       <pre class="hitl-json" id="ref-msg-content" style="white-space:pre-wrap;word-break:break-word"></pre>
     </div>
   </section>
@@ -75,63 +80,130 @@ function resolveJid(raw) {
   return name ? raw + ' (' + name + ')' : raw;
 }
 
-document.getElementById('ed-jid').value = payload.jid || payload.to || payload.to_jid || '';
-var jidLabel = document.querySelector('label[for="ed-jid"]') || document.getElementById('ed-jid-row')?.querySelector('.editor-label');
-if (jidLabel) {
-  var rawJid = payload.jid || payload.to || payload.to_jid || '';
+// ── Recipient field detection ──────────────────────────────────────────────
+// Canonical recipient field per action. Multi-recipient actions (`to` array or
+// `jids`) get a multi-line textarea; single-recipient get the plain input.
+var recipientField = null;
+var isMultiRecipient = false;
+if ('jids' in payload) { recipientField = 'jids'; isMultiRecipient = true; }
+else if ('to' in payload && Array.isArray(payload.to)) { recipientField = 'to'; isMultiRecipient = true; }
+else if ('to' in payload) { recipientField = 'to'; }
+else if ('to_jid' in payload) { recipientField = 'to_jid'; }
+else if ('jid' in payload) { recipientField = 'jid'; }
+
+if (isMultiRecipient) {
+  document.getElementById('ed-jid-row').style.display = 'none';
+  document.getElementById('ed-jids-row').style.display = '';
+  document.getElementById('ed-jids').value = (Array.isArray(payload[recipientField]) ? payload[recipientField] : []).join('\n');
+} else {
+  document.getElementById('ed-jids-row').style.display = 'none';
+  document.getElementById('ed-jid-row').style.display = '';
+  var rawJid = recipientField ? (payload[recipientField] || '') : '';
+  document.getElementById('ed-jid').value = rawJid;
   var resolvedName = resolvedNames[rawJid];
   if (resolvedName) {
-    jidLabel.textContent = 'To — ' + resolvedName;
+    document.getElementById('ed-jid-label').textContent = 'To — ' + resolvedName;
   }
 }
 
-// Show referenced message section — ALWAYS for reference actions
+// ── Centralized message content extractor ────────────────────────────────
+// Used by edit, delete, reaction, forward — single function for ALL message types.
+function extractMessageContent(rawMsg) {
+  var m = (rawMsg && rawMsg.message) ? rawMsg.message : (rawMsg || {});
+  // Text messages
+  if (m.conversation) return { text: m.conversation, type: 'text' };
+  if (m.extendedTextMessage && m.extendedTextMessage.text) return { text: m.extendedTextMessage.text, type: 'text' };
+  // Image
+  if (m.imageMessage) return { text: m.imageMessage.caption || '[image]', type: 'image', url: m.imageMessage.url || m.imageMessage.mediaUrl || '', thumb: m.imageMessage.thumbnailDirectPath || '' };
+  // Video
+  if (m.videoMessage) return { text: m.videoMessage.caption || '[video]', type: 'video', url: m.videoMessage.url || m.videoMessage.mediaUrl || '' };
+  // Audio
+  if (m.audioMessage) return { text: m.audioMessage.ptt ? '[voice note]' : '[audio]', type: 'audio', ptt: !!m.audioMessage.ptt, url: m.audioMessage.url || m.audioMessage.mediaUrl || '' };
+  // Document
+  if (m.documentMessage) return { text: m.documentMessage.fileName || '[document]', type: 'document', url: m.documentMessage.url || m.documentMessage.mediaUrl || '' };
+  // Sticker
+  if (m.stickerMessage) return { text: '[sticker]', type: 'sticker', url: m.stickerMessage.url || m.stickerMessage.mediaUrl || '' };
+  // Contact
+  if (m.contactMessage) return { text: (m.contactMessage.displayName || '') + ' ' + (m.contactMessage.vcard || ''), type: 'contact' };
+  if (m.contactsArrayMessage) return { text: '[' + ((m.contactsArrayMessage.contacts || []).length) + ' contacts]', type: 'contact' };
+  // Location
+  if (m.locationMessage) return { text: '📍 ' + (m.locationMessage.name || '') + ' ' + (m.locationMessage.address || ''), type: 'location', lat: m.locationMessage.degreesLatitude, lng: m.locationMessage.degreesLongitude };
+  // Reaction
+  if (m.reactionMessage) return { text: '❤️ ' + (m.reactionMessage.text || 'reaction'), type: 'reaction' };
+  // System
+  if (m.protocolMessage) return { text: '[system message]', type: 'system' };
+  // Fallback: try extendedTextMessage contextInfo
+  if (m.extendedTextMessage && m.extendedTextMessage.contextInfo && m.extendedTextMessage.contextInfo.stanzaId) {
+    return { text: '[forwarded message]', type: 'forward' };
+  }
+  return { text: JSON.stringify(m, null, 2), type: 'unknown' };
+}
+
+// ── Show referenced message section ──────────────────────────────────────
 var refSection = document.getElementById('ref-msg-section');
 var refContent = document.getElementById('ref-msg-content');
-var refLabel = document.querySelector('#ref-msg-section .editor-label');
+var refTitle = document.getElementById('ref-msg-title');
+var refMedia = document.getElementById('ref-media-preview');
 
-// Actions that reference existing messages
 var refActions = ['delete-message', 'edit-message', 'send-reaction', 'forward-message'];
 var isRefAction = refActions.includes('{{FUNC_NAME}}');
 
 if (isRefAction && refSection) {
   refSection.style.display = '';
 
-  // Try to load referenced message from JSON tag
   var refMsgStr = '';
-  try {
-    var el = document.getElementById('ref-msg-data');
-    if (el) refMsgStr = el.textContent || '';
-  } catch(e) {}
+  try { var refEl = document.getElementById('ref-msg-data'); if (refEl) refMsgStr = refEl.textContent || ''; } catch(e) {}
 
   if (refMsgStr && refMsgStr.length > 2) {
-    // Parse and display the message content
     try {
       var refParsed = JSON.parse(refMsgStr);
-      var refText = refParsed?.conversation || refParsed?.message?.conversation
-        || refParsed?.extendedTextMessage?.text || refParsed?.message?.extendedTextMessage?.text
-        || refParsed?.stickerMessage && '[sticker]'
-        || refParsed?.imageMessage && '[image]'
-        || refParsed?.videoMessage && '[video]'
-        || refParsed?.documentMessage && (refParsed.message?.documentMessage?.fileName || '[document]')
-        || refParsed?.contactMessage && '[contact]'
-        || refParsed?.locationMessage && '[location]'
-        || null;
-      if (refText) {
-        refContent.textContent = refText;
-      } else {
-        refContent.textContent = JSON.stringify(refParsed, null, 2);
+      var extracted = extractMessageContent(refParsed);
+
+      // Update title with resolved name
+      var msgId = payload.message_id || payload.from_message_id || '';
+      var rawJid = payload.jid || '';
+      var name = (typeof resolvedNames !== 'undefined' && resolvedNames[rawJid]) ? resolvedNames[rawJid] : rawJid;
+      if (refTitle) refTitle.textContent = '📨 Message from ' + name;
+
+      // Show media preview
+      if (refMedia) refMedia.innerHTML = '';
+      if (extracted.url && extracted.type === 'image') {
+        var img = document.createElement('img');
+        img.src = extracted.url;
+        img.style.cssText = 'max-width:100%;max-height:300px;border-radius:8px;margin:8px 0';
+        img.onerror = function() { this.alt = '[image — preview not available]'; };
+        if (refMedia) refMedia.appendChild(img);
+      } else if (extracted.url && extracted.type === 'audio') {
+        var audio = document.createElement('audio');
+        audio.src = extracted.url;
+        audio.controls = true;
+        audio.style.cssText = 'width:100%;margin:8px 0';
+        if (refMedia) refMedia.appendChild(audio);
+      } else if (extracted.url && extracted.type === 'video') {
+        var vid = document.createElement('video');
+        vid.src = extracted.url;
+        vid.controls = true;
+        vid.style.cssText = 'max-width:100%;max-height:300px;border-radius:8px;margin:8px 0';
+        if (refMedia) refMedia.appendChild(vid);
+      } else if (extracted.url && extracted.type === 'sticker') {
+        var stk = document.createElement('img');
+        stk.src = extracted.url;
+        stk.style.cssText = 'max-width:200px;max-height:200px;margin:8px 0';
+        stk.onerror = function() { this.alt = '[sticker]'; };
+        if (refMedia) refMedia.appendChild(stk);
       }
+
+      // Show text content
+      if (refContent) refContent.textContent = extracted.text;
     } catch(e) {
-      refContent.textContent = refMsgStr;
+      if (refContent) refContent.textContent = refMsgStr;
     }
   } else {
-    // No message in store — show what we know
     var msgId = payload.message_id || payload.from_message_id || '';
     var rawJid = payload.jid || '';
-    var name = resolvedNames[rawJid] || rawJid;
-    refLabel.textContent = '📨 Message #' + msgId + ' in ' + name;
-    refContent.textContent = '(Message not loaded in local store — sent before daemon was running)';
+    var name = (typeof resolvedNames !== 'undefined' && resolvedNames[rawJid]) ? resolvedNames[rawJid] : rawJid;
+    if (refTitle) refTitle.textContent = '📨 Message #' + msgId + ' in ' + name;
+    if (refContent) refContent.textContent = '(Message not in local store)';
   }
 }
 
@@ -197,14 +269,19 @@ if (payload.source) {
   }
 }
 if (payload.new_text) addField(extra,'new_text','New text',payload.new_text,'textarea');
-if (payload.to_jid) addField(extra,'to_jid','Forward to',payload.to_jid,'text');
 extra.querySelectorAll('input,textarea').forEach(function(el){el.addEventListener('input',sync)});
 
 function wrap(b,a){var t=document.getElementById('ed-text'),s=t.selectionStart,e=t.selectionEnd,sel=t.value.substring(s,e);t.value=t.value.substring(0,s)+b+(sel||'text')+a+t.value.substring(e);t.focus();t.setSelectionRange(s+b.length,s+b.length+(sel?sel.length:4));sync()}
 function ins(txt){var t=document.getElementById('ed-text'),p=t.selectionStart;t.value=t.value.substring(0,p)+txt+t.value.substring(p);t.focus();t.setSelectionRange(p+txt.length,p+txt.length);sync()}
 function addField(c,k,l,v,t){var r=document.createElement('div');r.className='editor-row';var lb=document.createElement('label');lb.className='editor-label';lb.textContent=l;r.appendChild(lb);if(t==='textarea'){var ta=document.createElement('textarea');ta.className='editor-textarea';ta.id='ed-'+k;ta.value=v;ta.rows=3;r.appendChild(ta)}else{var i=document.createElement('input');i.className='editor-input';i.id='ed-'+k;i.type=t;i.value=v;r.appendChild(i)}c.appendChild(r);el=function(e){el.addEventListener('input',sync)}}
 
-function sync(){var u=JSON.parse(JSON.stringify(payload));u.jid=document.getElementById('ed-jid').value||u.jid;u.to=u.jid;var t=document.getElementById('ed-text').value;if('text' in u)u.text=t;else if('caption' in u)u.caption=t;else if('question' in u)u.question=t;else if('name' in u)u.name=t;else if('new_text' in u)u.new_text=t;var o=document.getElementById('ed-options');if(o&&'options'in u)u.options=o.value.split('\n').filter(Boolean);var n=document.getElementById('ed-new_text');if(n)u.new_text=n.value;document.getElementById('payload').value=JSON.stringify(u,null,2)}
+function sync(){var u=JSON.parse(JSON.stringify(payload));
+  // Write recipient back to its canonical field only (never inject helper aliases)
+  if(recipientField){
+    if(isMultiRecipient){u[recipientField]=document.getElementById('ed-jids').value.split('\n').map(function(s){return s.trim()}).filter(Boolean)}
+    else{var rv=document.getElementById('ed-jid').value.trim();if(rv)u[recipientField]=rv}
+  }
+  var t=document.getElementById('ed-text').value;if('text' in u)u.text=t;else if('caption' in u)u.caption=t;else if('question' in u)u.question=t;else if('name' in u)u.name=t;else if('new_text' in u)u.new_text=t;var o=document.getElementById('ed-options');if(o&&'options'in u)u.options=o.value.split('\n').filter(Boolean);var n=document.getElementById('ed-new_text');if(n)u.new_text=n.value;document.getElementById('payload').value=JSON.stringify(u,null,2)}
 
 async function submit(status){
     sync();

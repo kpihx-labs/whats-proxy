@@ -64,14 +64,8 @@ function renderTemplate(
   // Add referenced message data if available
   let refMsgDisplay = "";
   if (referencedMsg) {
-    // Extract readable text from the Baileys message structure
-    const msg = referencedMsg.message || referencedMsg;
-    refMsgDisplay = JSON.stringify(msg, null, 2);
-    // Try to extract the actual text content
-    const textContent = (msg as any)?.conversation || (msg as any)?.extendedTextMessage?.text || (msg as any)?.imageMessage?.caption || (msg as any)?.videoMessage?.caption || (msg as any)?.documentMessage?.fileName || "";
-    if (textContent) {
-      refMsgDisplay = String(textContent);
-    }
+    // Always pass the FULL message as JSON — let the template JS extract text
+    refMsgDisplay = JSON.stringify(referencedMsg, null, 2);
   }
 
   let payloadDisplay: string;
@@ -170,7 +164,7 @@ function handleGet(request: IncomingMessage, response: ServerResponse): void {
     const isMessage = ["send-text", "send-image", "send-video", "send-audio",
       "send-document", "send-sticker", "send-location", "send-contact",
       "send-poll", "edit-message", "forward-message", "batch-send-text",
-      "send-batch", "send-reaction"].includes(req.action);
+      "send-batch", "send-reaction", "delete-message"].includes(req.action);
     const templatePath = isMessage ? MESSAGE_TEMPLATE_PATH : TEMPLATE_PATH;
 
     // Resolve JIDs to names for all actions that reference contacts/groups
@@ -296,7 +290,11 @@ async function handlePost(request: IncomingMessage, response: ServerResponse): P
   // Fall back to original payload if none submitted
   if (!payload) payload = req.payload;
 
-  const edited = JSON.stringify(payload) !== JSON.stringify(req.payload);
+  // Compare only fields that existed in the original — the template's sync()
+  // adds helper fields like `to`, which must NOT count as a reviewer edit.
+  const edited = Object.keys(req.payload).some(
+    (k) => JSON.stringify(payload[k]) !== JSON.stringify(req.payload[k]),
+  );
   const comment = String(submitted.comment || "");
 
   response.writeHead(200, { "Content-Type": "application/json" });
