@@ -3,6 +3,7 @@
 <link rel="stylesheet" href="/assets/hitl.css">
 </head><body>
 <script type="application/json" id="payload-data">{{PAYLOAD_JSON}}</script>
+<script type="application/json" id="resolved-names">{{RESOLVED_NAMES}}</script>
 <header class="hitl-header">
   <div><h1 class="hitl-brand">🟢 Whats-Proxy · Review</h1><p class="hitl-subtitle">{{FUNC_NAME}}</p></div>
   <div class="hitl-actions">
@@ -11,6 +12,7 @@
   </div>
 </header>
 <main class="hitl-container">
+  <section class="hitl-card" id="recipients-card" style="display:none"><h2>👤 Destinataires</h2><div class="hitl-card-body" id="recipients-body"></div></section>
   <section class="hitl-card"><h2>📋 Action JSON</h2><div class="hitl-card-body">
     <textarea class="hitl-input" id="payload" rows="16"></textarea>
   </div></section>
@@ -18,7 +20,18 @@
 <footer class="hitl-footer"><textarea class="hitl-input" id="comment" placeholder="Comment" rows="2"></textarea></footer>
 <script>
 var ORIGINAL,payload;try{payload=JSON.parse(document.getElementById('payload-data').textContent);ORIGINAL=JSON.parse(JSON.stringify(payload))}catch(e){payload={};ORIGINAL={}}
+var resolvedNames={};try{resolvedNames=JSON.parse(document.getElementById('resolved-names').textContent||'{}')}catch(e){}
+// Centralized JID → "number (name)" resolution, shared across ALL HITL actions.
+function resolveJid(raw){if(!raw)return '';var name=resolvedNames[raw];return name?raw+' ('+name+')':raw}
+// Scan the payload for any JID/phone field and list it with its resolved name.
+(function(){var seen={};var rows=[];
+  function add(v){if(!v)return;var s=String(v);if(seen[s])return;seen[s]=1;rows.push(resolveJid(s))}
+  ['jid','to','to_jid','from_chat'].forEach(function(k){if(payload[k]!==undefined){if(Array.isArray(payload[k]))payload[k].forEach(add);else add(payload[k])}});
+  if(Array.isArray(payload.jids))payload.jids.forEach(add);
+  if(Array.isArray(payload.contacts))payload.contacts.forEach(function(c){if(c&&c.phone)add(c.phone)});
+  if(rows.length){var card=document.getElementById('recipients-card');var body=document.getElementById('recipients-body');card.style.display='';rows.forEach(function(r){var d=document.createElement('div');d.className='msg-meta';d.textContent=r;body.appendChild(d)})}
+})();
 document.getElementById('payload').value=JSON.stringify(payload,null,2);
-async function submit(s){var raw=document.getElementById('payload').value;var p;try{p=JSON.parse(raw)}catch(e){p=raw};var c=document.getElementById('comment').value;var edited=JSON.stringify(p)!==JSON.stringify(ORIGINAL);var r=await fetch('/submit',{method:'POST',body:JSON.stringify({id:'{{REQUEST_ID}}',status:s,comment:c,payload:p,edited:edited})});if(r.ok)document.body.innerHTML='<div class="hitl-done"><h2>'+(s==='approved'?'✅ SENT':'❌ REJECTED')+'</h2><p style="opacity:.6">Close this window.</p></div>';}
+async function submit(s){var raw=document.getElementById('payload').value;var p;try{p=JSON.parse(raw)}catch(e){p=raw};var c=document.getElementById('comment').value;var edited=Object.keys(ORIGINAL).some(function(k){return JSON.stringify(p[k])!==JSON.stringify(ORIGINAL[k])});var r=await fetch('/submit',{method:'POST',body:JSON.stringify({id:'{{REQUEST_ID}}',status:s,comment:c,payload:p,edited:edited})});if(r.ok)document.body.innerHTML='<div class="hitl-done"><h2>'+(s==='approved'?'✅ SENT':'❌ REJECTED')+'</h2><p style="opacity:.6">Close this window.</p></div>';}
 </script>
 </body></html>

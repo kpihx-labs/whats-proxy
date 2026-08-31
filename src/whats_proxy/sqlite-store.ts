@@ -30,7 +30,7 @@ try {
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { formatMessage, isGroupJid } from "./helpers";
+import { formatMessage, isGroupJid, phoneToJid } from "./helpers";
 
 const ANALYTICS_STOP_WORDS = new Set([
   "a", "an", "and", "are", "as", "at", "be", "by", "de", "des", "du", "en", "est",
@@ -848,19 +848,23 @@ export class SQLiteStore {
 
   /** Resolve a contact JID to a display name. Tries contact name → chat name → LID mapping. */
   resolveContactName(jid: string): string | null {
+    // Normalize a bare phone number to a full JID before lookup — the store
+    // is keyed by full JIDs (`33612345678@s.whatsapp.net`), not plain numbers.
+    const normalized = phoneToJid(jid);
+
     // 1. Direct contact lookup
-    const contact = this.getContact(jid);
+    const contact = this.getContact(normalized);
     const contactName = contact?.name || contact?.notify || contact?.verifiedName;
     if (contactName) return contactName;
 
     // 2. Chat name lookup (pushName from last message)
-    const chat = this.getChat(jid);
+    const chat = this.getChat(normalized);
     const chatName = chat?.name || chat?.pushName;
     if (chatName) return chatName;
 
     // 3. LID → PN → contact name
-    if (jid.endsWith("@lid")) {
-      const mapping = this.lidPnMap.get(jid);
+    if (normalized.endsWith("@lid")) {
+      const mapping = this.lidPnMap.get(normalized);
       if (mapping?.pn) {
         const pnContact = this.getContact(mapping.pn);
         const pnName = pnContact?.name || pnContact?.notify || mapping.name;

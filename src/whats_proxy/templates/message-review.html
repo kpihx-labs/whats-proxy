@@ -100,10 +100,7 @@ if (isMultiRecipient) {
   document.getElementById('ed-jid-row').style.display = '';
   var rawJid = recipientField ? (payload[recipientField] || '') : '';
   document.getElementById('ed-jid').value = rawJid;
-  var resolvedName = resolvedNames[rawJid];
-  if (resolvedName) {
-    document.getElementById('ed-jid-label').textContent = 'To — ' + resolvedName;
-  }
+  document.getElementById('ed-jid-label').textContent = 'To — ' + resolveJid(rawJid);
 }
 
 // ── Centralized message content extractor ────────────────────────────────
@@ -159,11 +156,10 @@ if (isRefAction && refSection) {
       var refParsed = JSON.parse(refMsgStr);
       var extracted = extractMessageContent(refParsed);
 
-      // Update title with resolved name
+      // Update title with resolved name (number + name)
       var msgId = payload.message_id || payload.from_message_id || '';
       var rawJid = payload.jid || '';
-      var name = (typeof resolvedNames !== 'undefined' && resolvedNames[rawJid]) ? resolvedNames[rawJid] : rawJid;
-      if (refTitle) refTitle.textContent = '📨 Message from ' + name;
+      if (refTitle) refTitle.textContent = '📨 Message from ' + resolveJid(rawJid);
 
       // Show media preview
       if (refMedia) refMedia.innerHTML = '';
@@ -201,8 +197,7 @@ if (isRefAction && refSection) {
   } else {
     var msgId = payload.message_id || payload.from_message_id || '';
     var rawJid = payload.jid || '';
-    var name = (typeof resolvedNames !== 'undefined' && resolvedNames[rawJid]) ? resolvedNames[rawJid] : rawJid;
-    if (refTitle) refTitle.textContent = '📨 Message #' + msgId + ' in ' + name;
+    if (refTitle) refTitle.textContent = '📨 Message #' + msgId + ' in ' + resolveJid(rawJid);
     if (refContent) refContent.textContent = '(Message not in local store)';
   }
 }

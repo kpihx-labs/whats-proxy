@@ -243,13 +243,23 @@ Examples:
       example: { jid: "33612345678", message_id: "ABC123", star: true },
       returns: "{ status, jid, message_id }",
     },
-    handler: requireApproval("default")(async ({ jid, message_id, star, from_me }, { sock }) => {
+    handler: requireApproval("default")(async ({ jid, message_id, star, from_me }, { sock, store }) => {
       const chatJid = phoneToJid(String(jid));
       const shouldStar = star !== false;
+      // Auto-detect fromMe from the store when not explicitly provided —
+      // WhatsApp's star target is keyed by {id, fromMe}, so guessing wrong
+      // (defaulting to false) silently stars nothing when the message is yours.
+      let resolvedFromMe: boolean;
+      if (from_me !== undefined) {
+        resolvedFromMe = Boolean(from_me);
+      } else {
+        const msg = store.getMessage(String(message_id));
+        resolvedFromMe = msg?.key?.fromMe ?? false;
+      }
       await sock.chatModify(
         {
           star: {
-            messages: [{ id: String(message_id), fromMe: from_me ?? false }],
+            messages: [{ id: String(message_id), fromMe: resolvedFromMe }],
             star: shouldStar,
           },
         } as any,
