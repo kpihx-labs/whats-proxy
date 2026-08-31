@@ -95,10 +95,19 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
 
     return await new Promise<Output>((resolve) => {
       let currentSock: WASocket | null = null;
+      let resolved = false;
+
+      // Resolve once and mark done so late socket teardown events (the final
+      // `close` after we deliberately sock.end()) are silently ignored.
+      const finish = (output: Output) => {
+        if (resolved) return;
+        resolved = true;
+        resolve(output);
+      };
 
       const timeout = setTimeout(() => {
         currentSock?.end(undefined);
-        resolve(errResult("Setup timed out after 3 minutes. Run again for a fresh QR/code."));
+        finish(errResult("Setup timed out after 3 minutes. Run again for a fresh QR/code."));
       }, 180_000);
 
       // Create a fresh login socket. Re-usable: on 515 (restartRequired)
@@ -123,16 +132,11 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
         });
         currentSock = sock;
 
-        sock.ev.on("creds.update", (update) => {
-          if (update.advSecretKey) {
-            logger.info("advSecretKey rotated (companion_reg_refresh handler fired)");
-          }
-          saveCreds();
-        });
+        sock.ev.on("creds.update", saveCreds);
 
         sock.ev.on("connection.update", async (update) => {
           const { connection, lastDisconnect, qr } = update;
-          logger.info(`[DEBUG] connection.update: connection=${connection} qr=${!!qr} receivedQr=${receivedQr}`);
+          if (resolved) return; // ignore late teardown events after pairing/error
 
           if (qr) {
             receivedQr = true;
@@ -148,7 +152,7 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
               } catch (err) {
                 clearTimeout(timeout);
                 sock.end(undefined);
-                resolve(errResult(`Failed to get pairing code: ${(err as Error).message}`));
+                finish(errResult(`Failed to get pairing code: ${(err as Error).message}`));
                 return;
               }
             } else if (!opts.code) {
@@ -172,7 +176,7 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
             // Give creds a moment to flush to disk, then wrap up.
             setTimeout(() => {
               sock.end(undefined);
-              resolve(
+              finish(
                 okResult({
                   status: "paired",
                   phone: opts.code ? phone : undefined,
@@ -192,11 +196,11 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
             if (statusCode === DisconnectReason.loggedOut) {
               clearTimeout(timeout);
               sock.end(undefined);
-              resolve(errResult("Pairing failed or session rejected (401)."));
+              finish(errResult("Pairing failed or session rejected (401)."));
             } else if (statusCode === DisconnectReason.connectionReplaced) {
               clearTimeout(timeout);
               sock.end(undefined);
-              resolve(errResult("Connection replaced by another session (440)."));
+              finish(errResult("Connection replaced by another session (440)."));
             } else if (statusCode === DisconnectReason.restartRequired) {
               // 515 — WhatsApp accepted the pairing and now asks us to
               // reconnect with the freshly-saved session creds to finalize.
@@ -211,7 +215,7 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
               if (transientCloses >= MAX_TRANSIENT_CLOSES) {
                 clearTimeout(timeout);
                 sock.end(undefined);
-                resolve(errResult(
+                finish(errResult(
                   `Connection failed ${MAX_TRANSIENT_CLOSES} times (last: status ${statusCode ?? "?"}). ` +
                   (receivedQr ? "QR was scanned but pairing was rejected — retry later." : "Check network and retry.")
                 ));
