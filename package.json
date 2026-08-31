@@ -17,11 +17,10 @@
     "check": "bunx tsc --noEmit && bun test",
     "typecheck": "bunx tsc --noEmit",
     "test": "bun test",
-    "smoke": "bun run scripts/smoke.ts",
-    "postinstall": "bash patches/patch-baileys-companion-reg-refresh.sh"
+    "smoke": "bun run scripts/smoke.ts"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^7.0.0-rc14",
+    "@whiskeysockets/baileys": "ayusc/Baileys",
     "pino": "^9.0.0",
     "qrcode": "^1.5.4",
     "tsx": "^4.20.6",

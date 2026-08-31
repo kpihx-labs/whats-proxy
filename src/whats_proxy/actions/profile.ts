@@ -44,7 +44,7 @@ export default [
       returns: "{ status, about }",
     },
     handler: async ({ text }, { sock }) => {
-      await sock.updateProfileStatus(String(text || ""));
+      await sock.updateProfileStatus(String(text || ""), "", 0);
       return okResult({ status: "updated", about: text });
     },
     schema: profileAboutSchema,
