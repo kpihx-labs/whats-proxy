@@ -82,7 +82,13 @@ function wrapOutput(line: string): string {
  */
 export function getFullHelp(def: ActionDef): string {
   const doc = def.docstring || "";
-  return doc.split("\n").map(wrapOutput).join("\n");
+  const wrapped = doc.split("\n").map(wrapOutput).join("\n");
+  // Prepend usage line like tick-proxy's Typer does automatically.
+  const hasArgs = def.meta.arguments.length > 0;
+  const usage = hasArgs
+    ? `Usage:\n  whats-proxy do ${def.meta.action} [payload|file] [-o file] [-f json|table] [-a phone]\n`
+    : `Usage:\n  whats-proxy do ${def.meta.action} [-f json|table] [-a phone]\n`;
+  return usage + "\n" + wrapped;
 }
 
 /**
@@ -110,12 +116,14 @@ export function getCatalogHelp(registry: ActionRegistry): string {
     lines.push(`\x1b[1;35m── ${cat} ──\x1b[0m`);
     for (const name of names.sort()) {
       const def = registry[name]!;
-      lines.push(`  \x1b[1;36m${name}\x1b[0m`);
+      lines.push(`\x1b[1;36m${name}\x1b[0m`);
       const compact = getCompactHelp(def);
       if (compact) {
-        // Show only the first line of the description
-        const firstLine = compact.split("\n").find(l => l.trim()) || "";
-        lines.push(`  ${firstLine.trim()}`);
+        // Show the FULL compact help (description + parameters), not just the first line.
+        // Matches tick-proxy: everything before "Examples:" is visible in the catalog.
+        for (const l of compact.split("\n")) {
+          lines.push(l);
+        }
       }
       lines.push("");
     }

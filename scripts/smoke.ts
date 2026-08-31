@@ -48,7 +48,10 @@ console.log("\n[1] catalog help");
   check("mentions send-text", stripped.includes("send-text"));
   check("mentions find-messages", stripped.includes("find-messages"));
   check("mentions daily-digest", stripped.includes("daily-digest"));
-  const actionCount = (stripped.match(/^  [a-z-]+$/gm) || []).length;
+  // Count action names: lines starting with a lowercase letter, containing
+  // only lowercase + hyphens (no spaces, no ANSI). After ANSI strip, these
+  // are action names like "analytics-chat-insights" or "send-text".
+  const actionCount = (stripped.match(/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/gm) || []).length;
   check(`catalog lists ~65 actions (found ${actionCount})`, actionCount >= 60, `count=${actionCount}`);
 }
 
