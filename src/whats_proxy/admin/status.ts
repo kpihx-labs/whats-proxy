@@ -193,6 +193,29 @@ export async function adminStatus(): Promise<Output> {
       warnings.push(`⚠️ Service not active for ${phone}. Run: whats-proxy admin service start ${phone}`);
     }
 
+    // Store info (WAL size + last backup)
+    const storePath = join(phoneDir, "store.db");
+    const walPath = join(phoneDir, "store.db-wal");
+    const shmPath = join(phoneDir, "store.db-shm");
+    let storeInfo: { db_kb: number; wal_kb: number; shm_kb: number } | null = null;
+    try {
+      const dbSize = existsSync(storePath) ? statSync(storePath).size : 0;
+      const walSize = existsSync(walPath) ? statSync(walPath).size : 0;
+      const shmSize = existsSync(shmPath) ? statSync(shmPath).size : 0;
+      storeInfo = { db_kb: Math.round(dbSize / 1024), wal_kb: Math.round(walSize / 1024), shm_kb: Math.round(shmSize / 1024) };
+    } catch { /* non-fatal */ }
+
+    let lastBackup: string | null = null;
+    let backupCount = 0;
+    try {
+      const backupDir = join(shareDir(), "backup");
+      if (existsSync(backupDir)) {
+        const files = readdirSync(backupDir).filter((f) => f.startsWith(`${phone}-`) && f.endsWith(".db")).sort().reverse();
+        backupCount = files.length;
+        if (files.length > 0 && files[0]) lastBackup = files[0].replace(`${phone}-`, "").replace(".db", "").replace("T", " ").replace(/-/g, ":").slice(0, 19);
+      }
+    } catch { /* non-fatal */ }
+
     accountProbes.push({
       phone,
       default: phone === defaultPhone,
@@ -202,6 +225,8 @@ export async function adminStatus(): Promise<Output> {
       service_status: serviceStatus,
       pid,
       connection,
+      store: storeInfo,
+      backup: { count: backupCount, last: lastBackup },
     });
   }
 
