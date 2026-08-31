@@ -349,6 +349,43 @@ console.log("\n[9] CLI edge paths");
   }
 }
 
+// ── HITL template rendering ────────────────────────────────────────────────
+{
+  const { readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+
+  // Test message-review.html
+  const tplPath = join(import.meta.dir, "../src/whats_proxy/templates/message-review.html");
+  const tpl = readFileSync(tplPath, "utf-8");
+
+  check("message template has payload-data script tag", tpl.includes('<script type="application/json" id="payload-data">'));
+  check("message template has FUNC_NAME placeholder", tpl.includes("{{FUNC_NAME}}"));
+  check("message template has PAYLOAD_JSON placeholder", tpl.includes("{{PAYLOAD_JSON}}"));
+  check("message template has REQUEST_ID placeholder", tpl.includes("{{REQUEST_ID}}"));
+
+  // Test hitl.html
+  const hitlPath = join(import.meta.dir, "../src/whats_proxy/templates/hitl.html");
+  const hitl = readFileSync(hitlPath, "utf-8");
+  check("hitl template has payload-data script tag", hitl.includes('<script type="application/json" id="payload-data">'));
+  check("hitl template has PAYLOAD_JSON placeholder", hitl.includes("{{PAYLOAD_JSON}}"));
+
+  // Test CSS exists
+  const cssPath = join(import.meta.dir, "../src/whats_proxy/templates/hitl.css");
+  check("hitl.css exists", existsSync(cssPath));
+
+  // Simulate rendering and verify JSON survives
+  const testPayload = { jid: "33600000000", text: "🎉 *test* _italic_ \n newline" };
+  const rendered = tpl
+    .replace(/\{\{FUNC_NAME\}\}/g, "send-text")
+    .replace(/\{\{PAYLOAD_JSON\}\}/g, JSON.stringify(testPayload, null, 2))
+    .replace(/\{\{REQUEST_ID\}\}/g, "test-id");
+  // Verify the JSON survives in the script tag
+  const scriptMatch = rendered.match(/<script type="application\/json" id="payload-data">([\s\S]*?)<\/script>/);
+  const scriptContent = scriptMatch?.[1] ?? "";
+  check("rendered JSON survives in script tag", scriptContent.includes("🎉"));
+  check("rendered JSON is parseable", (() => { try { JSON.parse(scriptContent); return true; } catch { return false; } })());
+}
+
 // ── Cleanup ─────────────────────────────────────────────────────────────────
 rmSync(WORK, { recursive: true, force: true });
 

@@ -70,7 +70,40 @@ if (payload.options) addField(extra,'options','Poll options (one per line)',(pay
 if (payload.latitude!=null) addField(extra,'latitude','Latitude',payload.latitude,'number');
 if (payload.longitude!=null) addField(extra,'longitude','Longitude',payload.longitude,'number');
 if (payload.contacts) addField(extra,'contacts','Contacts',JSON.stringify(payload.contacts,null,2),'textarea');
-if (payload.source) addField(extra,'source','Source',payload.source,'text');
+if (payload.source) {
+  addField(extra,'source','Source',payload.source,'text');
+  // Image/video preview
+  var src = String(payload.source);
+  if (src.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i) || src.startsWith('data:image')) {
+    var img = document.createElement('img');
+    img.src = src;
+    img.style.cssText = 'max-width:100%;max-height:300px;border-radius:8px;margin-top:8px;border:1px solid var(--border)';
+    img.onerror=function(){this.style.display='none'};
+    var previewRow = document.createElement('div');
+    previewRow.className = 'editor-row';
+    var previewLabel = document.createElement('label');
+    previewLabel.className = 'editor-label';
+    previewLabel.textContent = 'Image Preview';
+    previewRow.appendChild(previewLabel);
+    previewRow.appendChild(img);
+    extra.appendChild(previewRow);
+  }
+  if (src.match(/\.(mp4|webm|ogg)$/i)) {
+    var vid = document.createElement('video');
+    vid.src = src;
+    vid.controls = true;
+    vid.style.cssText = 'max-width:100%;max-height:300px;border-radius:8px;margin-top:8px;border:1px solid var(--border)';
+    vid.onerror=function(){this.style.display='none'};
+    var vidRow = document.createElement('div');
+    vidRow.className = 'editor-row';
+    var vidLabel = document.createElement('label');
+    vidLabel.className = 'editor-label';
+    vidLabel.textContent = 'Video Preview';
+    vidRow.appendChild(vidLabel);
+    vidRow.appendChild(vid);
+    extra.appendChild(vidRow);
+  }
+}
 if (payload.new_text) addField(extra,'new_text','New text',payload.new_text,'textarea');
 if (payload.to_jid) addField(extra,'to_jid','Forward to',payload.to_jid,'text');
 extra.querySelectorAll('input,textarea').forEach(function(el){el.addEventListener('input',sync)});
