@@ -173,10 +173,14 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
             sock.end(undefined);
             resolve(errResult("Connection replaced by another session (440)."));
           } else {
-            // Transient close (e.g. status 428, 515, network blip). Baileys
-            // reconnects automatically, but after MAX_TRANSIENT_CLOSES
-            // consecutive failures, give up cleanly — whether QR was shown
-            // or not (post-scan failures like 515 are just as fatal).
+            // 515 = restartRequired — NORMAL during pairing (WhatsApp asks
+            // Baileys to restart the handshake). Do NOT count it as a
+            // transient failure — Baileys reconnects automatically.
+            if (statusCode === DisconnectReason.restartRequired) {
+              logger.info("Restart required by WhatsApp — reconnecting (normal during pairing).");
+              return; // let Baileys reconnect, don't increment counter
+            }
+            // Other transient closes (428, network blip): count toward limit.
             transientCloses++;
             logger.info(`Transient close (status ${statusCode ?? "?"}) ${transientCloses}/${MAX_TRANSIENT_CLOSES}`);
             if (transientCloses >= MAX_TRANSIENT_CLOSES) {
