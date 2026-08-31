@@ -58,7 +58,21 @@ function renderTemplate(
   requestId: string,
   action: string,
   payload: Record<string, unknown>,
+  referencedMsg?: Record<string, unknown> | null,
 ): string {
+  // Add referenced message data if available
+  let refMsgDisplay = "";
+  if (referencedMsg) {
+    // Extract readable text from the Baileys message structure
+    const msg = referencedMsg.message || referencedMsg;
+    refMsgDisplay = JSON.stringify(msg, null, 2);
+    // Try to extract the actual text content
+    const textContent = (msg as any)?.conversation || (msg as any)?.extendedTextMessage?.text || (msg as any)?.imageMessage?.caption || (msg as any)?.videoMessage?.caption || (msg as any)?.documentMessage?.fileName || "";
+    if (textContent) {
+      refMsgDisplay = String(textContent);
+    }
+  }
+
   let payloadDisplay: string;
   try {
     payloadDisplay = JSON.stringify(payload, null, 2);
@@ -76,6 +90,7 @@ function renderTemplate(
   html = html.replace(/\{\{FUNC_NAME\}\}/g, action);
   html = html.replace(/\{\{PAYLOAD_JSON\}\}/g, payloadDisplay);
   html = html.replace(/\{\{REQUEST_ID\}\}/g, requestId);
+  html = html.replace(/\{\{REFERENCED_MSG\}\}/g, refMsgDisplay);
   return html;
 }
 
@@ -85,6 +100,7 @@ interface InFlightRequest {
   action: string;
   payload: Record<string, unknown>;
   resolve: (response: HITLResponse) => void;
+  store?: any;
 }
 
 const activeRequests = new Map<string, InFlightRequest>();
@@ -155,7 +171,21 @@ function handleGet(request: IncomingMessage, response: ServerResponse): void {
       "send-batch", "send-reaction"].includes(req.action);
     const templatePath = isMessage ? MESSAGE_TEMPLATE_PATH : TEMPLATE_PATH;
 
-    const html = renderTemplate(templatePath, requestId, req.action, req.payload);
+    // Fetch referenced message for actions that reference existing messages
+    let referencedMsg: Record<string, unknown> | null = null;
+    const refActions = ["delete-message", "edit-message", "send-reaction", "forward-message"];
+    if (refActions.includes(req.action) && req.store) {
+      const messageId = String(req.payload.message_id || req.payload.from_message_id || "");
+      const jid = String(req.payload.jid || "");
+      if (messageId && jid) {
+        try {
+          const msg = req.store.getMessage(messageId);
+          if (msg) referencedMsg = msg as unknown as Record<string, unknown>;
+        } catch { /* message not in store — non-fatal */ }
+      }
+    }
+
+    const html = renderTemplate(templatePath, requestId, req.action, req.payload, referencedMsg);
     response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     response.end(html);
     return;
@@ -265,7 +295,7 @@ async function handlePost(request: IncomingMessage, response: ServerResponse): P
 export function requestApproval(
   action: string,
   payload: Record<string, unknown>,
-  opts?: { reviewMode?: string },
+  opts?: { reviewMode?: string; store?: any },
 ): Promise<HITLResponse> {
   const requestId = randomUUID();
 
@@ -286,7 +316,7 @@ export function requestApproval(
     });
 
     // Track this request
-    activeRequests.set(requestId, { action, payload, resolve });
+    activeRequests.set(requestId, { action, payload, resolve, store: opts?.store });
 
     // Timeout → fail-closed
     const timeout = setTimeout(() => {

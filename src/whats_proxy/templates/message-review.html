@@ -33,6 +33,14 @@
     </div>
   </section>
 
+  <!-- ===== Referenced message (for delete/edit/reaction/forward) ===== -->
+  <section class="hitl-card" id="ref-msg-section" style="display:none">
+    <h2>📨 Message à modifier</h2>
+    <div class="hitl-card-body">
+      <pre class="hitl-json" id="ref-msg-content" style="white-space:pre-wrap;word-break:break-word"></pre>
+    </div>
+  </section>
+
   <section class="hitl-card">
     <h2>🔧 Raw JSON</h2>
     <div class="hitl-card-body">
@@ -55,6 +63,17 @@ try {
     ORIGINAL = {};
 }
 document.getElementById('ed-jid').value = payload.jid || payload.to || payload.to_jid || '';
+
+// Show referenced message if available
+var refMsgStr = '{{REFERENCED_MSG}}';
+if (refMsgStr && refMsgStr.length > 0) {
+  document.getElementById('ref-msg-section').style.display = '';
+  try {
+    document.getElementById('ref-msg-content').textContent = refMsgStr;
+  } catch(e) {
+    document.getElementById('ref-msg-content').textContent = refMsgStr;
+  }
+}
 
 // Hide Message field + toolbar for actions without text content
 var hasText = 'text' in payload || 'caption' in payload || 'question' in payload || 'name' in payload || 'new_text' in payload;
