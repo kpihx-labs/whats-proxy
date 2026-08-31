@@ -231,6 +231,16 @@ export function protectAction(definition: ActionDef, policy: ActionPolicy | unde
         args = result.data;
       }
       const needsApproval = typeof policy.approval === "function" ? policy.approval(args) : policy.approval;
+
+      // Pre-check: verify referenced message exists in store before opening HITL
+      const refActions = ["edit-message", "delete-message", "send-reaction", "forward-message"];
+      if (refActions.includes(definition.meta.action) && needsApproval && context.store) {
+        const mid = String(args.message_id || args.from_message_id || "");
+        if (mid && !context.store.getMessage(mid)) {
+          return errResult(`Message not found in local store: ${mid}. Cannot open HITL for a message that doesn't exist.`);
+        }
+      }
+
       if (needsApproval && policy.preflight) {
         const error = await policy.preflight(args, context);
         if (error) return errResult(error);
