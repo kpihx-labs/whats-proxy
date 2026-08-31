@@ -30,8 +30,8 @@ import type { Output } from "../types.ts";
  */
 function serviceSourcePath(): string {
   const here = dirname(fileURLToPath(import.meta.url));
-  // admin/ → src/ → services/
-  return join(here, "..", "services", "whats-proxy@.service");
+  // admin/ → whats_proxy/ → src/ → services/
+  return join(here, "..", "..", "services", "whats-proxy@.service");
 }
 
 /**
