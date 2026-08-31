@@ -14,7 +14,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { REGISTRY, ACTION_COUNT, ALL } from "../src/whats_proxy/actions/registry.ts";
-import { ACTION_POLICIES } from "../src/whats_proxy/actions/policies.ts";
+import { ACTION_POLICIES, policyFor } from "../src/whats_proxy/actions/policies.ts";
 import { SCHEMAS } from "../src/whats_proxy/actions/schemas.ts";
 import { getCompactHelp, getFullHelp } from "../src/whats_proxy/doc.ts";
 
@@ -94,7 +94,7 @@ describe("Registry ↔ policies coherence", () => {
     ]);
     for (const name of Object.keys(REGISTRY)) {
       if (!readOnly.has(name)) {
-        expect(ACTION_POLICIES[name]).toBeDefined();
+        expect(policyFor(name, REGISTRY[name])).toBeDefined();
       }
     }
   });

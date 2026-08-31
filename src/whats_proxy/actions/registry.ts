@@ -43,7 +43,7 @@ for (const def of ALL) {
   if (REGISTRY[def.meta.action]) {
     throw new Error(`Duplicate action: ${def.meta.action}`);
   }
-  REGISTRY[def.meta.action] = protectAction(def, policyFor(def.meta.action));
+  REGISTRY[def.meta.action] = protectAction(def, policyFor(def.meta.action, def));
 }
 
 export const ACTION_COUNT = ALL.length;

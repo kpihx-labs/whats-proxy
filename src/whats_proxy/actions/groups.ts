@@ -8,6 +8,7 @@
  */
 
 import type { ActionDef } from "./types.ts";
+import { requireApproval, requirePreflight } from "../decorators.ts";
 import { groupCreateSchema, groupInfoSchema, groupListSchema, groupSubjectSchema, groupDescriptionSchema, groupParticipantsSchema, groupLeaveSchema, groupInviteSchema, groupSettingsSchema, groupPictureSchema } from "./schemas.ts";
 import { phoneToJid, groupJid, isGroupJid, jidToPhone, resolveMedia, okResult, errResult, formatMessage } from "../helpers.ts";
 import { fetchAdditionalHistory, type HistorySyncResult } from "./history.ts";
@@ -76,7 +77,7 @@ export default [
       example: { subject: "X24 Project", participants: ["33612345678"] },
       returns: "{ status, jid, subject, participants }",
     },
-    handler: async ({ subject, participants, description }, { sock }) => {
+    handler: requireApproval("default")(async ({ subject, participants, description }, { sock }) => {
       const list = Array.isArray(participants) ? participants.map(String) : [];
       const jids = list.map(phoneToJid);
       const result: any = await sock.groupCreate(String(subject), jids);
@@ -91,7 +92,7 @@ export default [
         subject: result.subject || subject,
         participants: result.participants || jids.map((j) => ({ jid: j })),
       });
-    },
+    }),
     schema: groupCreateSchema,
     docstring: `Create a new WhatsApp group. You must provide at least 1 participant besides yourself.
 
@@ -299,11 +300,11 @@ Examples:
       example: { jid: "120363000000000@g.us", subject: "New Name" },
       returns: "{ status, jid, subject }",
     },
-    handler: async ({ jid, subject }, { sock }) => {
+    handler: requireApproval("default")(async ({ jid, subject }, { sock }) => {
       const gJid = _ensureGroupJid(String(jid));
       await sock.groupUpdateSubject(gJid, String(subject));
       return okResult({ status: "updated", jid: gJid, subject });
-    },
+    }),
     schema: groupSubjectSchema,
     docstring: `Change the group name/subject.
 
@@ -334,11 +335,11 @@ Examples:
       example: { jid: "120363000000000@g.us", description: "Updated description" },
       returns: "{ status, jid }",
     },
-    handler: async ({ jid, description }, { sock }) => {
+    handler: requireApproval("default")(async ({ jid, description }, { sock }) => {
       const gJid = _ensureGroupJid(String(jid));
       await sock.groupUpdateDescription(gJid, description ? String(description) : undefined);
       return okResult({ status: "updated", jid: gJid });
-    },
+    }),
     schema: groupDescriptionSchema,
     docstring: `Update or clear the group description.
 
@@ -375,7 +376,7 @@ Examples:
       ],
       returns: "{ status, jid, participants }",
     },
-    handler: async ({ jid, action, participants }, { sock }) => {
+    handler: requireApproval("default")(async ({ jid, action, participants }, { sock }) => {
       const gJid = _ensureGroupJid(String(jid));
       const list = Array.isArray(participants) ? participants.map(String) : [];
       const pJids = list.map(phoneToJid);
@@ -385,7 +386,7 @@ Examples:
         jid: gJid,
         participants: result || pJids.map((p) => ({ jid: p, status: "ok" })),
       });
-    },
+    }),
     schema: groupParticipantsSchema,
     docstring: `Add, remove, promote (to admin), or demote (from admin) group participants.
 
@@ -416,11 +417,22 @@ Examples:
       example: { jid: "120363000000000@g.us" },
       returns: "{ status, jid }",
     },
-    handler: async ({ jid }, { sock }) => {
-      const gJid = _ensureGroupJid(String(jid));
-      await sock.groupLeave(gJid);
-      return okResult({ status: "left", jid: gJid });
-    },
+    handler: requireApproval("default")(
+      requirePreflight(
+        async (args, ctx) => {
+          try {
+            await (ctx as any).sock.groupMetadata(String(args.jid));
+          } catch {
+            throw new Error(`Group ${String(args.jid)} could not be read before destructive review.`);
+          }
+        },
+        ["jid"],
+      )(async ({ jid }, { sock }) => {
+        const gJid = _ensureGroupJid(String(jid));
+        await sock.groupLeave(gJid);
+        return okResult({ status: "left", jid: gJid });
+      }),
+    ),
     schema: groupLeaveSchema,
     docstring: `Leave a group.
 
@@ -523,7 +535,7 @@ Examples:
       example: { jid: "120363000000000@g.us", announce: true },
       returns: "{ status, jid, changes }",
     },
-    handler: async ({ jid, announce, locked, ephemeral, member_add_mode, join_approval_mode }, { sock }) => {
+    handler: requireApproval("default")(async ({ jid, announce, locked, ephemeral, member_add_mode, join_approval_mode }, { sock }) => {
       const gJid = _ensureGroupJid(String(jid));
       const updates: string[] = [];
 
@@ -552,7 +564,7 @@ Examples:
         return errResult("No settings provided. Specify at least one setting to update.");
       }
       return okResult({ status: "updated", jid: gJid, changes: updates });
-    },
+    }),
     schema: groupSettingsSchema,
     docstring: `Update group settings: announcement mode, locked mode, disappearing messages, member add mode, and join approval mode.
 
@@ -587,7 +599,7 @@ Examples:
       example: { jid: "120363000000000@g.us", source: "/path/to/pic.jpg" },
       returns: "{ status, jid }",
     },
-    handler: async ({ jid, source }, { sock }) => {
+    handler: requireApproval("default")(async ({ jid, source }, { sock }) => {
       const gJid = _ensureGroupJid(String(jid));
       const media = resolveMedia(String(source));
       let imgBuf: Buffer;
@@ -601,7 +613,7 @@ Examples:
       }
       await sock.updateProfilePicture(gJid, imgBuf);
       return okResult({ status: "updated", jid: gJid });
-    },
+    }),
     schema: groupPictureSchema,
     docstring: `Set or update the group profile picture.
 

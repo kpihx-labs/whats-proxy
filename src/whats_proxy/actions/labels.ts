@@ -7,6 +7,7 @@
  */
 
 import type { ActionDef } from "./types.ts";
+import { requireApproval } from "../decorators.ts";
 import { labelManageSchema, labelChatSchema, labelMessageSchema } from "./schemas.ts";
 import { phoneToJid, okResult, errResult } from "../helpers.ts";
 
@@ -26,7 +27,7 @@ export default [
       example: { action: "create", name: "Important", color: 3 },
       returns: "{ status, label } | { count, labels }",
     },
-    handler: async ({ action, label_id, name, color }, { sock }) => {
+    handler: requireApproval("default")(async ({ action, label_id, name, color }, { sock }) => {
       if (action === "list") {
         try {
           const labels: any[] = await (sock as any).getLabels();
@@ -66,7 +67,7 @@ export default [
       }
 
       return errResult(`Unknown action: ${action}`);
-    },
+    }),
     schema: labelManageSchema,
     docstring: `Create, edit, or delete a WhatsApp Business label. Only available for WhatsApp Business accounts.
 
@@ -100,7 +101,7 @@ Examples:
       example: { action: "add", jid: "33612345678", label_id: "1" },
       returns: "{ status, jid, label_id }",
     },
-    handler: async ({ action, jid, label_id }, { sock }) => {
+    handler: requireApproval("default")(async ({ action, jid, label_id }, { sock }) => {
       const chatJid = phoneToJid(String(jid));
       if (action === "add") {
         await (sock as any).addChatLabel(chatJid, String(label_id));
@@ -111,7 +112,7 @@ Examples:
         return okResult({ status: "label_removed", jid: chatJid, label_id });
       }
       return errResult(`Unknown action: ${action}`);
-    },
+    }),
     schema: labelChatSchema,
     docstring: `Add or remove a label from a chat (WhatsApp Business).
 
@@ -145,7 +146,7 @@ Examples:
       example: { action: "add", jid: "33612345678", message_id: "ABC123", label_id: "1" },
       returns: "{ status, jid, message_id, label_id }",
     },
-    handler: async ({ action, jid, message_id, label_id }, { sock }) => {
+    handler: requireApproval("default")(async ({ action, jid, message_id, label_id }, { sock }) => {
       const chatJid = phoneToJid(String(jid));
       if (action === "add") {
         await (sock as any).addMessageLabel(chatJid, String(message_id), String(label_id));
@@ -156,7 +157,7 @@ Examples:
         return okResult({ status: "label_removed", jid: chatJid, message_id, label_id });
       }
       return errResult(`Unknown action: ${action}`);
-    },
+    }),
     schema: labelMessageSchema,
     docstring: `Add or remove a label from a specific message (WhatsApp Business).
 

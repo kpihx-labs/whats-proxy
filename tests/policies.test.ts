@@ -51,7 +51,7 @@ describe("ACTION_POLICIES", () => {
 
   test("all message sends and irreversible deletes require approval", () => {
     for (const action of ["send-text", "send-image", "send-video", "send-audio", "send-document", "delete-message", "group-leave", "channel-delete", "media-cleanup"]) {
-      expect(policyFor(action)).toBeDefined();
+      expect(policyFor(action, REGISTRY[action])).toBeDefined();
     }
   });
 
@@ -67,14 +67,14 @@ describe("ACTION_POLICIES", () => {
 
   test("destructive policy declarations preflight and lock their real targets", () => {
     for (const action of ["delete-message", "group-leave", "channel-delete"]) {
-      const policy = policyFor(action)!;
+      const policy = policyFor(action, REGISTRY[action])!;
       expect(policy.preflight).toBeDefined();
       expect(policy.identityFields?.length).toBeGreaterThan(0);
     }
   });
 
   test("local destructive preflight refuses an unobserved message", async () => {
-    const policy = policyFor("delete-message")!;
+    const policy = policyFor("delete-message", REGISTRY["delete-message"])!;
     const result = await policy.preflight!({ jid: "33600000000", message_id: "missing" }, {
       store: new Store(),
     } as never);

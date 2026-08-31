@@ -7,6 +7,7 @@
  */
 
 import type { ActionDef } from "./types.ts";
+import { requireApproval } from "../decorators.ts";
 import { chatListSchema, chatReadSchema, chatManageSchema, chatStarSchema, chatDisappearingSchema } from "./schemas.ts";
 import { phoneToJid, isGroupJid, okResult, errResult, formatChat, formatMessage } from "../helpers.ts";
 import { fetchAdditionalHistory, type HistorySyncResult } from "./history.ts";
@@ -170,7 +171,7 @@ Examples:
       example: { jid: "33612345678", action: "archive" },
       returns: "{ status, jid }",
     },
-    handler: async ({ jid, action, mute_duration }, { sock, store }) => {
+    handler: requireApproval("default")(async ({ jid, action, mute_duration }, { sock, store }) => {
       const chatJid = phoneToJid(String(jid));
       const now = Date.now();
 
@@ -208,7 +209,7 @@ Examples:
 
       await sock.chatModify(mod as any, chatJid);
       return okResult({ status: action, jid: chatJid });
-    },
+    }),
     schema: chatManageSchema,
     docstring: `Perform a chat management action: archive, unarchive, pin, unpin, mute, unmute, mark_read, mark_unread, delete, or clear.
 
@@ -242,7 +243,7 @@ Examples:
       example: { jid: "33612345678", message_id: "ABC123", star: true },
       returns: "{ status, jid, message_id }",
     },
-    handler: async ({ jid, message_id, star, from_me }, { sock }) => {
+    handler: requireApproval("default")(async ({ jid, message_id, star, from_me }, { sock }) => {
       const chatJid = phoneToJid(String(jid));
       const shouldStar = star !== false;
       await sock.chatModify(
@@ -259,7 +260,7 @@ Examples:
         jid: chatJid,
         message_id,
       });
-    },
+    }),
     schema: chatStarSchema,
     docstring: `Star or unstar a message.
 
@@ -293,7 +294,7 @@ Examples:
       example: { jid: "33612345678", duration: 86400 },
       returns: "{ status, jid, disappearing }",
     },
-    handler: async ({ jid, duration }, { sock }) => {
+    handler: requireApproval("default")(async ({ jid, duration }, { sock }) => {
       const chatJid = phoneToJid(String(jid));
       await sock.sendMessage(chatJid, { disappearingMessagesInChat: Number(duration) } as any);
       const labels: Record<number, string> = { 0: "off", 86400: "24 hours", 604800: "7 days", 7776000: "90 days" };
@@ -302,7 +303,7 @@ Examples:
         jid: chatJid,
         disappearing: labels[Number(duration)] || `${duration}s`,
       });
-    },
+    }),
     schema: chatDisappearingSchema,
     docstring: `Set disappearing messages timer for a chat. Available durations: 0 (off), 86400 (24h), 604800 (7 days), 7776000 (90 days).
 

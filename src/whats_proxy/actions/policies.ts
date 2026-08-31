@@ -1,15 +1,15 @@
 /**
  * Declarative safety policy for registered WhatsApp actions.
  *
- * This is the single visible source of truth for review, preflight, and
- * verification requirements. The registry applies these policies exactly once
- * when it builds the executable action map, so a CLI path cannot bypass them.
+ * Two-tier resolution:
+ *   1. Conditional/complex policies live in ACTION_POLICIES (predicates,
+ *      conditional preflights, verify objects).
+ *   2. Simple "always-approve" policies are declared via `requireApproval`
+ *      decorators on the handler and derived at lookup time.
  *
- * Examples:
- *   policyFor("send-text", { jid: "33600000000", text: "Hello" })?.approval
- *   // => true
- *   policyFor("chat-list", {})
- *   // => undefined
+ * `policyFor()` checks the central map first, then falls back to decorator
+ * metadata. `protectAction()` wraps the handler with HITL once the policy
+ * is resolved.
  */
 
 import type { ActionContext, ActionDef, ActionHandler } from "./types.ts";
@@ -33,6 +33,10 @@ export interface ActionPolicy {
   verify?: Verify;
 }
 
+// ---------------------------------------------------------------------------
+// Predicates (shared by conditional policies)
+// ---------------------------------------------------------------------------
+
 const always = (): boolean => true;
 const actionIs = (...values: string[]): Predicate => (args) => values.includes(String(args.action));
 const hasDangerousChatOperation = actionIs("delete", "clear");
@@ -40,6 +44,10 @@ const hasDangerousInviteOperation = actionIs("revoke", "join");
 const hasDangerousContactOperation = actionIs("block", "unblock");
 const deletesWatchlist = actionIs("delete");
 const mutatesLocalCollection = (args: Record<string, unknown>): boolean => !["get", "list", "list_by_tag"].includes(String(args.action));
+
+// ---------------------------------------------------------------------------
+// Preflight guards (used by conditional policies)
+// ---------------------------------------------------------------------------
 
 const requireStoreMessage: Preflight = (args, context) =>
   context.store.getMessage(String(args.message_id))
@@ -83,6 +91,10 @@ const requireLabel: Preflight = async (args, context) => {
   }
 };
 
+// ---------------------------------------------------------------------------
+// Verify helpers (used by conditional policies)
+// ---------------------------------------------------------------------------
+
 const verifyWatchlist: Verify = (args, context) => {
   const name = String(args.name);
   const actual = context.store.getWatchlist(name) ?? null;
@@ -103,44 +115,99 @@ const verifyContactTags: Verify = (args, context) => {
   };
 };
 
-/** Policies for every action with a consequential side effect. */
+// ---------------------------------------------------------------------------
+// Conditional policies — central map (only cases that can't use decorators)
+// ---------------------------------------------------------------------------
+
+/** Conditional/complex policies that require predicates, conditional preflights, or verify objects. */
 export const ACTION_POLICIES: Record<string, ActionPolicy> = {
-  "send-text": { approval: always }, "send-image": { approval: always },
-  "send-video": { approval: always }, "send-audio": { approval: always },
-  "send-document": { approval: always }, "send-sticker": { approval: always },
-  "send-location": { approval: always }, "send-contact": { approval: always },
-  "send-reaction": { approval: always }, "send-poll": { approval: always },
-  "edit-message": { approval: always },
-  "delete-message": { approval: always, preflight: requireStoreMessage, identityFields: ["jid", "message_id"] },
-  "forward-message": { approval: always }, "batch-send-text": { approval: always },
-  "send-batch": { approval: always },
   "chat-manage": { approval: always, preflight: (args, context) => hasDangerousChatOperation(args) ? requireChat(args, context) : null, identityFields: ["jid"], lockIdentity: hasDangerousChatOperation },
-  "chat-star": { approval: always }, "chat-disappearing": { approval: always },
   "contact-block": { approval: hasDangerousContactOperation },
-  "group-create": { approval: always }, "group-subject": { approval: always },
-  "group-description": { approval: always }, "group-participants": { approval: always },
-  "group-leave": { approval: always, preflight: requireGroup, identityFields: ["jid"] },
   "group-invite": { approval: hasDangerousInviteOperation, preflight: (args, context) => String(args.action) === "revoke" ? requireGroup(args, context) : null, identityFields: ["jid"], lockIdentity: actionIs("revoke") },
-  "group-settings": { approval: always }, "group-picture": { approval: always },
-  "channel-create": { approval: always }, "channel-manage": { approval: always },
-  "channel-update": { approval: always },
-  "channel-delete": { approval: always, preflight: requireChannel, identityFields: ["jid"] },
   "label-manage": { approval: always, preflight: (args, context) => String(args.action) === "delete" ? requireLabel(args, context) : null, identityFields: ["label_id"], lockIdentity: actionIs("delete") },
-  "label-chat": { approval: always }, "label-message": { approval: always },
-  "profile-name": { approval: always }, "profile-about": { approval: always },
-  "profile-picture": { approval: always }, "profile-privacy": { approval: actionIs("set") },
+  "profile-privacy": { approval: actionIs("set") },
   "contact-tags": { approval: mutatesLocalCollection, verify: verifyContactTags },
   "watchlist": { approval: mutatesLocalCollection, preflight: (args, context) => deletesWatchlist(args) ? requireWatchlist(args, context) : null, identityFields: ["name"], lockIdentity: deletesWatchlist, verify: verifyWatchlist },
-  "presence": { approval: always }, "read-messages": { approval: always },
-  "media-download": { approval: always }, "media-cleanup": { approval: always },
 };
+
+// ---------------------------------------------------------------------------
+// Decorator-based policy derivation
+// ---------------------------------------------------------------------------
+
+/**
+ * Derive an ActionPolicy from handler decorator metadata.
+ *
+ * Looks for `__require_approval__`, `__preflight_check__`, and
+ * `__require_verification__` properties set by the decorators in
+ * `decorators.ts`.
+ *
+ * Throw-based preflight guards (from `requirePreflight`) are wrapped to
+ * return-string style for `protectAction` compatibility.
+ */
+function derivePolicyFromDecorators(def: ActionDef): ActionPolicy | undefined {
+  const handler = def.handler as any;
+  if (!handler.__require_approval__) return undefined;
+  const policy: ActionPolicy = { approval: true };
+  if (handler.__preflight_check__) {
+    const rawCheck = handler.__preflight_check__ as (args: Record<string, unknown>, ctx: Record<string, unknown>) => void | never;
+    // Wrap throw-based preflight to return-string style for protectAction
+    policy.preflight = async (args, context) => {
+      try {
+        await rawCheck(args, context as unknown as Record<string, unknown>);
+        return null;
+      } catch (e) {
+        return (e as Error).message;
+      }
+    };
+    policy.identityFields = handler.__preflight_identity_fields__;
+  }
+  if (handler.__require_verification__) {
+    policy.verify = handler.__verification_checks__;
+  }
+  return policy;
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Return the declared policy for one registered action.
+ *
+ * Resolution order:
+ *   1. Central map (conditional/complex policies)
+ *   2. Handler decorator metadata (simple always-approve)
+ *   3. undefined (read-only action)
+ *
+ * Args:
+ *   name: Kebab-case action name from the registry.
+ *   def: Optional ActionDef to inspect for decorator metadata.
+ *
+ * Returns:
+ *   The action policy, or undefined when the action is read-only.
+ *
+ * Examples:
+ *   policyFor("send-text", registry["send-text"])?.approval
+ *   // => true
+ *   policyFor("chat-manage", registry["chat-manage"])?.approval
+ *   // => [Function: always]
+ *   policyFor("chat-list")
+ *   // => undefined
+ */
+export function policyFor(name: string, def?: ActionDef): ActionPolicy | undefined {
+  // 1. Central map — conditional/complex cases take precedence
+  if (ACTION_POLICIES[name]) return ACTION_POLICIES[name];
+  // 2. Derive from handler decorators
+  if (def) return derivePolicyFromDecorators(def);
+  return undefined;
+}
 
 /**
  * Attach declared preflight, approval, and verification behavior to one action.
  *
  * Args:
  *   definition: Registry action definition to protect.
- *   policy: Optional policy from ACTION_POLICIES.
+ *   policy: Optional policy from policyFor().
  *
  * Returns:
  *   The same action definition with a non-bypassable protected handler.
@@ -154,9 +221,7 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
 export function protectAction(definition: ActionDef, policy: ActionPolicy | undefined): ActionDef {
   if (!policy) return definition;
   const original: ActionHandler = definition.handler;
-  return {
-    ...definition,
-    handler: async (args, context) => {
+  const protectedHandler: ActionHandler = async (args, context) => {
       // Zod payload validation (safety net — before HITL).
       if (definition.schema) {
         const result = definition.schema.safeParse(args);
@@ -199,25 +264,17 @@ export function protectAction(definition: ActionDef, policy: ActionPolicy | unde
         data.verification = policy.verify(approvedArgs, context);
       }
       return output;
-    },
   };
-}
-
-/**
- * Return the declared policy for one registered action.
- *
- * Args:
- *   name: Kebab-case action name from the registry.
- *
- * Returns:
- *   The action policy, or undefined when the action is read-only.
- *
- * Examples:
- *   policyFor("send-text")?.approval
- *   // => [Function: always]
- *   policyFor("chat-list")
- *   // => undefined
- */
-export function policyFor(name: string): ActionPolicy | undefined {
-  return ACTION_POLICIES[name];
+  // Copy decorator metadata from original handler to protected handler
+  const src = original as any;
+  if (src.__require_approval__) (protectedHandler as any).__require_approval__ = src.__require_approval__;
+  if (src.__review_mode__) (protectedHandler as any).__review_mode__ = src.__review_mode__;
+  if (src.__preflight_check__) (protectedHandler as any).__preflight_check__ = src.__preflight_check__;
+  if (src.__preflight_identity_fields__) (protectedHandler as any).__preflight_identity_fields__ = src.__preflight_identity_fields__;
+  if (src.__require_verification__) (protectedHandler as any).__require_verification__ = src.__require_verification__;
+  if (src.__verification_checks__) (protectedHandler as any).__verification_checks__ = src.__verification_checks__;
+  return {
+    ...definition,
+    handler: protectedHandler,
+  };
 }

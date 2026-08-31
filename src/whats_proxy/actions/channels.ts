@@ -7,6 +7,7 @@
  */
 
 import type { ActionDef } from "./types.ts";
+import { requireApproval, requirePreflight } from "../decorators.ts";
 import { channelCreateSchema, channelInfoSchema, channelManageSchema, channelUpdateSchema, channelDeleteSchema } from "./schemas.ts";
 import { newsletterJid, resolveMedia, okResult, errResult } from "../helpers.ts";
 
@@ -40,7 +41,7 @@ export default [
       example: { name: "My Channel", description: "Updates" },
       returns: "{ status, channel }",
     },
-    handler: async ({ name, description, picture }, { sock }) => {
+    handler: requireApproval("default")(async ({ name, description, picture }, { sock }) => {
       const opts: Record<string, unknown> = { name: String(name) };
       if (description) opts.description = description;
       if (picture) {
@@ -57,7 +58,7 @@ export default [
         status: "created",
         channel: _fmtChannel(result),
       });
-    },
+    }),
     schema: channelCreateSchema,
     docstring: `Create a new WhatsApp Channel (Newsletter). Returns the channel metadata including JID.
 
@@ -130,7 +131,7 @@ Examples:
       example: { jid: "120363000000000@newsletter", action: "follow" },
       returns: "{ status, jid }",
     },
-    handler: async ({ jid, action }, { sock }) => {
+    handler: requireApproval("default")(async ({ jid, action }, { sock }) => {
       const channelJid = newsletterJid(String(jid));
 
       if (action === "follow") {
@@ -150,7 +151,7 @@ Examples:
         return okResult({ status: "unmuted", jid: channelJid });
       }
       return errResult(`Unknown action: ${action}`);
-    },
+    }),
     schema: channelManageSchema,
     docstring: `Follow (subscribe), unfollow, mute, or unmute a WhatsApp Channel.
 
@@ -183,7 +184,7 @@ Examples:
       example: { jid: "120363000000000@newsletter", name: "New Name" },
       returns: "{ status, jid, updated }",
     },
-    handler: async ({ jid, name, description, picture }, { sock }) => {
+    handler: requireApproval("default")(async ({ jid, name, description, picture }, { sock }) => {
       const channelJid = newsletterJid(String(jid));
       const updates: string[] = [];
 
@@ -219,7 +220,7 @@ Examples:
         return errResult("No updates provided. Specify name, description, or picture.");
       }
       return okResult({ status: "updated", jid: channelJid, updated: updates });
-    },
+    }),
     schema: channelUpdateSchema,
     docstring: `Update a channel's name, description, or picture.
 
@@ -251,11 +252,22 @@ Examples:
       example: { jid: "120363000000000@newsletter" },
       returns: "{ status, jid }",
     },
-    handler: async ({ jid }, { sock }) => {
-      const channelJid = newsletterJid(String(jid));
-      await (sock as any).newsletterDelete(channelJid);
-      return okResult({ status: "deleted", jid: channelJid });
-    },
+    handler: requireApproval("default")(
+      requirePreflight(
+        async (args, ctx) => {
+          try {
+            await (ctx as any).sock.newsletterMetadata("jid", String(args.jid));
+          } catch {
+            throw new Error(`Channel ${String(args.jid)} could not be read before destructive review.`);
+          }
+        },
+        ["jid"],
+      )(async ({ jid }, { sock }) => {
+        const channelJid = newsletterJid(String(jid));
+        await (sock as any).newsletterDelete(channelJid);
+        return okResult({ status: "deleted", jid: channelJid });
+      }),
+    ),
     schema: channelDeleteSchema,
     docstring: `Delete a WhatsApp Channel that you own. This action is irreversible.
 

@@ -9,6 +9,7 @@
  */
 
 import type { ActionDef } from "./types.ts";
+import { requireApproval, requirePreflight } from "../decorators.ts";
 import { phoneToJid, resolveMedia, okResult, errResult } from "../helpers.ts";
 import {
   sendTextSchema, sendImageSchema, sendVideoSchema, sendAudioSchema,
@@ -139,14 +140,14 @@ export default [
       ],
       returns: "{ status, jid, message_id, timestamp }",
     },
-    handler: async ({ jid, text, quoted_id, mentions }, { sock, store }) => {
+    handler: requireApproval("default")(async ({ jid, text, quoted_id, mentions }, { sock, store }) => {
       const to = phoneToJid(String(jid));
       const content: Record<string, unknown> = { text: String(text) };
       const opts = _buildSendOpts({ quoted_id, mentions }, store);
       if (mentions) content.mentions = mentions;
       const result = await sock.sendMessage(to, content as any, opts as any);
       return _fmtSent(result, to);
-    },
+    }),
     schema: sendTextSchema,
     docstring: `Send a text message to a contact or group. Supports @mentions and replying to a specific message via quoted_id.
 
@@ -186,14 +187,14 @@ Examples:
       ],
       returns: "{ status, jid, message_id, timestamp }",
     },
-    handler: async ({ jid, source, caption, quoted_id }, { sock, store }) => {
+    handler: requireApproval("default")(async ({ jid, source, caption, quoted_id }, { sock, store }) => {
       const to = phoneToJid(String(jid));
       const content: Record<string, unknown> = { image: resolveMedia(String(source)) as any };
       if (caption) content.caption = caption;
       const opts = _buildSendOpts({ quoted_id }, store);
       const result = await sock.sendMessage(to, content as any, opts as any);
       return _fmtSent(result, to);
-    },
+    }),
     schema: sendImageSchema,
     docstring: `Send an image to a contact or group. Media source can be a URL, base64 data, or local file path.
 
@@ -235,7 +236,7 @@ Examples:
       ],
       returns: "{ status, jid, message_id, timestamp }",
     },
-    handler: async ({ jid, source, caption, gif_playback, ptv, quoted_id }, { sock, store }) => {
+    handler: requireApproval("default")(async ({ jid, source, caption, gif_playback, ptv, quoted_id }, { sock, store }) => {
       const to = phoneToJid(String(jid));
       const content: Record<string, unknown> = { video: resolveMedia(String(source)) as any };
       if (caption) content.caption = caption;
@@ -244,7 +245,7 @@ Examples:
       const opts = _buildSendOpts({ quoted_id }, store);
       const result = await sock.sendMessage(to, content as any, opts as any);
       return _fmtSent(result, to);
-    },
+    }),
     schema: sendVideoSchema,
     docstring: `Send a video to a contact or group. Set gif_playback=true for a GIF, or ptv=true for a video note (circle).
 
@@ -281,14 +282,14 @@ Examples:
       example: { jid: "33612345678", source: "/path/to/audio.mp3", ptt: false },
       returns: "{ status, jid, message_id, timestamp }",
     },
-    handler: async ({ jid, source, ptt, quoted_id }, { sock, store }) => {
+    handler: requireApproval("default")(async ({ jid, source, ptt, quoted_id }, { sock, store }) => {
       const to = phoneToJid(String(jid));
       const content: Record<string, unknown> = { audio: resolveMedia(String(source)) as any };
       if (ptt) content.ptt = true;
       const opts = _buildSendOpts({ quoted_id }, store);
       const result = await sock.sendMessage(to, content as any, opts as any);
       return _fmtSent(result, to);
-    },
+    }),
     schema: sendAudioSchema,
     docstring: `Send an audio file or voice note. Set ptt=true to send as a voice note (push-to-talk style).
 
@@ -330,7 +331,7 @@ Examples:
       ],
       returns: "{ status, jid, message_id, timestamp }",
     },
-    handler: async ({ jid, source, filename, mimetype, caption, quoted_id }, { sock, store }) => {
+    handler: requireApproval("default")(async ({ jid, source, filename, mimetype, caption, quoted_id }, { sock, store }) => {
       const to = phoneToJid(String(jid));
       const content: Record<string, unknown> = {
         document: resolveMedia(String(source)) as any,
@@ -341,7 +342,7 @@ Examples:
       const opts = _buildSendOpts({ quoted_id }, store);
       const result = await sock.sendMessage(to, content as any, opts as any);
       return _fmtSent(result, to);
-    },
+    }),
     schema: sendDocumentSchema,
     docstring: `Send a document/file to a contact or group. Supports any file type.
 
@@ -377,13 +378,13 @@ Examples:
       example: { jid: "33612345678", source: "/path/to/sticker.webp" },
       returns: "{ status, jid, message_id, timestamp }",
     },
-    handler: async ({ jid, source, quoted_id }, { sock, store }) => {
+    handler: requireApproval("default")(async ({ jid, source, quoted_id }, { sock, store }) => {
       const to = phoneToJid(String(jid));
       const content = { sticker: resolveMedia(String(source)) as any };
       const opts = _buildSendOpts({ quoted_id }, store);
       const result = await sock.sendMessage(to, content as any, opts as any);
       return _fmtSent(result, to);
-    },
+    }),
     schema: sendStickerSchema,
     docstring: `Send a sticker (WebP format recommended).
 
@@ -419,7 +420,7 @@ Examples:
       example: { jid: "33612345678", latitude: 48.8566, longitude: 2.3522, name: "Paris" },
       returns: "{ status, jid, message_id, timestamp }",
     },
-    handler: async ({ jid, latitude, longitude, name, address, quoted_id }, { sock, store }) => {
+    handler: requireApproval("default")(async ({ jid, latitude, longitude, name, address, quoted_id }, { sock, store }) => {
       const to = phoneToJid(String(jid));
       const content: Record<string, unknown> = {
         location: {
@@ -433,7 +434,7 @@ Examples:
       const opts = _buildSendOpts({ quoted_id }, store);
       const result = await sock.sendMessage(to, content as any, opts as any);
       return _fmtSent(result, to);
-    },
+    }),
     schema: sendLocationSchema,
     docstring: `Send a GPS location pin.
 
@@ -469,7 +470,7 @@ Examples:
       example: { jid: "33612345678", contacts: [{ name: "Alice", phone: "33600000000" }] },
       returns: "{ status, jid, message_id, timestamp }",
     },
-    handler: async ({ jid, contacts, quoted_id }, { sock, store }) => {
+    handler: requireApproval("default")(async ({ jid, contacts, quoted_id }, { sock, store }) => {
       const to = phoneToJid(String(jid));
       const list = (contacts as { name: string; phone: string }[]) || [];
       const vCards = list.map((c) => {
@@ -491,7 +492,7 @@ Examples:
       const opts = _buildSendOpts({ quoted_id }, store);
       const result = await sock.sendMessage(to, content as any, opts as any);
       return _fmtSent(result, to);
-    },
+    }),
     schema: sendContactSchema,
     docstring: `Send one or more contact cards (vCards).
 
@@ -525,7 +526,7 @@ Examples:
       example: { jid: "33612345678", message_id: "ABC123", emoji: "👍" },
       returns: "{ status, jid, message_id, emoji }",
     },
-    handler: async ({ jid, message_id, emoji, from_me }, { sock }) => {
+    handler: requireApproval("default")(async ({ jid, message_id, emoji, from_me }, { sock }) => {
       const to = phoneToJid(String(jid));
       const content = {
         react: {
@@ -544,7 +545,7 @@ Examples:
         message_id,
         emoji: emoji || null,
       });
-    },
+    }),
     schema: sendReactionSchema,
     docstring: `React to a message with an emoji. Send an empty emoji string to remove the reaction.
 
@@ -579,7 +580,7 @@ Examples:
       example: { jid: "33612345678", question: "Lunch?", options: ["Pizza", "Sushi"] },
       returns: "{ status, jid, message_id, timestamp }",
     },
-    handler: async ({ jid, question, options, selectable_count }, { sock }) => {
+    handler: requireApproval("default")(async ({ jid, question, options, selectable_count }, { sock }) => {
       const opts = Array.isArray(options) ? options.map(String) : [];
       if (opts.length < 2) {
         return errResult("A poll requires at least 2 options.");
@@ -594,7 +595,7 @@ Examples:
       };
       const result = await sock.sendMessage(to, content as any);
       return _fmtSent(result, to);
-    },
+    }),
     schema: sendPollSchema,
     docstring: `Create a poll in a chat. By default single-select; set selectable_count > 1 for multi-select.
 
@@ -628,7 +629,7 @@ Examples:
       example: { jid: "33612345678", message_id: "ABC123", new_text: "Updated text" },
       returns: "{ status, jid, message_id }",
     },
-    handler: async ({ jid, message_id, new_text }, { sock }) => {
+    handler: requireApproval("default")(async ({ jid, message_id, new_text }, { sock }) => {
       const to = phoneToJid(String(jid));
       const content = {
         text: String(new_text),
@@ -636,7 +637,7 @@ Examples:
       };
       await sock.sendMessage(to, content as any);
       return okResult({ status: "edited", jid: to, message_id });
-    },
+    }),
     schema: editMessageSchema,
     docstring: `Edit a previously sent message (text only). You can only edit messages you sent.
 
@@ -670,17 +671,27 @@ Examples:
       example: { jid: "33612345678", message_id: "ABC123", from_me: true },
       returns: "{ status, jid, message_id }",
     },
-    handler: async ({ jid, message_id, from_me, participant }, { sock }) => {
-      const to = phoneToJid(String(jid));
-      const key: Record<string, unknown> = {
-        remoteJid: to,
-        id: String(message_id),
-        fromMe: from_me ?? true,
-      };
-      if (participant) key.participant = participant;
-      await sock.sendMessage(to, { delete: key } as any);
-      return okResult({ status: "deleted", jid: to, message_id });
-    },
+    handler: requireApproval("default")(
+      requirePreflight(
+        (args, ctx) => {
+          const store = (ctx as any).store;
+          if (!store?.getMessage(String(args.message_id))) {
+            throw new Error(`Message ${String(args.message_id)} is not present in the local store; refusing a destructive review without a preflighted target.`);
+          }
+        },
+        ["jid", "message_id"],
+      )(async ({ jid, message_id, from_me, participant }, { sock }) => {
+        const to = phoneToJid(String(jid));
+        const key: Record<string, unknown> = {
+          remoteJid: to,
+          id: String(message_id),
+          fromMe: from_me ?? true,
+        };
+        if (participant) key.participant = participant;
+        await sock.sendMessage(to, { delete: key } as any);
+        return okResult({ status: "deleted", jid: to, message_id });
+      }),
+    ),
     schema: deleteMessageSchema,
     docstring: `Delete (revoke) a message. You can delete your own messages for everyone, or in groups admins can delete anyone's messages.
 
@@ -713,7 +724,7 @@ Examples:
       example: { to_jid: "33612345678", message_id: "ABC123" },
       returns: "{ status, jid, message_id, timestamp }",
     },
-    handler: async ({ to_jid, message_id }, { sock, store }) => {
+    handler: requireApproval("default")(async ({ to_jid, message_id }, { sock, store }) => {
       const msg = store.getMessage(String(message_id));
       if (!msg) {
         return errResult(`Message ${message_id} not found in store. It must be a recent message.`);
@@ -721,7 +732,7 @@ Examples:
       const to = phoneToJid(String(to_jid));
       const result = await sock.sendMessage(to, { forward: msg, force: true } as any);
       return _fmtSent(result, to);
-    },
+    }),
     schema: forwardMessageSchema,
     docstring: `Forward an existing message to another chat.
 
@@ -758,7 +769,7 @@ Examples:
       ],
       returns: "{ total, sent, failed, results }",
     },
-    handler: async ({ jids, text, delay_ms }, { sock }) => {
+    handler: requireApproval("default")(async ({ jids, text, delay_ms }, { sock }) => {
       const list = Array.isArray(jids) ? jids.map(String) : [];
       if (list.length === 0) {
         return errResult("At least one recipient is required.");
@@ -781,7 +792,7 @@ Examples:
       const sent = results.filter((r) => r.status === "sent").length;
       const failed = results.filter((r) => r.status === "failed").length;
       return okResult({ total: list.length, sent, failed, results });
-    },
+    }),
     schema: batchSendTextSchema,
     docstring: `Send the same text message to multiple recipients. Returns a summary of successes and failures.
 
@@ -822,7 +833,7 @@ Examples:
       ],
       returns: "{ total, sent, failed, results }",
     },
-    handler: async ({ to, parts, quoted_id, delay_ms }, { sock, store }) => {
+    handler: requireApproval("default")(async ({ to, parts, quoted_id, delay_ms }, { sock, store }) => {
       // Normalize `to` to always be an array.
       const recipients: string[] = Array.isArray(to)
         ? to.map(String)
@@ -887,7 +898,7 @@ Examples:
         }
       }
       return okResult({ total: totalSends, sent, failed, results });
-    },
+    }),
     schema: sendBatchSchema,
     docstring: `Send multiple content types to one or more recipients in a single call. Each part becomes one WhatsApp message; every part is sent to every recipient.
 

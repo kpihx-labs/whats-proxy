@@ -12,6 +12,7 @@ import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync, unlinkSync
 import { join, extname } from "node:path";
 import { downloadMediaMessage } from "@whiskeysockets/baileys";
 import type { ActionDef, ActionContext } from "./types.ts";
+import { requireApproval } from "../decorators.ts";
 import { phoneToJid, okResult, errResult } from "../helpers.ts";
 import { VERSION } from "../version.ts";
 import {
@@ -141,7 +142,7 @@ Examples:
       example: { type: "composing", jid: "33612345678" },
       returns: "{ status, jid }",
     },
-    handler: async ({ type, jid }, { sock }) => {
+    handler: requireApproval("default")(async ({ type, jid }, { sock }) => {
       if (type === "available" || type === "unavailable") {
         await sock.sendPresenceUpdate(type as any);
         return okResult({ status: type });
@@ -152,7 +153,7 @@ Examples:
       const chatJid = phoneToJid(String(jid));
       await sock.sendPresenceUpdate(type as any, chatJid);
       return okResult({ status: type, jid: chatJid });
-    },
+    }),
     schema: presenceSchema,
     docstring: `Send a presence update or typing indicator.
 
@@ -185,7 +186,7 @@ Examples:
       example: { jid: "33612345678", message_ids: ["ABC123"] },
       returns: "{ status, jid, count }",
     },
-    handler: async ({ jid, message_ids, participant }, { sock }) => {
+    handler: requireApproval("default")(async ({ jid, message_ids, participant }, { sock }) => {
       const chatJid = phoneToJid(String(jid));
       const ids = Array.isArray(message_ids) ? message_ids.map(String) : [];
       const keys = ids.map((id) => ({
@@ -199,7 +200,7 @@ Examples:
         jid: chatJid,
         count: ids.length,
       });
-    },
+    }),
     schema: readMessagesSchema,
     docstring: `Mark specific messages as read (send read receipts).
 
@@ -294,7 +295,7 @@ Examples:
       example: { message_id: "ABC123" },
       returns: "{ message_id, media_type, mimetype, filename, file_length, saved_to }",
     },
-    handler: async ({ message_id }, { sock, store }) => {
+    handler: requireApproval("default")(async ({ message_id }, { sock, store }) => {
       const msg = store.getMessage(String(message_id));
       if (!msg) {
         return errResult(`Message ${message_id} not found in store.`);
@@ -363,7 +364,7 @@ Examples:
         file_length: buffer.length,
         saved_to: filePath,
       });
-    },
+    }),
     schema: mediaDownloadSchema,
     docstring: `Download media (image, video, audio, document, sticker) from a message.
 
@@ -390,7 +391,7 @@ Examples:
       example: {},
       returns: "{ status, files_deleted, bytes_freed, cache_dir }",
     },
-    handler: async () => {
+    handler: requireApproval("default")(async () => {
       const cacheDir = join(homedir(), ".cache", "whats_media");
       if (!existsSync(cacheDir)) {
         return okResult({ status: "skipped", message: "Cache directory does not exist." });
@@ -415,7 +416,7 @@ Examples:
         bytes_freed: bytesFreed,
         cache_dir: cacheDir,
       });
-    },
+    }),
     schema: mediaCleanupSchema,
     docstring: `Clear the local WhatsApp media cache directory.
 

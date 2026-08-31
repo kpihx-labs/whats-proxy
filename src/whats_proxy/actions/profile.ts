@@ -7,6 +7,7 @@
  */
 
 import type { ActionDef } from "./types.ts";
+import { requireApproval } from "../decorators.ts";
 import { profileNameSchema, profileAboutSchema, profilePictureSchema, profilePrivacySchema } from "./schemas.ts";
 import { resolveMedia, okResult, errResult } from "../helpers.ts";
 
@@ -22,14 +23,14 @@ export default [
       example: { name: "Ivann" },
       returns: "{ status, name }",
     },
-    handler: async ({ name }, { sock }) => {
+    handler: requireApproval("default")(async ({ name }, { sock }) => {
       const value = String(name || "");
       if (!value || value.length > 25) {
         return errResult("Name must be between 1 and 25 characters.");
       }
       await sock.updateProfileName(value);
       return okResult({ status: "updated", name: value });
-    },
+    }),
     schema: profileNameSchema,
     docstring: `Change your WhatsApp display name.
 
@@ -58,10 +59,10 @@ Examples:
       example: { text: "Building things." },
       returns: "{ status, about }",
     },
-    handler: async ({ text }, { sock }) => {
+    handler: requireApproval("default")(async ({ text }, { sock }) => {
       await sock.updateProfileStatus(String(text || ""), "", 0);
       return okResult({ status: "updated", about: text });
-    },
+    }),
     schema: profileAboutSchema,
     docstring: `Change your WhatsApp 'About' status text.
 
@@ -90,7 +91,7 @@ Examples:
       example: { source: "/path/to/pic.jpg" },
       returns: "{ status }",
     },
-    handler: async ({ source }, { sock }) => {
+    handler: requireApproval("default")(async ({ source }, { sock }) => {
       if (source === "remove") {
         await sock.removeProfilePicture((sock as any).user?.id);
         return okResult({ status: "removed" });
@@ -107,7 +108,7 @@ Examples:
       }
       await sock.updateProfilePicture((sock as any).user?.id, imgBuf);
       return okResult({ status: "updated" });
-    },
+    }),
     schema: profilePictureSchema,
     docstring: `Change your WhatsApp profile picture.
 
