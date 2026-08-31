@@ -322,6 +322,7 @@ async function cmdAdmin(argv: string[]): Promise<number> {
     process.stdout.write(
       "Usage:\n" +
       "  whats-proxy admin doctor                               Fix permissions + create missing dirs\n" +
+      "  whats-proxy admin backup [phone]                       Atomic backup via VACUUM\n" +
       "  whats-proxy admin setup                                Install service + config\n" +
       "  whats-proxy admin status                               Full installation status\n" +
       "  whats-proxy admin purge                                Remove everything\n" +
@@ -420,6 +421,16 @@ async function cmdAdmin(argv: string[]): Promise<number> {
   if (sub === "doctor") {
     const { adminDoctor } = await import("./admin/doctor.ts");
     const result = await adminDoctor();
+    print_json(result);
+    return result.meta.status === "error" ? 1 : 0;
+  }
+
+  // ── admin backup ─────────────────────────────────────────────────────────
+
+  if (sub === "backup") {
+    const phone = argv[0] ? canonicalPhone(argv[0]) : undefined;
+    const { adminBackup } = await import("./admin/backup.ts");
+    const result = await adminBackup({ phone });
     print_json(result);
     return result.meta.status === "error" ? 1 : 0;
   }

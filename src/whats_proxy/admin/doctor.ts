@@ -149,12 +149,58 @@ export async function adminDoctor(): Promise<Output> {
       checks.push({ path: `~/.local/share/whats-proxy/${phone}/state/creds.json`, status: "ok" });
     }
 
-    // 4d. <phone>/store.db (warn if missing — will be created on first dispatch)
+    // 4d. <phone>/store.db — integrity + stats
     const storePath = join(phoneDir, "store.db");
     if (!existsSync(storePath)) {
       checks.push({ path: `~/.local/share/whats-proxy/${phone}/store.db`, status: "warn", detail: "will be created on first dispatch" });
     } else {
-      checks.push({ path: `~/.local/share/whats-proxy/${phone}/store.db`, status: "ok" });
+      try {
+        // Lazy-load better-sqlite3 (only when checking DB)
+        let SqliteDb: any;
+        try { SqliteDb = (await import("better-sqlite3")).default; } catch { SqliteDb = (await import("bun:sqlite")).Database; }
+        const db = new SqliteDb(storePath, { readonly: true });
+
+        // Integrity check
+        const integrity = db.pragma("integrity_check", { simple: true }) as string;
+
+        // Size
+        const pageCount = db.pragma("page_count", { simple: true }) as number;
+        const pageSize = db.pragma("page_size", { simple: true }) as number;
+        const sizeKB = Math.round((pageCount * pageSize) / 1024);
+
+        // Row counts — works on both better-sqlite3 (.prepare) and bun:sqlite (.query)
+        const rowCounts: Record<string, number> = {};
+        for (const tbl of ["chats", "contacts", "messages", "group_meta", "lid_mappings"]) {
+          try {
+            let count: number;
+            if (typeof db.query === "function") {
+              // bun:sqlite
+              count = (db.query(`SELECT COUNT(*) as c FROM ${tbl}`).get() as { c: number }).c;
+            } else {
+              // better-sqlite3
+              count = (db.prepare(`SELECT COUNT(*) as c FROM ${tbl}`).get() as { c: number }).c;
+            }
+            rowCounts[tbl] = count;
+          } catch {
+            rowCounts[tbl] = 0;
+          }
+        }
+
+        db.close();
+
+        if (integrity === "ok") {
+          checks.push({
+            path: `~/.local/share/whats-proxy/${phone}/store.db`,
+            status: "ok",
+            detail: `${sizeKB}KB — chats:${rowCounts.chats} contacts:${rowCounts.contacts} messages:${rowCounts.messages} groups:${rowCounts.group_meta} lids:${rowCounts.lid_mappings}`,
+          });
+        } else {
+          checks.push({ path: `~/.local/share/whats-proxy/${phone}/store.db`, status: "error", detail: `INTEGRITY FAIL: ${integrity}` });
+          warnings.push(`DB integrity FAILED for ${phone}! Run: whats-proxy admin doctor --repair`);
+        }
+      } catch (err) {
+        checks.push({ path: `~/.local/share/whats-proxy/${phone}/store.db`, status: "warn", detail: `could not check: ${(err as Error).message}` });
+      }
     }
   }
 
