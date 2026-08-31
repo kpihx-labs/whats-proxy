@@ -1,6 +1,6 @@
 # whats-proxy — Architecture Contract
 
-> **Status:** 🟢 **IMPLEMENTED — 67 actions.** This document is the authoritative architecture
+> **Status:** 🟢 **IMPLEMENTED — 65 actions.** This document is the authoritative architecture
 > contract for `whats-proxy`, the non-MCP WhatsApp CLI built on the ADN of `tick-proxy`
 > (`$HOME/KpihX-Labs/tick_proxy/`) with Baileys as the WhatsApp engine.
 
@@ -117,7 +117,7 @@ When `-o` is given, the file path is printed instead of the autosave path (both 
 
 ---
 
-## Actions — FLAT, ONE level after `do` (67 actions)
+## Actions — FLAT, ONE level after `do` (65 actions)
 
 Naming convention (inherited from `tick-proxy` / `tg-proxy`): **`<domain>-<verb>`, kebab-case,
 domain FIRST.** All `whats-mcp` `verb_noun` names are flipped.
@@ -466,7 +466,7 @@ operational needs:
 
 ## Zod Validation
 
-Every action has a Zod schema in `actions/schemas.ts` (67 schemas). Validation runs at two points:
+Every action has a Zod schema in `actions/schemas.ts` (65 schemas). Validation runs at two points:
 
 | Gate | Location | Purpose |
 |------|----------|---------|
@@ -675,7 +675,7 @@ rename (`send_message` → `send-text`) plus schema migration (JS object → Zod
 | `make smoke` | 50 end-to-end checks: CLI edge paths, spawn guard, hermetic sweep, no real WhatsApp | local |
 | `make stress` | 8 concurrent daemon spawns → exactly 1 winner (O_EXCL proof) | local |
 | `make runtime-smoke` | Verify `bin/whats-proxy.mjs` runs under Node.js (not Bun) | local |
-| Registry integrity | 67 actions, zero duplicates, every action has a Zod schema | `bun test` |
+| Registry integrity | 65 actions, zero duplicates, every action has a Zod schema | `bun test` |
 | Policy integrity | Every action in `policies.ts` maps to a registered action | `bun test` |
 | HITL completeness | Every send/mutation action has HITL policy | `bun test` |
 
@@ -695,7 +695,7 @@ WhatsApp device. Authentication failures are fail-closed; never invent a browser
 | **D5** | No verification decorator | WhatsApp fails loud (unlike TickTick silent-drop) | add unnecessary verification overhead |
 | **D6** | Pairing lifecycle | dedicated section documenting 515 reconnect gotcha | pairing bugs are the #1 support issue |
 | **D7** | Env prefix | **`WHATS_*`** (harmonizes with `TICK_*` and `TG_*`) | any other prefix |
-| **D8** | HITL scope | 28 always + 10 conditional = 38 of 67 actions | narrower policy would miss send safety |
+| **D8** | HITL scope | 28 always + 10 conditional = 38 of 65 actions | narrower policy would miss send safety |
 
 ---
 

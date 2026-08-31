@@ -444,24 +444,11 @@ export const readMessagesSchema = z.object({
   participant: z.string().optional(),
 });
 
-export const searchMessagesSchema = z.object({
-  query: z.string(),
-  jid: z.string().optional(),
-  jids: z.array(z.string()).optional(),
-  limit: z.number().or(z.string()).optional(),
-  since: z.number().or(z.string()).optional(),
-  until: z.number().or(z.string()).optional(),
-  include_types: z.array(z.string()).optional(),
-  exclude_types: z.array(z.string()).optional(),
-});
-
 export const mediaDownloadSchema = z.object({
   message_id: z.string(),
 });
 
 export const mediaCleanupSchema = z.object({});
-
-export const syncChatSchema = z.object({});
 
 // ── Schema registry (action name → schema) — used by audit tests ───────────
 
@@ -542,8 +529,6 @@ export const SCHEMAS: Record<string, z.ZodObject<Record<string, z.ZodTypeAny>>> 
   "guide": guideSchema,
   "presence": presenceSchema,
   "read-messages": readMessagesSchema,
-  "search-messages": searchMessagesSchema,
   "media-download": mediaDownloadSchema,
   "media-cleanup": mediaCleanupSchema,
-  "sync-chat": syncChatSchema,
 };

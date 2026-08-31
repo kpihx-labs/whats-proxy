@@ -1,8 +1,8 @@
 /**
- * whats-proxy — Utility actions (8).
+ * whats-proxy — Utility actions (6).
  *
- * connection-status, guide, presence, read-messages, search-messages,
- * media-download, media-cleanup, sync-chat.
+ * connection-status, guide, presence, read-messages,
+ * media-download, media-cleanup.
  *
  * Faithful port of whats-mcp `utils.js`.
  */
@@ -15,11 +15,9 @@ import type { ActionDef, ActionContext } from "./types.ts";
 import { requireApproval } from "../decorators.ts";
 import { phoneToJid, okResult, errResult } from "../helpers.ts";
 import { VERSION } from "../version.ts";
-import { rpcCall } from "../client.ts";
 import {
   connectionStatusSchema, guideSchema, presenceSchema, readMessagesSchema,
-  searchMessagesSchema, mediaDownloadSchema, mediaCleanupSchema,
-  syncChatSchema,
+  mediaDownloadSchema, mediaCleanupSchema,
 } from "./schemas.ts";
 
 export default [
@@ -224,69 +222,6 @@ Examples:
   },
   {
     meta: {
-      action: "search-messages",
-      category: "utilities",
-      description:
-        "Search messages in the local store by text content. Filter by one or multiple chat JIDs, time range, and message types. Only searches messages already in memory.",
-      arguments: [
-        { name: "query", description: "Text to search for (case-insensitive).", required: true },
-        { name: "jid", description: "Optional: limit search to this chat JID or phone number.", required: false },
-        { name: "jids", description: "Optional: search across multiple chat JIDs. Takes precedence over jid.", required: false },
-        { name: "limit", description: "Max results (default 50, max 200).", required: false },
-        { name: "since", description: "Unix timestamp: only include messages sent at or after this time.", required: false },
-        { name: "until", description: "Unix timestamp: only include messages sent at or before this time.", required: false },
-        { name: "include_types", description: "If set, only include messages of these types.", required: false },
-        { name: "exclude_types", description: "Exclude messages of these types.", required: false },
-      ],
-      example: { query: "stage" },
-      returns: "{ query, count, messages }",
-    },
-    handler: async ({ query, jid, jids, limit, since, until, include_types, exclude_types }, { store }) => {
-      let chatJids: string | string[] | null = null;
-      if (Array.isArray(jids) && jids.length > 0) {
-        chatJids = jids.map((j) => phoneToJid(String(j)));
-      } else if (jid) {
-        chatJids = phoneToJid(String(jid));
-      }
-      const lim = Math.min(Number(limit) || 50, 200);
-      const results = store.searchMessages(String(query), chatJids, lim, {
-        since: since !== undefined ? Number(since) : undefined,
-        until: until !== undefined ? Number(until) : undefined,
-        types: Array.isArray(include_types) ? include_types.map(String) : undefined,
-        excludeTypes: Array.isArray(exclude_types) ? exclude_types.map(String) : undefined,
-      });
-      return okResult({
-        query,
-        count: results.length,
-        messages: results,
-      });
-    },
-    schema: searchMessagesSchema,
-    docstring: `Search messages in the local store by text content.
-
-Parameters:
-    - query (required): Text to search for (case-insensitive).
-    - jid (optional): Limit search to this chat JID or phone number.
-    - jids (optional): Search across multiple chat JIDs. Takes precedence over jid.
-    - limit (optional): Max results (default 50, max 200).
-    - since (optional): Unix timestamp: only include messages at or after this time.
-    - until (optional): Unix timestamp: only include messages at or before this time.
-    - include_types (optional): Only include messages of these types.
-    - exclude_types (optional): Exclude messages of these types.
-
-Examples:
-    - Global text search:
-        \`whats-proxy do search-messages '{"query":"stage"}'\`
-        → {"query":"stage","count":8,"messages":[{"id":"MSG001","jid":"33612345678","text":"Stage chez DxO confirmé","timestamp":1756614000,"from_me":false}]}
-    - Search in one chat:
-        \`whats-proxy do search-messages '{"query":"meeting","jid":"33612345678","limit":10}'\`
-        → {"query":"meeting","count":5,"messages":[{"id":"MSG002","jid":"33612345678","text":"Meeting scheduled for Friday","timestamp":1756610000,"from_me":true}]}
-    - Search with time range:
-        \`whats-proxy do search-messages '{"query":"deadline","since":1756600000,"until":1756620000}'\`
-        → {"query":"deadline","count":3,"messages":[{"id":"MSG003","jid":"120363000000000@g.us","text":"Deadline moved to next week","timestamp":1756615000,"from_me":false}]}`,
-  },
-  {
-    meta: {
       action: "media-download",
       category: "utilities",
       description:
@@ -435,63 +370,5 @@ Examples:
     - Cache directory doesn't exist:
         \`whats-proxy do media-cleanup '{}'\`
         → {"status":"skipped","message":"Cache directory does not exist."}`,
-  },
-
-  // ── sync-chat: force resync store ────────────────────────────────────────
-
-  {
-    meta: {
-      action: "sync-chat",
-      category: "utilities",
-      description: "Force a WhatsApp state resync — re-fetches chats, contacts, groups, and recent messages. Use when the store is stale or after a long idle period.",
-      arguments: [],
-      example: {},
-      examples: [
-        { description: "Full resync", payload: {} },
-        { description: "After daemon restart", payload: {} },
-        { description: "Check store freshness after long idle", payload: {} },
-      ],
-      returns: "{ status, groups_preloaded, stats }",
-    },
-    handler: async (_args, { sock, store }) => {
-      if (!sock) return errResult("Daemon not connected to WhatsApp.");
-      try {
-        const { ALL_WA_PATCH_NAMES } = await import("@whiskeysockets/baileys");
-        await sock.resyncAppState(ALL_WA_PATCH_NAMES, true);
-        const groups = await sock.groupFetchAllParticipating();
-        let groupCount = 0;
-        for (const meta of Object.values(groups || {})) {
-          const m = meta as unknown as Record<string, unknown>;
-          if (m?.id) { store.setGroupMeta(m.id as string, m); groupCount++; }
-        }
-        const stats = store.stats();
-        return okResult({
-          status: "resynced",
-          groups_preloaded: groupCount,
-          stats,
-        });
-      } catch (err) {
-        return errResult(`Sync failed: ${(err as Error).message}`);
-      }
-    },
-    schema: syncChatSchema,
-    docstring: `Force a WhatsApp state resync — re-fetches chats, contacts, groups, and recent messages.
-
-Use when the store is stale, after a long idle period, or when new data is expected
-but not appearing. The daemon calls resyncAppState() and preloads all group metadata.
-
-Parameters:
-    (none)
-
-Examples:
-    - Full resync after a daemon restart:
-        \`whats-proxy do sync-chat '{}'\`
-        → {"meta":{"status":"ok","comment":"","edited":false},"data":{"status":"resynced","groups_preloaded":86,"stats":{"chats":353,"contacts":3949,"messages":920,"groups":86}}}
-    - Force refresh when store seems stale:
-        \`whats-proxy do sync-chat '{}'\`
-        → {"meta":{"status":"ok","comment":"","edited":false},"data":{"status":"resynced","groups_preloaded":86,"stats":{"chats":353,"contacts":3949,"messages":1050,"groups":86}}}
-    - After adding new groups or contacts:
-        \`whats-proxy do sync-chat '{}'\`
-        → {"meta":{"status":"ok","comment":"","edited":false},"data":{"status":"resynced","groups_preloaded":87,"stats":{"chats":354,"contacts":3950,"messages":921,"groups":87}}}`,
   },
 ] satisfies ActionDef[];

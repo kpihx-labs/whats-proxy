@@ -2,17 +2,17 @@
 
 ## Project
 
-Non-MCP CLI proxy for WhatsApp. Full `whats-mcp` catalog (67 actions) as flat JSON-RPC actions
+Non-MCP CLI proxy for WhatsApp. Full `whats-mcp` catalog (65 actions) as flat JSON-RPC actions
 over per-account background daemons. `../tick_proxy/` is the sole proxy standard; Bun/Baileys
 preserve only the persistent WhatsApp session and Store. **Read `CONTRACT.md` before touching code.**
 
-> **Status:** 🟢 **IMPLEMENTED — 67 actions, multi-account, pairing working live.** `CONTRACT.md`
+> **Status:** 🟢 **IMPLEMENTED — 65 actions, multi-account, pairing working live.** `CONTRACT.md`
 > is the architecture contract. Version 0.6.0.
 
 ## Overview
 
 ```bash
-whats-proxy do <action> [payload|file] [-a phone] [-o path] [-f json|table]   # 67 actions
+whats-proxy do <action> [payload|file] [-a phone] [-o path] [-f json|table]   # 65 actions
 whats-proxy admin auth login|status|logout|use                                # auth lifecycle
 whats-proxy admin daemon status|stop|restart|logs|refresh                     # daemon lifecycle
 ```
@@ -31,7 +31,7 @@ whats-proxy admin daemon status|stop|restart|logs|refresh                     # 
 - **Isolated state for tests:** `WHATS_PROXY_STATE_DIR` + `WHATS_PROXY_NO_BROWSER` suppress
   real WhatsApp and browser interaction during `make check`.
 - **Actions must be registered** in `actions/registry.ts` (duplicate detection on boot; registry
-  test asserts 67; audit test asserts 67 schemas).
+  test asserts 65; audit test asserts 65 schemas).
 - **Safety is declarative:** `actions/policies.ts` is the only source for approval, preflight
   locks, and verification. Never call `requestApproval()` inside a domain action.
 - **Zod validation:** Every action has a Zod schema in `actions/schemas.ts`. Validation runs
@@ -103,10 +103,9 @@ The in-memory store captures messages via Baileys events. Sync behavior:
 | `messaging-history.set` | Initial connect + resync | Batch of recent messages per chat (~100/chat) |
 | `messages.upsert` | Real-time (daemon running) | Every new message as it arrives |
 | `admin service refresh` | On demand (CLI) | Force resync: chats, contacts, groups + messages |
-| `sync-chat` action | On demand (agent) | Same as refresh — callable from any `do` workflow |
 
 The store does NOT hold full WhatsApp history — WhatsApp limits initial sync to ~100 messages per chat.
-To accumulate more: keep the daemon running (real-time `messages.upsert`) and periodically `sync-chat`.
+To accumulate more: keep the daemon running (real-time `messages.upsert`) and periodically `admin service refresh`.
 
 ## Pairing lifecycle
 
@@ -118,7 +117,7 @@ admin auth login [--code] [--phone N] → wipe stale auth → QR/code displayed
 
 ## Porting status
 
-65/65 `whats-mcp` tools ported + 2 new (`send-batch`, `sync-chat`) = **67 actions** total.
+65/65 `whats-mcp` tools ported + 1 new (`send-batch`) = **65 actions** total.
 
 ## Backward compatibility
 
