@@ -1,13 +1,25 @@
 /**
- * whats-proxy — Configuration loader.
+ * whats-proxy — Configuration loader + multi-account management.
  *
  * All defaults live here as a single source of truth. No .env file,
- * no config.json layer. Auth artifacts are session files under state/.
+ * no config.json layer. Auth artifacts are per-account session files
+ * under ~/.config/whats-proxy/<phone>/.
+ *
+ * Multi-account layout:
+ *   ~/.config/whats-proxy/
+ *   ├── accounts.json          # account registry + default
+ *   ├── <phone>/               # one folder per WhatsApp account
+ *   │   ├── state/             # Baileys auth
+ *   │   ├── store.json         # messages, contacts, chats
+ *   │   ├── daemon.sock        # daemon socket
+ *   │   ├── daemon.lock        # O_EXCL lock
+ *   │   └── daemon.pid         # daemon PID
+ *   └── state/                 # LEGACY flat layout (auto-migrated)
  */
 
 import { VERSION } from "./version.ts";
 
-import { mkdirSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -149,6 +161,20 @@ export function ensureDirs(cfg: AppConfig) {
   return p;
 }
 
+/** Build paths for a specific account: <base>/<phone>/... */
+export function accountStatePaths(phone: string, cfg?: AppConfig) {
+  const dir = accountDir(phone, cfg);
+  return {
+    dir,
+    auth: join(dir, "state"),
+    storeFile: join(dir, "store.json"),
+    pidFile: join(dir, "daemon.pid"),
+    sockFile: join(dir, "daemon.sock"),
+    lockFile: join(dir, "daemon.lock"),
+    autosaveDir: "/tmp/whats-proxy-autosave",
+  };
+}
+
 /** Load and return the merged configuration. */
 export function loadConfig(): AppConfig {
   const config = JSON.parse(JSON.stringify(DEFAULTS)) as AppConfig;
@@ -166,4 +192,149 @@ export function loadConfig(): AppConfig {
   config.state_directory = resolve(expandHome(config.state_directory));
 
   return config;
+}
+
+// ── Multi-account management ──────────────────────────────────────────────────
+
+export interface AccountInfo {
+  alias: string | null;
+  created: string;
+  last_active: string | null;
+}
+
+interface AccountsFile {
+  default: string | null;
+  accounts: Record<string, AccountInfo>;
+}
+
+const ACCOUNTS_FILENAME = "accounts.json";
+
+/** Read the accounts.json file. Returns empty registry if missing. */
+export function readAccounts(cfg?: AppConfig): AccountsFile {
+  const base = cfg ? stateDir(cfg) : configDir();
+  const filePath = join(base, ACCOUNTS_FILENAME);
+  try {
+    return JSON.parse(readFileSync(filePath, "utf-8")) as AccountsFile;
+  } catch {
+    return { default: null, accounts: {} };
+  }
+}
+
+/** Write the accounts.json file. */
+export function writeAccounts(data: AccountsFile, cfg?: AppConfig): void {
+  const base = cfg ? stateDir(cfg) : configDir();
+  const filePath = join(base, ACCOUNTS_FILENAME);
+  mkdirSync(base, { recursive: true });
+  writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf-8");
+}
+
+/** Get the per-account directory path: <base>/<phone>/ */
+export function accountDir(phone: string, cfg?: AppConfig): string {
+  const base = cfg ? stateDir(cfg) : configDir();
+  return join(base, phone.replace(/\D/g, ""));
+}
+
+/** Get the canonical phone number (digits only). */
+export function canonicalPhone(phone: string): string {
+  return phone.replace(/\D/g, "");
+}
+
+/** Get the default account phone, or null if none set. */
+export function getDefaultAccount(cfg?: AppConfig): string | null {
+  const data = readAccounts(cfg);
+  return data.default;
+}
+
+/** Set the default account phone. */
+export function setDefaultAccount(phone: string, cfg?: AppConfig): void {
+  const data = readAccounts(cfg);
+  data.default = canonicalPhone(phone);
+  writeAccounts(data, cfg);
+}
+
+/** Register a new account in accounts.json. */
+export function registerAccount(phone: string, alias: string | null, cfg?: AppConfig): void {
+  const data = readAccounts(cfg);
+  const cp = canonicalPhone(phone);
+  if (!data.accounts[cp]) {
+    data.accounts[cp] = {
+      alias,
+      created: new Date().toISOString(),
+      last_active: null,
+    };
+    if (!data.default) data.default = cp;
+    writeAccounts(data, cfg);
+  }
+}
+
+/** Remove an account from accounts.json. Does NOT delete files. */
+export function unregisterAccount(phone: string, cfg?: AppConfig): void {
+  const data = readAccounts(cfg);
+  const cp = canonicalPhone(phone);
+  delete data.accounts[cp];
+  if (data.default === cp) data.default = Object.keys(data.accounts)[0] || null;
+  writeAccounts(data, cfg);
+}
+
+/** List all registered account phones. */
+export function listAccounts(cfg?: AppConfig): string[] {
+  return Object.keys(readAccounts(cfg).accounts);
+}
+
+/** Delete all files for an account (state, store, daemon artifacts). */
+export function deleteAccountFiles(phone: string, cfg?: AppConfig): void {
+  const dir = accountDir(phone, cfg);
+  if (existsSync(dir)) {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Auto-migrate legacy flat layout (<base>/state/) to per-account layout.
+ *
+ * Detects creds.json at <base>/state/creds.json, reads the phone number
+ * from it, moves the files to <base>/<phone>/state/, and registers the
+ * account. No-op if migration already happened.
+ */
+export function migrateLegacyState(cfg?: AppConfig): string | null {
+  const base = cfg ? stateDir(cfg) : configDir();
+  const legacyAuth = join(base, "state");
+  const legacyCreds = join(legacyAuth, "creds.json");
+
+  // No legacy state to migrate
+  if (!existsSync(legacyCreds)) return null;
+
+  // Already migrated (accounts.json exists and has entries)
+  const data = readAccounts(cfg);
+  if (Object.keys(data.accounts).length > 0) return null;
+
+  try {
+    const creds = JSON.parse(readFileSync(legacyCreds, "utf-8"));
+    const me = creds?.me;
+    if (!me?.id) return null;
+
+    const phone = canonicalPhone(me.id.split(":")[0]);
+    const targetDir = accountDir(phone, cfg);
+    const targetAuth = join(targetDir, "state");
+
+    // Create target and move
+    mkdirSync(targetAuth, { recursive: true });
+    renameSync(legacyAuth, targetAuth);
+
+    // Move store.json if it exists
+    const legacyStore = join(base, "store.json");
+    if (existsSync(legacyStore)) {
+      renameSync(legacyStore, join(targetDir, "store.json"));
+    }
+
+    // Register the account
+    registerAccount(phone, null, cfg);
+    setDefaultAccount(phone, cfg);
+
+    // Clean up empty legacy state dir (it was renamed, so it's gone)
+    return phone;
+  } catch {
+    // Migration failed — leave legacy state untouched
+    return null;
+  }
 }

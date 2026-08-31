@@ -28,7 +28,7 @@ import { createServer, type Socket } from "node:net";
 import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync, openSync, closeSync, writeSync } from "node:fs";
 import { join } from "node:path";
 
-import { loadConfig, type AppConfig, statePaths, ensureDirs } from "./config.ts";
+import { loadConfig, type AppConfig, statePaths, accountStatePaths, ensureDirs } from "./config.ts";
 import { Store } from "./store.ts";
 import { Logger } from "./logger.ts";
 import { okResult, errResult } from "./helpers.ts";
@@ -392,9 +392,16 @@ async function serveSocket(cfg: AppConfig, paths: ReturnType<typeof statePaths>)
 
 // ── Daemon lifecycle ─────────────────────────────────────────────────────────
 
-export async function startDaemon(): Promise<void> {
+export async function startDaemon(phone?: string): Promise<void> {
   config = loadConfig();
-  const paths = ensureDirs(config);
+  // Per-account daemon when phone is provided; legacy flat layout otherwise.
+  const paths = phone ? (() => {
+    const p = accountStatePaths(phone, config);
+    mkdirSync(p.dir, { recursive: true });
+    mkdirSync(p.auth, { recursive: true });
+    mkdirSync(p.autosaveDir, { recursive: true });
+    return p;
+  })() : ensureDirs(config);
   log = new Logger("info");
 
   // ── Atomic single-owner lock ─────────────────────────────────────────────

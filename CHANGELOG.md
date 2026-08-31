@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.6.0 — 2026-08-31
+
+- **Multi-account support:** whats-proxy now manages multiple WhatsApp accounts simultaneously.
+  Each account lives in `~/.config/whats-proxy/<phone>/` with its own Baileys auth, Store, daemon
+  socket, and lock. Legacy single-account layouts are auto-migrated on first run.
+- **New admin namespace:** Two sub-namespaces replace the old monolithic admin:
+  - `admin auth login|status|logout|use` — authentication lifecycle per account
+  - `admin daemon status|stop|restart|logs|refresh` — daemon lifecycle per account or all
+  Old commands (`admin setup`, `admin status`, `admin stop`) still work with deprecation warnings.
+- **`-a`/`--account` flag on `do`:** Every RPC action now accepts `--account <phone>` to target
+  a specific daemon. Resolution: flag → `WHATS_PROXY_ACCOUNT` env → default account → legacy.
+- **`admin auth login` replaces `admin setup`:** Same QR/code pairing logic, but writes to
+  `<phone>/state/`, auto-registers the account, and auto-sets first account as default.
+- **`admin daemon refresh [phone]`:** Force-resync WhatsApp state (messages, contacts, groups)
+  for one or all accounts via the daemon's `resyncAppState` RPC.
+- **`accounts.json` registry:** Central registry tracking all linked accounts, default, aliases,
+  and creation timestamps at `~/.config/whats-proxy/accounts.json`.
+- **`admin auth use <phone>`:** Switch the default account without `--account` on every call.
+- **Auto-migration:** On first launch, detects legacy flat layout (`state/creds.json` at root),
+  reads phone from creds, moves to `<phone>/state/`, and registers in `accounts.json`.
+
 ## 0.5.0 — 2026-08-31
 
 - **Baileys fork switch:** Replaced npm `@whiskeysockets/baileys@^7.0.0-rc14` with
@@ -19,27 +40,27 @@
 - **No .env file:** Removed `.env.example` entirely. Defaults live in `config.ts`. Only 2 env
   overrides remain (both for operational/test needs): `WHATS_PROXY_STATE_DIR`,
   `WHATS_PROXY_MAX_IDLE_MINUTES`. Default `max_idle_minutes` changed from 0 to 30 (safe default).
-- **Zod payload validation (P1+P3):** 65 Zod schemas in `schemas.ts`, validated at CLI
+- **Zod payload validation (P1+P3):** 66 Zod schemas in `schemas.ts`, validated at CLI
   (pre-daemon) and daemon-side (`protectAction`). Required-argument check runs first, then
   Zod type validation.
 - **Auto-wrapped envelope examples (P4):** `--help` output now shows full `{"meta":{...},"data":{...}}`
   envelope for every example.
 - **Registration audit tests (P2+P6):** `tests/audit.test.ts` — 8 tests: count, kebab-case,
   meta.action, ≥3 examples, help sections, registry↔policies coherence, schema completeness.
-- **HITL xdg-open guard:** `WHATS_PROXY_NO_BROWSER` env var suppresses browser auto-open
-  during tests/CI (was opening Edge tabs during `make check`).
-- **Teardown noise suppressed:** `resolved` flag + `finish()` helper prevent spurious
-  "Transient close" logs after deliberate socket teardown.
-- **setup.ts stale auth wipe:** `admin setup` wipes stale auth files before fresh pairing
-  to avoid 428 from version-mismatched credentials.
-- **CONTRACT.md rewritten:** Full architecture contract (709 lines), dense and complete,
-  matching tick-proxy's documentation standard.
 - **New action `send-batch`:** Unified multi-recipient multi-part send. Sends any content type
   (text, image, video, audio, document, sticker, location, contact, poll) to one or more
   recipients in a single call. Each part becomes one WhatsApp message; every part is sent to
   every recipient. Text parts support `@mentions`. Any part can override the global `quoted_id`
   to reply to a different message. Return shape: `{ total, sent, failed, results }`. 66 actions
   total (was 65).
+- **CONTRACT.md rewritten:** Full architecture contract, dense and complete, matching tick-proxy's
+  documentation standard.
+- **HITL xdg-open guard:** `WHATS_PROXY_NO_BROWSER` env var suppresses browser auto-open
+  during tests/CI (was opening Edge tabs during `make check`).
+- **Teardown noise suppressed:** `resolved` flag + `finish()` helper prevent spurious
+  "Transient close" logs after deliberate socket teardown.
+- **setup.ts stale auth wipe:** `admin setup` wipes stale auth files before fresh pairing
+  to avoid 428 from version-mismatched credentials.
 
 ## 0.4.0 — 2026-08-30
 

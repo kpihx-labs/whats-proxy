@@ -114,7 +114,7 @@ console.log("\n[6] daemon spawn + dispatch");
   const cfg = loadConfig();
   const paths = statePaths(cfg);
 
-  await spawnDaemon(cfg, 30_000);
+  await spawnDaemon(cfg, undefined, 30_000);
   check("daemon answers ping", await pingDaemon(paths));
 
   // connection-info

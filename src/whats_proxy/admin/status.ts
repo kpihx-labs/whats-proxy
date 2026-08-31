@@ -33,7 +33,7 @@ import type { Output } from "../types.ts";
 export async function adminStatus(): Promise<Output> {
   const cfg = loadConfig();
   const paths = statePaths(cfg);
-  const client = new WaClient(cfg, false); // never spawn for status
+  const client = new WaClient(undefined, cfg, false); // never spawn for status
 
   // Auth presence: Baileys creds exist in state/
   const credsFile = join(paths.auth, "creds.json");

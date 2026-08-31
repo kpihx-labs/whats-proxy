@@ -5,6 +5,9 @@
  * detached daemon when none is running (transparent: logged to the state
  * dir, pidfile written, `admin status` reflects it). Every method returns
  * the full Output envelope (`meta` + `data`) — the tick-proxy standard.
+ *
+ * Multi-account: each phone number owns its own daemon, socket, and state
+ * directory under ~/.config/whats-proxy/<phone>/.
  */
 
 import { connect as netConnect, type Socket } from "node:net";
@@ -13,7 +16,14 @@ import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from "
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-import { loadConfig, statePaths, type AppConfig } from "./config.ts";
+import {
+  loadConfig,
+  statePaths,
+  accountStatePaths,
+  canonicalPhone,
+  getDefaultAccount,
+  type AppConfig,
+} from "./config.ts";
 import { WhatsProxyError } from "./exceptions.ts";
 import type { ConnectionInfo, Output } from "./types.ts";
 
@@ -86,14 +96,22 @@ function daemonCommand(): { executable: string; args: string[] } {
 /**
  * Spawn a detached daemon process and wait until it answers ping
  * (up to `waitMs`, default 30s). Returns once the daemon is reachable.
+ *
+ * When `phone` is provided, passes `--account <phone>` to the daemon binary
+ * so it starts the per-account daemon (state under <base>/<phone>/).
  */
-export async function spawnDaemon(cfg: AppConfig, waitMs = 30_000): Promise<void> {
-  const paths = statePaths(cfg);
+export async function spawnDaemon(
+  cfg: AppConfig,
+  phone?: string,
+  waitMs = 30_000,
+): Promise<void> {
+  const paths = phone ? accountStatePaths(phone, cfg) : statePaths(cfg);
   mkdirSync(paths.dir, { recursive: true });
 
-   // Detached: keeps running after the CLI exits; diagnostics remain on stderr.
-   const command = daemonCommand();
-   const child = spawn(command.executable, command.args, {
+  // Detached: keeps running after the CLI exits; diagnostics remain on stderr.
+  const command = daemonCommand();
+  const spawnArgs = phone ? [...command.args, "--account", phone] : [...command.args];
+  const child = spawn(command.executable, spawnArgs, {
     detached: true,
     stdio: ["ignore", "ignore", "ignore"],
     cwd: process.cwd(),
@@ -107,7 +125,7 @@ export async function spawnDaemon(cfg: AppConfig, waitMs = 30_000): Promise<void
     if (await pingDaemon(paths)) return;
     if (Date.now() > deadline) {
       throw new WhatsProxyError(
-         `Daemon did not become ready within ${waitMs / 1000}s. Run 'whats-proxy admin status' and inspect stderr diagnostics.`,
+        `Daemon did not become ready within ${waitMs / 1000}s. Run 'whats-proxy admin status' and inspect stderr diagnostics.`,
         "DAEMON_START_TIMEOUT",
       );
     }
@@ -127,10 +145,33 @@ export async function pingDaemon(paths: ReturnType<typeof statePaths>): Promise<
 }
 
 /** Ensure the daemon is reachable; spawn it if needed. */
-export async function ensureDaemon(cfg: AppConfig): Promise<void> {
-  const paths = statePaths(cfg);
+export async function ensureDaemon(cfg: AppConfig, phone?: string): Promise<void> {
+  const paths = phone ? accountStatePaths(phone, cfg) : statePaths(cfg);
   if (await pingDaemon(paths)) return;
-  await spawnDaemon(cfg);
+  await spawnDaemon(cfg, phone);
+}
+
+// ── Account resolution ──────────────────────────────────────────────────────
+
+/**
+ * Resolve the target phone number from explicit flag, env var, or default.
+ *
+ * Resolution order:
+ *   1. explicit `phone` parameter (-a / --account)
+ *   2. WHATS_PROXY_ACCOUNT env var
+ *   3. Default account from accounts.json
+ *   4. null (caller decides: error or legacy flat layout)
+ */
+function resolvePhone(explicit?: string): string | null {
+  // 1. Explicit --account flag
+  if (explicit) return canonicalPhone(explicit);
+
+  // 2. Environment variable (test override)
+  const envPhone = process.env.WHATS_PROXY_ACCOUNT;
+  if (envPhone) return canonicalPhone(envPhone);
+
+  // 3. Default account from accounts.json
+  return getDefaultAccount();
 }
 
 // ── WaClient ─────────────────────────────────────────────────────────────────
@@ -139,21 +180,35 @@ export async function ensureDaemon(cfg: AppConfig): Promise<void> {
  * RPC client for `whats-proxy do`. Auto-spawns the daemon on first use.
  * The 65 actions map 1:1 to RPC `dispatch` calls (no per-method wrappers —
  * the daemon owns the Baileys socket and Store, so the client stays thin).
+ *
+ * Multi-account: pass a phone number to target a specific account's daemon.
+ * Without a phone, the default account is used (or the legacy flat layout).
  */
 export class WaClient {
   private cfg: AppConfig;
+  private phone: string | null;
   private paths: ReturnType<typeof statePaths>;
   private autoSpawn: boolean;
 
-  constructor(cfg?: AppConfig, autoSpawn = true) {
+  constructor(phone?: string, cfg?: AppConfig, autoSpawn = true) {
     this.cfg = cfg || loadConfig();
-    this.paths = statePaths(this.cfg);
+    this.phone = resolvePhone(phone);
     this.autoSpawn = autoSpawn;
+
+    // Per-account paths when a phone is resolved; legacy flat layout otherwise.
+    this.paths = this.phone
+      ? accountStatePaths(this.phone, this.cfg)
+      : statePaths(this.cfg);
+  }
+
+  /** The resolved phone number for this client instance. */
+  get account(): string | null {
+    return this.phone;
   }
 
   /** Execute one action against the daemon. Returns the Output envelope. */
   async do(action: string, args: Record<string, unknown> = {}): Promise<Output> {
-    if (this.autoSpawn) await ensureDaemon(this.cfg);
+    if (this.autoSpawn) await ensureDaemon(this.cfg, this.phone ?? undefined);
     const resp = await rpcCall(this.paths.sockFile, "dispatch", { action, args });
     return unwrap(resp);
   }
@@ -165,25 +220,9 @@ export class WaClient {
    * action: public WhatsApp operations must remain registry-routed so required
    * argument validation, policies, HITL, preflight, and verification cannot be
    * bypassed.
-   *
-   * Args:
-   *   method: Internal daemon method such as `ping`, `connection-info`, or
-   *     `shutdown`; never use it to bypass a registered WhatsApp action.
-   *   params: JSON-RPC parameters accepted by that internal method.
-   *
-   * Returns:
-   *   Raw JSON-RPC response object from the Unix-socket daemon.
-   *
-   * Examples:
-   *   await new WaClient().raw("ping")
-   *   // => { jsonrpc: "2.0", id: 1, result: { pong: true } }
-   *   await new WaClient().raw("connection-info")
-   *   // => { jsonrpc: "2.0", id: 1, result: { state: "open", ... } }
-   *   await new WaClient().raw("shutdown")
-   *   // => { jsonrpc: "2.0", id: 1, result: { meta: { status: "ok", ... }, data: { stopped: true, ... } } }
    */
   async raw(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
-    if (this.autoSpawn) await ensureDaemon(this.cfg);
+    if (this.autoSpawn) await ensureDaemon(this.cfg, this.phone ?? undefined);
     const resp = await rpcCall(this.paths.sockFile, method, params);
     return resp;
   }
