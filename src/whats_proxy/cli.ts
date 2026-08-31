@@ -324,15 +324,12 @@ async function cmdAdmin(argv: string[]): Promise<number> {
   if (sub === "--help" || sub === "-h" || sub === undefined) {
     process.stdout.write(
       "Usage:\n" +
-      "  whats-proxy admin auth login [--code] [--phone N]   Pair WhatsApp (QR or code)\n" +
-      "  whats-proxy admin auth status [phone]               Auth status (JSON)\n" +
-      "  whats-proxy admin auth logout <phone>                Logout & unregister\n" +
-      "  whats-proxy admin auth use <phone>                   Set default account\n" +
-      "  whats-proxy admin daemon status [phone]              Daemon status (JSON)\n" +
-      "  whats-proxy admin daemon stop [phone]                Stop daemon\n" +
-      "  whats-proxy admin daemon restart [phone]             Restart daemon\n" +
-      "  whats-proxy admin daemon logs [phone]                Tail daemon logs\n" +
-      "  whats-proxy admin daemon refresh [phone]             Refresh app state\n",
+      "  whats-proxy admin setup                              Install service + config\n" +
+      "  whats-proxy admin status                             Full installation status\n" +
+      "  whats-proxy admin purge                              Remove everything\n" +
+      "  whats-proxy admin service start|stop|restart|status|logs <phone>  Service lifecycle\n" +
+      "  whats-proxy admin auth login|status|logout|use <phone>           Auth lifecycle\n" +
+      "  whats-proxy admin daemon status|stop|restart|logs|refresh <phone> Daemon lifecycle\n",
     );
     return 0;
   }
@@ -421,6 +418,112 @@ async function cmdAdmin(argv: string[]): Promise<number> {
     }
   }
 
+  // ── admin setup ─────────────────────────────────────────────────────────
+
+  if (sub === "setup") {
+    const { adminSetup } = await import("./admin/setup.ts");
+    const result = await adminSetup();
+    print_json(result);
+    return result.meta.status === "error" ? 1 : 0;
+  }
+
+  // ── admin purge ─────────────────────────────────────────────────────────
+
+  if (sub === "purge") {
+    const { adminPurge } = await import("./admin/purge.ts");
+    const result = await adminPurge();
+    print_json(result);
+    return result.meta.status === "error" ? 1 : 0;
+  }
+
+  // ── admin status (comprehensive) ────────────────────────────────────────
+
+  if (sub === "status") {
+    const { adminStatus } = await import("./admin/status.ts");
+    const result = await adminStatus();
+    print_json(result);
+    return result.meta.status === "error" ? 1 : 0;
+  }
+
+  // ── admin service ───────────────────────────────────────────────────────
+
+  if (sub === "service") {
+    const subsub = argv[1];
+    const rest = argv.slice(2);
+
+    switch (subsub) {
+      case "start": {
+        if (!rest[0]) {
+          print_json({
+            meta: { status: "error", comment: "Usage: whats-proxy admin service start <phone>", edited: false },
+            data: { error: "Missing required argument: phone" },
+          } satisfies Output);
+          return 2;
+        }
+        const { serviceStart } = await import("./admin/service/start.ts");
+        const result = await serviceStart({ phone: canonicalPhone(rest[0]) });
+        print_json(result);
+        return result.meta.status === "error" ? 1 : 0;
+      }
+
+      case "stop": {
+        if (!rest[0]) {
+          print_json({
+            meta: { status: "error", comment: "Usage: whats-proxy admin service stop <phone>", edited: false },
+            data: { error: "Missing required argument: phone" },
+          } satisfies Output);
+          return 2;
+        }
+        const { serviceStop } = await import("./admin/service/stop.ts");
+        const result = await serviceStop({ phone: canonicalPhone(rest[0]) });
+        print_json(result);
+        return result.meta.status === "error" ? 1 : 0;
+      }
+
+      case "restart": {
+        if (!rest[0]) {
+          print_json({
+            meta: { status: "error", comment: "Usage: whats-proxy admin service restart <phone>", edited: false },
+            data: { error: "Missing required argument: phone" },
+          } satisfies Output);
+          return 2;
+        }
+        const { serviceRestart } = await import("./admin/service/restart.ts");
+        const result = await serviceRestart({ phone: canonicalPhone(rest[0]) });
+        print_json(result);
+        return result.meta.status === "error" ? 1 : 0;
+      }
+
+      case "logs": {
+        const phone = rest[0] ? canonicalPhone(rest[0]) : undefined;
+        const linesIdx = rest.indexOf("--lines");
+        const lines = linesIdx !== -1 && rest[linesIdx + 1] ? parseInt(rest[linesIdx + 1]!, 10) : undefined;
+        const { serviceLogs } = await import("./admin/service/logs.ts");
+        const result = await serviceLogs({ phone, lines });
+        print_json(result);
+        return result.meta.status === "error" ? 1 : 0;
+      }
+
+      case "status": {
+        const phone = rest[0] ? canonicalPhone(rest[0]) : undefined;
+        const { serviceStatus } = await import("./admin/service/status.ts");
+        const result = await serviceStatus({ phone });
+        print_json(result);
+        return result.meta.status === "error" ? 1 : 0;
+      }
+
+      default:
+        print_json({
+          meta: { status: "error", comment: `Unknown admin service subcommand: ${subsub ?? "(empty)"}`, edited: false },
+          data: {
+            error: `Unknown admin service subcommand: ${subsub ?? "(empty)"}`,
+            usage: "whats-proxy admin service start|stop|restart|logs|status <phone>",
+          },
+        } satisfies Output);
+        return 2;
+    }
+  }
+
   // ── admin daemon ─────────────────────────────────────────────────────────
 
   if (sub === "daemon") {
@@ -481,7 +584,7 @@ async function cmdAdmin(argv: string[]): Promise<number> {
     meta: { status: "error", comment: `Unknown admin subcommand: ${sub}`, edited: false },
     data: {
       error: `Unknown admin subcommand: ${sub}`,
-      usage: "whats-proxy admin auth|daemon",
+      usage: "whats-proxy admin setup|status|purge|service|auth|daemon",
     },
   } satisfies Output);
   return 2;
@@ -527,6 +630,10 @@ export async function main(argv: string[]): Promise<number> {
           `  whats-proxy do <action> [payload|file] [-a phone] [-o file] [-f json|table]\n` +
           `  whats-proxy do --help          # full action catalog\n` +
           `  whats-proxy do <action> --help # per-action help\n` +
+          `  whats-proxy admin setup                              Install service + config\n` +
+          `  whats-proxy admin status                             Full installation status\n` +
+          `  whats-proxy admin purge                              Remove everything\n` +
+          `  whats-proxy admin service start|stop|restart|status|logs <phone>\n` +
           `  whats-proxy admin auth login [--code] [--phone N]\n` +
           `  whats-proxy admin auth status [phone]\n` +
           `  whats-proxy admin auth logout <phone>\n` +

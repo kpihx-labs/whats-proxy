@@ -1,0 +1,16 @@
+[Unit]
+Description=WhatsApp proxy daemon for account %i
+After=graphical-session.target network-online.target
+Wants=graphical-session.target
+
+[Service]
+Type=exec
+ExecStart=%h/.bun/bin/whats-proxy daemon --account %i
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+NoNewPrivileges=false
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=default.target
