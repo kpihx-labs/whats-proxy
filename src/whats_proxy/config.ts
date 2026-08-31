@@ -2,18 +2,19 @@
  * whats-proxy — Configuration loader + multi-account management.
  *
  * All defaults live here as a single source of truth. No .env file,
- * no config.json layer. Auth artifacts are per-account session files
- * under ~/.config/whats-proxy/<phone>/.
+ * no config.json layer.
  *
- * Multi-account layout:
- *   ~/.config/whats-proxy/
- *   ├── accounts.json          # account registry + default
- *   └── <phone>/               # one folder per WhatsApp account
- *       ├── state/             # Baileys auth
- *       ├── store.json         # messages, contacts, chats
- *       ├── daemon.sock        # daemon socket
- *       ├── daemon.lock        # O_EXCL lock
- *       └── daemon.pid         # daemon PID
+ * Split layout (XDG-style):
+ *   ~/.config/whats-proxy/              # CONFIG ONLY (light)
+ *   ├── accounts.json                   # account registry + default
+ *
+ *   ~/.local/share/whats-proxy/         # HEAVY DATA (per-account)
+ *   └── <phone>/
+ *       ├── state/                      # Baileys auth
+ *       ├── store.json                  # messages, contacts, chats
+ *       ├── daemon.sock                 # daemon socket
+ *       ├── daemon.lock                 # O_EXCL lock
+ *       └── daemon.pid                  # daemon PID
  */
 
 import { VERSION } from "./version.ts";
@@ -82,6 +83,11 @@ export function expandHome(p: string): string {
 /** Resolve the config directory (default ~/.config/whats-proxy). */
 export function configDir(): string {
   return expandHome(process.env.WHATS_PROXY_CONFIG_DIR || DEFAULTS.state_directory);
+}
+
+/** Resolve the share directory for heavy per-account data (default ~/.local/share/whats-proxy). */
+export function shareDir(): string {
+  return expandHome(process.env.WHATS_PROXY_SHARE_DIR || join(homedir(), ".local", "share", "whats-proxy"));
 }
 
 /**
@@ -209,9 +215,8 @@ interface AccountsFile {
 const ACCOUNTS_FILENAME = "accounts.json";
 
 /** Read the accounts.json file. Returns empty registry if missing. */
-export function readAccounts(cfg?: AppConfig): AccountsFile {
-  const base = cfg ? stateDir(cfg) : configDir();
-  const filePath = join(base, ACCOUNTS_FILENAME);
+export function readAccounts(_cfg?: AppConfig): AccountsFile {
+  const filePath = join(configDir(), ACCOUNTS_FILENAME);
   try {
     return JSON.parse(readFileSync(filePath, "utf-8")) as AccountsFile;
   } catch {
@@ -220,17 +225,16 @@ export function readAccounts(cfg?: AppConfig): AccountsFile {
 }
 
 /** Write the accounts.json file. */
-export function writeAccounts(data: AccountsFile, cfg?: AppConfig): void {
-  const base = cfg ? stateDir(cfg) : configDir();
+export function writeAccounts(data: AccountsFile, _cfg?: AppConfig): void {
+  const base = configDir();
   const filePath = join(base, ACCOUNTS_FILENAME);
-  mkdirSync(base, { recursive: true });
-  writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf-8");
+  mkdirSync(base, { recursive: true, mode: 0o700 });
+  writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
 }
 
-/** Get the per-account directory path: <base>/<phone>/ */
-export function accountDir(phone: string, cfg?: AppConfig): string {
-  const base = cfg ? stateDir(cfg) : configDir();
-  return join(base, phone.replace(/\D/g, ""));
+/** Get the per-account directory path: <shareDir>/<phone>/ */
+export function accountDir(phone: string, _cfg?: AppConfig): string {
+  return join(shareDir(), canonicalPhone(phone));
 }
 
 /** Get the canonical phone number (digits only). */

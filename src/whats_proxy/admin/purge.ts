@@ -7,7 +7,8 @@
  * 2. Disables all services
  * 3. Removes the service symlink from ~/.config/systemd/user/
  * 4. Runs systemctl --user daemon-reload
- * 5. Removes ~/.config/whats-proxy/ directory
+ * 5. Removes ~/.config/whats-proxy/ (accounts.json)
+ * 6. Removes ~/.local/share/whats-proxy/ (all heavy data)
  *
  * Does NOT uninstall the binary — that's `uv tool uninstall whats-proxy` or
  * `bun unlink`.
@@ -18,7 +19,7 @@ import { execSync } from "node:child_process";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
-import { configDir, readAccounts, loadConfig } from "../config.ts";
+import { configDir, shareDir, readAccounts, loadConfig } from "../config.ts";
 import { okResult, errResult } from "../helpers.ts";
 import type { Output } from "../types.ts";
 
@@ -40,6 +41,7 @@ export async function adminPurge(): Promise<Output> {
   const cfg = loadConfig();
   const accounts = readAccounts(cfg);
   const configPath = configDir();
+  const sharePath = shareDir();
   const systemdUserDir = join(homedir(), ".config", "systemd", "user");
   const serviceTarget = join(systemdUserDir, "whats-proxy@.service");
   const removed: string[] = [];
@@ -90,13 +92,23 @@ export async function adminPurge(): Promise<Output> {
     warnings.push(`daemon-reload failed: ${(err as Error).message}`);
   }
 
-  // 4. Remove config directory
+  // 4. Remove config directory (accounts.json)
   if (existsSync(configPath)) {
     try {
       rmSync(configPath, { recursive: true, force: true });
       removed.push(`config:${configPath}`);
     } catch (err) {
       warnings.push(`Failed to remove config directory: ${(err as Error).message}`);
+    }
+  }
+
+  // 5. Remove share directory (heavy per-account data)
+  if (existsSync(sharePath)) {
+    try {
+      rmSync(sharePath, { recursive: true, force: true });
+      removed.push(`share:${sharePath}`);
+    } catch (err) {
+      warnings.push(`Failed to remove share directory: ${(err as Error).message}`);
     }
   }
 

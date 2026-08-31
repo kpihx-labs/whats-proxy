@@ -2,12 +2,13 @@
  * whats-proxy — admin setup.
  *
  * `whats-proxy admin setup` — install the systemd user service and
- * create the config directory with correct permissions.
+ * create the config and share directories with correct permissions.
  *
  * 1. Creates ~/.config/whats-proxy/ with mode 0o700
- * 2. Symlinks systemd/whats-proxy@.service → ~/.config/systemd/user/
- * 3. Runs systemctl --user daemon-reload
- * 4. Shows next-step instructions
+ * 2. Creates ~/.local/share/whats-proxy/ with mode 0o700
+ * 3. Symlinks services/whats-proxy@.service → ~/.config/systemd/user/
+ * 4. Runs systemctl --user daemon-reload
+ * 5. Shows next-step instructions
  */
 
 import { mkdirSync, chmodSync, existsSync, symlinkSync, unlinkSync } from "node:fs";
@@ -15,7 +16,7 @@ import { execSync } from "node:child_process";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
-import { configDir } from "../config.ts";
+import { configDir, shareDir } from "../config.ts";
 import { okResult, errResult } from "../helpers.ts";
 import type { Output } from "../types.ts";
 
@@ -44,15 +45,16 @@ function repoRoot(): string {
  */
 export async function adminSetup(): Promise<Output> {
   const configPath = configDir();
+  const sharePath = shareDir();
   const systemdUserDir = join(homedir(), ".config", "systemd", "user");
-  const serviceSource = join(repoRoot(), "systemd", "whats-proxy@.service");
+  const serviceSource = join(repoRoot(), "services", "whats-proxy@.service");
   const serviceTarget = join(systemdUserDir, "whats-proxy@.service");
 
   const warnings: string[] = [];
 
   // 1. Create config directory with 0o700
   try {
-    mkdirSync(configPath, { recursive: true });
+    mkdirSync(configPath, { recursive: true, mode: 0o700 });
     chmodSync(configPath, 0o700);
   } catch (err) {
     return errResult(`Failed to create config directory: ${(err as Error).message}`, {
@@ -60,7 +62,17 @@ export async function adminSetup(): Promise<Output> {
     });
   }
 
-  // 2. Create systemd user directory and symlink service file
+  // 2. Create share directory with 0o700
+  try {
+    mkdirSync(sharePath, { recursive: true, mode: 0o700 });
+    chmodSync(sharePath, 0o700);
+  } catch (err) {
+    return errResult(`Failed to create share directory: ${(err as Error).message}`, {
+      share_path: sharePath,
+    });
+  }
+
+  // 3. Create systemd user directory and symlink service file
   try {
     mkdirSync(systemdUserDir, { recursive: true });
 
@@ -83,7 +95,7 @@ export async function adminSetup(): Promise<Output> {
     });
   }
 
-  // 3. Reload systemd daemon
+  // 4. Reload systemd daemon
   try {
     execSync("systemctl --user daemon-reload", {
       encoding: "utf-8",
@@ -98,7 +110,8 @@ export async function adminSetup(): Promise<Output> {
     service_path: serviceTarget,
     linked_from: serviceSource,
     config_path: configPath,
-    permissions: { config: "0700" },
+    share_path: sharePath,
+    permissions: { config: "0700", share: "0700" },
     next_steps: [
       "Pair a WhatsApp account: whats-proxy admin auth login",
       "Start the service: whats-proxy admin service start <phone>",

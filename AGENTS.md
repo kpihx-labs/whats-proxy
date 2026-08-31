@@ -19,7 +19,7 @@ whats-proxy admin daemon status|stop|restart|logs|refresh                     # 
 
 ## Key Rules
 
-- **Never delete `~/.config/whats-proxy/<phone>/state/`** — session credentials live there;
+- **Never delete `~/.local/share/whats-proxy/<phone>/state/`** — session credentials live there;
   losing them forces re-pairing via `admin auth login`.
 - **stdout is pure JSON** — never `console.log` anything that could pollute CLI output
   (use `logger.ts` → stderr).
@@ -73,14 +73,16 @@ tests/              # bun test: helpers, store, display, policies, audit
 ## Multi-account layout
 
 ```
-~/.config/whats-proxy/
-├── accounts.json            # registry: default + per-account metadata
-├── <phone>/                 # per-account directory
-│   ├── state/               # Baileys auth
-│   ├── store.json           # messages, contacts, chats
-│   ├── daemon.sock          # daemon socket
-│   ├── daemon.lock          # O_EXCL lock
-│   └── daemon.pid           # daemon PID
+~/.config/whats-proxy/           # CONFIG ONLY (light)
+├── accounts.json                # registry: default + per-account metadata
+
+~/.local/share/whats-proxy/      # HEAVY DATA (per-account)
+└── <phone>/
+    ├── state/                   # Baileys auth
+    ├── store.json               # messages, contacts, chats
+    ├── daemon.sock              # daemon socket
+    ├── daemon.lock              # O_EXCL lock
+    └── daemon.pid               # daemon PID
 ```
 
 ## Account resolution

@@ -321,9 +321,10 @@ async function cmdAdmin(argv: string[]): Promise<number> {
   if (sub === "--help" || sub === "-h" || sub === undefined) {
     process.stdout.write(
       "Usage:\n" +
-      "  whats-proxy admin setup                              Install service + config\n" +
-      "  whats-proxy admin status                             Full installation status\n" +
-      "  whats-proxy admin purge                              Remove everything\n" +
+      "  whats-proxy admin doctor                               Fix permissions + create missing dirs\n" +
+      "  whats-proxy admin setup                                Install service + config\n" +
+      "  whats-proxy admin status                               Full installation status\n" +
+      "  whats-proxy admin purge                                Remove everything\n" +
       "  whats-proxy admin service start|stop|restart|status|logs|refresh <phone>\n" +
       "  whats-proxy admin auth login|status|logout|use <phone>\n",
     );
@@ -412,6 +413,15 @@ async function cmdAdmin(argv: string[]): Promise<number> {
         } satisfies Output);
         return 2;
     }
+  }
+
+  // ── admin doctor ─────────────────────────────────────────────────────────
+
+  if (sub === "doctor") {
+    const { adminDoctor } = await import("./admin/doctor.ts");
+    const result = await adminDoctor();
+    print_json(result);
+    return result.meta.status === "error" ? 1 : 0;
   }
 
   // ── admin setup ─────────────────────────────────────────────────────────
@@ -533,7 +543,7 @@ async function cmdAdmin(argv: string[]): Promise<number> {
     meta: { status: "error", comment: `Unknown admin subcommand: ${sub}`, edited: false },
     data: {
       error: `Unknown admin subcommand: ${sub}`,
-        usage: "whats-proxy admin setup|status|purge|service|auth",
+        usage: "whats-proxy admin doctor|setup|status|purge|service|auth",
     },
   } satisfies Output);
   return 2;
@@ -579,9 +589,10 @@ export async function main(argv: string[]): Promise<number> {
           `  whats-proxy do <action> [payload|file] [-a phone] [-o file] [-f json|table]\n` +
           `  whats-proxy do --help          # full action catalog\n` +
           `  whats-proxy do <action> --help # per-action help\n` +
-          `  whats-proxy admin setup                              Install service + config\n` +
-          `  whats-proxy admin status                             Full installation status\n` +
-          `  whats-proxy admin purge                              Remove everything\n` +
+          `  whats-proxy admin doctor                               Fix permissions + create missing dirs\n` +
+          `  whats-proxy admin setup                                Install service + config\n` +
+          `  whats-proxy admin status                               Full installation status\n` +
+          `  whats-proxy admin purge                                Remove everything\n` +
           `  whats-proxy admin service start|stop|restart|status|logs|refresh <phone>\n` +
           `  whats-proxy admin auth login [--code] [--phone N]\n` +
           `  whats-proxy admin auth status [phone]\n` +

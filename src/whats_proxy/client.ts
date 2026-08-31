@@ -7,7 +7,7 @@
  * the full Output envelope (`meta` + `data`) — the tick-proxy standard.
  *
  * Multi-account: each phone number owns its own daemon, socket, and state
- * directory under ~/.config/whats-proxy/<phone>/.
+ * directory under ~/.local/share/whats-proxy/<phone>/.
  */
 
 import { connect as netConnect, type Socket } from "node:net";

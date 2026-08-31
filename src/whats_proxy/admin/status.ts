@@ -24,6 +24,7 @@ import {
   readAccounts,
   getDefaultAccount,
   configDir,
+  shareDir,
 } from "../config.ts";
 import { okResult } from "../helpers.ts";
 import { VERSION } from "../version.ts";
@@ -75,6 +76,7 @@ export async function adminStatus(): Promise<Output> {
   const accounts = readAccounts(cfg);
   const defaultPhone = getDefaultAccount(cfg);
   const configPath = configDir();
+  const sharePath = shareDir();
   const warnings: string[] = [];
 
   // Binary
@@ -90,6 +92,9 @@ export async function adminStatus(): Promise<Output> {
 
   // Config directory
   const configDirInfo = checkDir(configPath, 0o700, "Config directory", warnings);
+
+  // Share directory
+  const shareDirInfo = checkDir(sharePath, 0o700, "Share directory", warnings);
 
   // Accounts file
   const accountsPath = join(configPath, "accounts.json");
@@ -132,7 +137,7 @@ export async function adminStatus(): Promise<Output> {
   const allPhones = Object.keys(accounts.accounts);
 
   for (const phone of allPhones) {
-    const phoneDir = join(configPath, phone);
+    const phoneDir = join(sharePath, phone);
     const stateDir = join(phoneDir, "state");
 
     // State directory permissions
@@ -218,6 +223,10 @@ export async function adminStatus(): Promise<Output> {
     config_dir: {
       path: configPath,
       ...configDirInfo,
+    },
+    share_dir: {
+      path: sharePath,
+      ...shareDirInfo,
     },
     accounts_file: {
       path: accountsPath,
