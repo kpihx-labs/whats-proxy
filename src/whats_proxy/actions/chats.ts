@@ -46,6 +46,23 @@ export default [
       });
     },
     schema: chatListSchema,
+    docstring: `List recent chats from the in-memory store. Returns chat JIDs, names, timestamps, unread counts, and other metadata.
+
+Parameters:
+    - limit (optional): Max number of chats to return (default 50, max 500).
+    - offset (optional): Offset for pagination (default 0).
+    - filter (optional): Filter chats: all (default), groups, contacts, unread.
+
+Examples:
+    - List all recent chats:
+        \`whats-proxy do chat-list '{}'\`
+        → {"total":120,"offset":0,"count":50,"chats":[{"jid":"33612345678@s.whatsapp.net","name":"Alice","unread":2,"last_message":"Hello!"},{"jid":"120363000000000@g.us","name":"X24 Project","unread":0,"last_message":"Sprint done"}]}
+    - List only groups:
+        \`whats-proxy do chat-list '{"filter":"groups","limit":20}'\`
+        → {"total":15,"offset":0,"count":15,"chats":[{"jid":"120363000000000@g.us","name":"X24 Project","unread":0},{"jid":"120363000000001@g.us","name":"Family","unread":5}]}
+    - List unread chats:
+        \`whats-proxy do chat-list '{"filter":"unread"}'\`
+        → {"total":8,"offset":0,"count":8,"chats":[{"jid":"33612345678@s.whatsapp.net","name":"Alice","unread":2},{"jid":"120363000000001@g.us","name":"Family","unread":5}]}`,
   },
   {
     meta: {
@@ -114,6 +131,30 @@ export default [
       });
     },
     schema: chatReadSchema,
+    docstring: `Get recent messages from a specific chat. Messages come from the local store and can trigger an on-demand history fetch for older messages.
+
+Parameters:
+    - jid (required): Chat JID or phone number.
+    - limit (optional): Max number of messages to return (default 50, max 200).
+    - before_id (optional): Message ID cursor: return messages older than this.
+    - fetch_history (optional): If true (default), request additional older history from WhatsApp.
+    - history_count (optional): How many older messages to request during history sync.
+    - history_wait_ms (optional): How long to wait for history sync events (default 3500ms).
+    - since (optional): Unix timestamp: only include messages at or after this time.
+    - until (optional): Unix timestamp: only include messages at or before this time.
+    - include_types (optional): Only include messages of these types.
+    - exclude_types (optional): Exclude messages of these types.
+
+Examples:
+    - Read recent messages from a contact:
+        \`whats-proxy do chat-read '{"jid":"33612345678","limit":20}'\`
+        → {"jid":"33612345678@s.whatsapp.net","count":20,"messages":[{"id":"MSG001","text":"Hello!","from_me":false,"timestamp":1756614000},{"id":"MSG002","text":"Hi there","from_me":true,"timestamp":1756613900}],"history_sync":{"enabled":true,"requested":false,"received":false,"reason":"cache_sufficient","before_count":45,"after_count":45}}
+    - Read messages with time filter:
+        \`whats-proxy do chat-read '{"jid":"120363000000000@g.us","since":1756600000,"until":1756620000}'\`
+        → {"jid":"120363000000000@g.us","count":12,"messages":[{"id":"MSG003","text":"Sprint update","from_me":false,"timestamp":1756610000}],"history_sync":{"enabled":true,"requested":false,"received":false,"reason":"cache_sufficient","before_count":30,"after_count":30}}
+    - Paginate older messages:
+        \`whats-proxy do chat-read '{"jid":"33612345678","limit":50,"before_id":"MSG050"}'\`
+        → {"jid":"33612345678@s.whatsapp.net","count":50,"messages":[{"id":"MSG049","text":"Older message","from_me":false,"timestamp":1756600000}],"history_sync":{"enabled":true,"requested":true,"received":true,"reason":"cache_insufficient","before_count":50,"after_count":100,"anchor_id":"MSG050","requested_count":50,"wait_ms":3500}}`,
   },
   {
     meta: {
@@ -169,6 +210,23 @@ export default [
       return okResult({ status: action, jid: chatJid });
     },
     schema: chatManageSchema,
+    docstring: `Perform a chat management action: archive, unarchive, pin, unpin, mute, unmute, mark_read, mark_unread, delete, or clear.
+
+Parameters:
+    - jid (required): Chat JID or phone number.
+    - action (required): archive|unarchive|pin|unpin|mute|unmute|mark_read|mark_unread|delete|clear.
+    - mute_duration (optional): For 'mute' action: duration in seconds. 0 = 8 hours, -1 = forever.
+
+Examples:
+    - Archive a chat:
+        \`whats-proxy do chat-manage '{"jid":"33612345678","action":"archive"}'\`
+        → {"status":"archive","jid":"33612345678@s.whatsapp.net"}
+    - Mute a group for 8 hours:
+        \`whats-proxy do chat-manage '{"jid":"120363000000000@g.us","action":"mute","mute_duration":0}'\`
+        → {"status":"mute","jid":"120363000000000@g.us"}
+    - Mark a chat as unread:
+        \`whats-proxy do chat-manage '{"jid":"33612345678","action":"mark_unread"}'\`
+        → {"status":"mark_unread","jid":"33612345678@s.whatsapp.net"}`,
   },
   {
     meta: {
@@ -203,6 +261,24 @@ export default [
       });
     },
     schema: chatStarSchema,
+    docstring: `Star or unstar a message.
+
+Parameters:
+    - jid (required): Chat JID.
+    - message_id (required): Message ID to star/unstar.
+    - star (optional): true to star, false to unstar. Default true.
+    - from_me (optional): Whether the message was sent by you. Default false.
+
+Examples:
+    - Star a message:
+        \`whats-proxy do chat-star '{"jid":"33612345678","message_id":"ABC123","star":true}'\`
+        → {"status":"starred","jid":"33612345678@s.whatsapp.net","message_id":"ABC123"}
+    - Unstar a message:
+        \`whats-proxy do chat-star '{"jid":"33612345678","message_id":"ABC123","star":false}'\`
+        → {"status":"unstarred","jid":"33612345678@s.whatsapp.net","message_id":"ABC123"}
+    - Star your own message in a group:
+        \`whats-proxy do chat-star '{"jid":"120363000000000@g.us","message_id":"MSG456","star":true,"from_me":true}'\`
+        → {"status":"starred","jid":"120363000000000@g.us","message_id":"MSG456"}`,
   },
   {
     meta: {
@@ -228,5 +304,21 @@ export default [
       });
     },
     schema: chatDisappearingSchema,
+    docstring: `Set disappearing messages timer for a chat. Available durations: 0 (off), 86400 (24h), 604800 (7 days), 7776000 (90 days).
+
+Parameters:
+    - jid (required): Chat JID.
+    - duration (required): Disappearing timer in seconds: 0=off, 86400=24h, 604800=7d, 7776000=90d.
+
+Examples:
+    - Enable 24h disappearing messages:
+        \`whats-proxy do chat-disappearing '{"jid":"33612345678","duration":86400}'\`
+        → {"status":"set","jid":"33612345678@s.whatsapp.net","disappearing":"24 hours"}
+    - Enable 7-day disappearing messages:
+        \`whats-proxy do chat-disappearing '{"jid":"120363000000000@g.us","duration":604800}'\`
+        → {"status":"set","jid":"120363000000000@g.us","disappearing":"7 days"}
+    - Disable disappearing messages:
+        \`whats-proxy do chat-disappearing '{"jid":"33612345678","duration":0}'\`
+        → {"status":"set","jid":"33612345678@s.whatsapp.net","disappearing":"off"}`,
   },
 ] satisfies ActionDef[];

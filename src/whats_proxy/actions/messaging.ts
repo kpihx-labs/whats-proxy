@@ -148,6 +148,24 @@ export default [
       return _fmtSent(result, to);
     },
     schema: sendTextSchema,
+    docstring: `Send a text message to a contact or group. Supports @mentions and replying to a specific message via quoted_id.
+
+Parameters:
+    - jid (required): Recipient JID or phone number.
+    - text (required): Message text. Supports *bold*, _italic_, ~strikethrough~.
+    - quoted_id (optional): Message ID to reply to.
+    - mentions (optional): Array of JIDs to @mention.
+
+Examples:
+    - Send a text message:
+        \`whats-proxy do send-text '{"jid":"33612345678","text":"Hello!"}'\`
+        → {"status":"sent","jid":"33612345678@s.whatsapp.net","message_id":"ABC123","timestamp":1756614000}
+    - Reply to a specific message:
+        \`whats-proxy do send-text '{"jid":"33612345678","text":"Replying here","quoted_id":"MSG456"}'\`
+        → {"status":"sent","jid":"33612345678@s.whatsapp.net","message_id":"DEF789","timestamp":1756614001}
+    - Text with mentions in a group:
+        \`whats-proxy do send-text '{"jid":"120363xxx@g.us","text":"@Alice check this","mentions":["33600000000@s.whatsapp.net"]}'\`
+        → {"status":"sent","jid":"120363xxx@g.us","message_id":"GHI012","timestamp":1756614002}`,
   },
   {
     meta: {
@@ -177,6 +195,24 @@ export default [
       return _fmtSent(result, to);
     },
     schema: sendImageSchema,
+    docstring: `Send an image to a contact or group. Media source can be a URL, base64 data, or local file path.
+
+Parameters:
+    - jid (required): Recipient JID or phone number.
+    - source (required): Image source: URL, base64 string, or local file path.
+    - caption (optional): Caption for the image.
+    - quoted_id (optional): Message ID to reply to.
+
+Examples:
+    - Send a local image with caption:
+        \`whats-proxy do send-image '{"jid":"33612345678","source":"/home/user/Pictures/diagram.png","caption":"Architecture diagram"}'\`
+        → {"status":"sent","jid":"33612345678@s.whatsapp.net","message_id":"IMG001","timestamp":1756614000}
+    - Send a remote image to a group:
+        \`whats-proxy do send-image '{"jid":"120363000000000@g.us","source":"https://example.com/announcement.jpg","caption":"Announcement"}'\`
+        → {"status":"sent","jid":"120363000000000@g.us","message_id":"IMG002","timestamp":1756614001}
+    - Reply with an image:
+        \`whats-proxy do send-image '{"jid":"33612345678","source":"/home/user/Pictures/receipt.jpg","quoted_id":"ABC123"}'\`
+        → {"status":"sent","jid":"33612345678@s.whatsapp.net","message_id":"IMG003","timestamp":1756614002}`,
   },
   {
     meta: {
@@ -210,6 +246,26 @@ export default [
       return _fmtSent(result, to);
     },
     schema: sendVideoSchema,
+    docstring: `Send a video to a contact or group. Set gif_playback=true for a GIF, or ptv=true for a video note (circle).
+
+Parameters:
+    - jid (required): Recipient JID or phone number.
+    - source (required): Video source: URL, base64, or local path.
+    - caption (optional): Caption for the video.
+    - gif_playback (optional): Send as GIF. Default false.
+    - ptv (optional): Send as video note / circle message. Default false.
+    - quoted_id (optional): Message ID to reply to.
+
+Examples:
+    - Send a local video with caption:
+        \`whats-proxy do send-video '{"jid":"33612345678","source":"/home/user/Videos/demo.mp4","caption":"Demo recording"}'\`
+        → {"status":"sent","jid":"33612345678@s.whatsapp.net","message_id":"VID001","timestamp":1756614000}
+    - Send as GIF to a group:
+        \`whats-proxy do send-video '{"jid":"120363000000000@g.us","source":"/home/user/Videos/loop.mp4","gif_playback":true}'\`
+        → {"status":"sent","jid":"120363000000000@g.us","message_id":"VID002","timestamp":1756614001}
+    - Send as video note:
+        \`whats-proxy do send-video '{"jid":"33612345678","source":"/home/user/Videos/answer.mp4","ptv":true}'\`
+        → {"status":"sent","jid":"33612345678@s.whatsapp.net","message_id":"VID003","timestamp":1756614002}`,
   },
   {
     meta: {
@@ -234,6 +290,24 @@ export default [
       return _fmtSent(result, to);
     },
     schema: sendAudioSchema,
+    docstring: `Send an audio file or voice note. Set ptt=true to send as a voice note (push-to-talk style).
+
+Parameters:
+    - jid (required): Recipient JID or phone number.
+    - source (required): Audio source: URL, base64, or local path.
+    - ptt (optional): Send as voice note (push-to-talk). Default false.
+    - quoted_id (optional): Message ID to reply to.
+
+Examples:
+    - Send an audio file:
+        \`whats-proxy do send-audio '{"jid":"33612345678","source":"/home/user/Music/song.mp3"}'\`
+        → {"status":"sent","jid":"33612345678@s.whatsapp.net","message_id":"AUD001","timestamp":1756614000}
+    - Send a voice note:
+        \`whats-proxy do send-audio '{"jid":"33612345678","source":"/home/user/recordings/note.ogg","ptt":true}'\`
+        → {"status":"sent","jid":"33612345678@s.whatsapp.net","message_id":"AUD002","timestamp":1756614001}
+    - Reply with audio:
+        \`whats-proxy do send-audio '{"jid":"120363000000000@g.us","source":"https://example.com/podcast.mp3","quoted_id":"MSG123"}'\`
+        → {"status":"sent","jid":"120363000000000@g.us","message_id":"AUD003","timestamp":1756614002}`,
   },
   {
     meta: {
@@ -269,6 +343,26 @@ export default [
       return _fmtSent(result, to);
     },
     schema: sendDocumentSchema,
+    docstring: `Send a document/file to a contact or group. Supports any file type.
+
+Parameters:
+    - jid (required): Recipient JID or phone number.
+    - source (required): Document source: URL, base64, or local path.
+    - filename (optional): Display filename (e.g. 'report.pdf').
+    - mimetype (optional): MIME type (e.g. 'application/pdf'). Auto-detected if omitted.
+    - caption (optional): Caption for the document.
+    - quoted_id (optional): Message ID to reply to.
+
+Examples:
+    - Send a local PDF:
+        \`whats-proxy do send-document '{"jid":"33612345678","source":"/home/user/Documents/report.pdf","filename":"report.pdf","mimetype":"application/pdf"}'\`
+        → {"status":"sent","jid":"33612345678@s.whatsapp.net","message_id":"DOC001","timestamp":1756614000}
+    - Send a remote document to a group:
+        \`whats-proxy do send-document '{"jid":"120363000000000@g.us","source":"https://example.com/agenda.pdf","filename":"agenda.pdf"}'\`
+        → {"status":"sent","jid":"120363000000000@g.us","message_id":"DOC002","timestamp":1756614001}
+    - Reply with a document:
+        \`whats-proxy do send-document '{"jid":"33612345678","source":"/home/user/Documents/answer.pdf","quoted_id":"ABC123"}'\`
+        → {"status":"sent","jid":"33612345678@s.whatsapp.net","message_id":"DOC003","timestamp":1756614002}`,
   },
   {
     meta: {
@@ -291,6 +385,23 @@ export default [
       return _fmtSent(result, to);
     },
     schema: sendStickerSchema,
+    docstring: `Send a sticker (WebP format recommended).
+
+Parameters:
+    - jid (required): Recipient JID or phone number.
+    - source (required): Sticker image source: URL, base64, or local path (WebP format).
+    - quoted_id (optional): Message ID to reply to.
+
+Examples:
+    - Send a local sticker:
+        \`whats-proxy do send-sticker '{"jid":"33612345678","source":"/home/user/Stickers/funny.webp"}'\`
+        → {"status":"sent","jid":"33612345678@s.whatsapp.net","message_id":"STK001","timestamp":1756614000}
+    - Send a remote sticker to a group:
+        \`whats-proxy do send-sticker '{"jid":"120363000000000@g.us","source":"https://example.com/meme.webp"}'\`
+        → {"status":"sent","jid":"120363000000000@g.us","message_id":"STK002","timestamp":1756614001}
+    - Reply with a sticker:
+        \`whats-proxy do send-sticker '{"jid":"33612345678","source":"/home/user/Stickers/emoji.webp","quoted_id":"MSG456"}'\`
+        → {"status":"sent","jid":"33612345678@s.whatsapp.net","message_id":"STK003","timestamp":1756614002}`,
   },
   {
     meta: {
@@ -324,6 +435,26 @@ export default [
       return _fmtSent(result, to);
     },
     schema: sendLocationSchema,
+    docstring: `Send a GPS location pin.
+
+Parameters:
+    - jid (required): Recipient JID or phone number.
+    - latitude (required): Latitude (decimal degrees).
+    - longitude (required): Longitude (decimal degrees).
+    - name (optional): Location name.
+    - address (optional): Address text.
+    - quoted_id (optional): Message ID to reply to.
+
+Examples:
+    - Send a named location:
+        \`whats-proxy do send-location '{"jid":"33612345678","latitude":48.8566,"longitude":2.3522,"name":"Paris","address":"France"}'\`
+        → {"status":"sent","jid":"33612345678@s.whatsapp.net","message_id":"LOC001","timestamp":1756614000}
+    - Send coordinates without name:
+        \`whats-proxy do send-location '{"jid":"120363000000000@g.us","latitude":45.7640,"longitude":4.8357}'\`
+        → {"status":"sent","jid":"120363000000000@g.us","message_id":"LOC002","timestamp":1756614001}
+    - Reply with a location:
+        \`whats-proxy do send-location '{"jid":"33612345678","latitude":51.5074,"longitude":-0.1278,"name":"London","quoted_id":"MSG789"}'\`
+        → {"status":"sent","jid":"33612345678@s.whatsapp.net","message_id":"LOC003","timestamp":1756614002}`,
   },
   {
     meta: {
@@ -362,6 +493,23 @@ export default [
       return _fmtSent(result, to);
     },
     schema: sendContactSchema,
+    docstring: `Send one or more contact cards (vCards).
+
+Parameters:
+    - jid (required): Recipient JID or phone number.
+    - contacts (required): Array of { name, phone } objects to send.
+    - quoted_id (optional): Message ID to reply to.
+
+Examples:
+    - Send a single contact:
+        \`whats-proxy do send-contact '{"jid":"33612345678","contacts":[{"name":"Alice","phone":"33600000000"}]}'\`
+        → {"status":"sent","jid":"33612345678@s.whatsapp.net","message_id":"CON001","timestamp":1756614000}
+    - Send multiple contacts:
+        \`whats-proxy do send-contact '{"jid":"120363000000000@g.us","contacts":[{"name":"Alice","phone":"33600000000"},{"name":"Bob","phone":"33611111111"}]}'\`
+        → {"status":"sent","jid":"120363000000000@g.us","message_id":"CON002","timestamp":1756614001}
+    - Reply with a contact card:
+        \`whats-proxy do send-contact '{"jid":"33612345678","contacts":[{"name":"Support","phone":"33622222222"}],"quoted_id":"MSG123"}'\`
+        → {"status":"sent","jid":"33612345678@s.whatsapp.net","message_id":"CON003","timestamp":1756614002}`,
   },
   {
     meta: {
@@ -398,6 +546,24 @@ export default [
       });
     },
     schema: sendReactionSchema,
+    docstring: `React to a message with an emoji. Send an empty emoji string to remove the reaction.
+
+Parameters:
+    - jid (required): Chat JID where the message is.
+    - message_id (required): ID of the message to react to.
+    - emoji (required): Emoji reaction (e.g. '👍', '❤️'). Empty string to remove.
+    - from_me (optional): Whether the target message was sent by you. Default false.
+
+Examples:
+    - React with a thumbs up:
+        \`whats-proxy do send-reaction '{"jid":"33612345678","message_id":"ABC123","emoji":"👍"}'\`
+        → {"status":"reacted","jid":"33612345678@s.whatsapp.net","message_id":"ABC123","emoji":"👍"}
+    - React to your own message:
+        \`whats-proxy do send-reaction '{"jid":"120363000000000@g.us","message_id":"MSG456","emoji":"❤️","from_me":true}'\`
+        → {"status":"reacted","jid":"120363000000000@g.us","message_id":"MSG456","emoji":"❤️"}
+    - Remove a reaction:
+        \`whats-proxy do send-reaction '{"jid":"33612345678","message_id":"ABC123","emoji":""}'\`
+        → {"status":"reaction_removed","jid":"33612345678@s.whatsapp.net","message_id":"ABC123","emoji":null}`,
   },
   {
     meta: {
@@ -430,6 +596,24 @@ export default [
       return _fmtSent(result, to);
     },
     schema: sendPollSchema,
+    docstring: `Create a poll in a chat. By default single-select; set selectable_count > 1 for multi-select.
+
+Parameters:
+    - jid (required): Recipient JID or phone number.
+    - question (required): Poll question text.
+    - options (required): Array of poll option strings (2-12).
+    - selectable_count (optional): How many options can be selected (default 1).
+
+Examples:
+    - Single-select poll:
+        \`whats-proxy do send-poll '{"jid":"33612345678","question":"Lunch?","options":["Pizza","Sushi","Tacos"]}'\`
+        → {"status":"sent","jid":"33612345678@s.whatsapp.net","message_id":"POLL001","timestamp":1756614000}
+    - Multi-select poll in a group:
+        \`whats-proxy do send-poll '{"jid":"120363000000000@g.us","question":"Topics for next meeting?","options:["Sprint","Roadblock","Demo"],"selectable_count":3}'\`
+        → {"status":"sent","jid":"120363000000000@g.us","message_id":"POLL002","timestamp":1756614001}
+    - Poll with error (too few options):
+        \`whats-proxy do send-poll '{"jid":"33612345678","question":"Vote?","options":["Yes"]}'\`
+        → {"meta":{"status":"error","comment":"A poll requires at least 2 options.","edited":false},"data":{"error":"A poll requires at least 2 options."}}`,
   },
   {
     meta: {
@@ -454,6 +638,23 @@ export default [
       return okResult({ status: "edited", jid: to, message_id });
     },
     schema: editMessageSchema,
+    docstring: `Edit a previously sent message (text only). You can only edit messages you sent.
+
+Parameters:
+    - jid (required): Chat JID where the message is.
+    - message_id (required): ID of the message to edit.
+    - new_text (required): New text content.
+
+Examples:
+    - Fix a typo:
+        \`whats-proxy do edit-message '{"jid":"33612345678","message_id":"ABC123","new_text":"Hello, meeting at 15:00"}'\`
+        → {"status":"edited","jid":"33612345678@s.whatsapp.net","message_id":"ABC123"}
+    - Edit a group announcement:
+        \`whats-proxy do edit-message '{"jid":"120363000000000@g.us","message_id":"MSG456","new_text":"*Updated*\nSprint moved to Thursday"}'\`
+        → {"status":"edited","jid":"120363000000000@g.us","message_id":"MSG456"}
+    - Edit with formatting:
+        \`whats-proxy do edit-message '{"jid":"33612345678","message_id":"MSG789","new_text":"*Important* deadline: *Friday* 18:00"}'\`
+        → {"status":"edited","jid":"33612345678@s.whatsapp.net","message_id":"MSG789"}`,
   },
   {
     meta: {
@@ -481,6 +682,24 @@ export default [
       return okResult({ status: "deleted", jid: to, message_id });
     },
     schema: deleteMessageSchema,
+    docstring: `Delete (revoke) a message. You can delete your own messages for everyone, or in groups admins can delete anyone's messages.
+
+Parameters:
+    - jid (required): Chat JID.
+    - message_id (required): ID of the message to delete.
+    - from_me (optional): Whether you sent the message. Default true.
+    - participant (optional): In groups: JID of the message sender (required if from_me=false).
+
+Examples:
+    - Delete your own message:
+        \`whats-proxy do delete-message '{"jid":"33612345678","message_id":"ABC123","from_me":true}'\`
+        → {"status":"deleted","jid":"33612345678@s.whatsapp.net","message_id":"ABC123"}
+    - Delete a group message you sent:
+        \`whats-proxy do delete-message '{"jid":"120363000000000@g.us","message_id":"MSG456","from_me":true}'\`
+        → {"status":"deleted","jid":"120363000000000@g.us","message_id":"MSG456"}
+    - Admin delete someone else's message:
+        \`whats-proxy do delete-message '{"jid":"120363000000000@g.us","message_id":"MSG789","from_me":false,"participant":"33600000000@s.whatsapp.net"}'\`
+        → {"status":"deleted","jid":"120363000000000@g.us","message_id":"MSG789"}`,
   },
   {
     meta: {
@@ -504,6 +723,22 @@ export default [
       return _fmtSent(result, to);
     },
     schema: forwardMessageSchema,
+    docstring: `Forward an existing message to another chat.
+
+Parameters:
+    - to_jid (required): Destination JID to forward to.
+    - message_id (required): ID of the message to forward.
+
+Examples:
+    - Forward to a contact:
+        \`whats-proxy do forward-message '{"to_jid":"33612345678","message_id":"ABC123"}'\`
+        → {"status":"sent","jid":"33612345678@s.whatsapp.net","message_id":"FWD001","timestamp":1756614000}
+    - Forward to a group:
+        \`whats-proxy do forward-message '{"to_jid":"120363000000000@g.us","message_id":"MSG456"}'\`
+        → {"status":"sent","jid":"120363000000000@g.us","message_id":"FWD002","timestamp":1756614001}
+    - Forward with error (message not found):
+        \`whats-proxy do forward-message '{"to_jid":"33612345678","message_id":"NONEXISTENT"}'\`
+        → {"meta":{"status":"error","comment":"Message NONEXISTENT not found in store. It must be a recent message.","edited":false},"data":{"error":"Message NONEXISTENT not found in store. It must be a recent message."}}`,
   },
   {
     meta: {
@@ -548,6 +783,23 @@ export default [
       return okResult({ total: list.length, sent, failed, results });
     },
     schema: batchSendTextSchema,
+    docstring: `Send the same text message to multiple recipients. Returns a summary of successes and failures.
+
+Parameters:
+    - jids (required): Array of recipient JIDs or phone numbers.
+    - text (required): Message text to send to all recipients.
+    - delay_ms (optional): Delay in ms between sends to avoid rate-limiting. Default 1000.
+
+Examples:
+    - Broadcast to two contacts:
+        \`whats-proxy do batch-send-text '{"jids":["33612345678","33600000000"],"text":"Meeting starts in ten minutes."}'\`
+        → {"total":2,"sent":2,"failed":0,"results":[{"jid":"33612345678@s.whatsapp.net","status":"sent","message_id":"BATCH001"},{"jid":"33600000000@s.whatsapp.net","status":"sent","message_id":"BATCH002"}]}
+    - Broadcast with rate limiting:
+        \`whats-proxy do batch-send-text '{"jids":["33612345678","33600000000"],"text":"*Reminder*\nPlease confirm attendance.","delay_ms":1500}'\`
+        → {"total":2,"sent":2,"failed":0,"results":[{"jid":"33612345678@s.whatsapp.net","status":"sent","message_id":"BATCH003"},{"jid":"33600000000@s.whatsapp.net","status":"sent","message_id":"BATCH004"}]}
+    - Broadcast with some failures:
+        \`whats-proxy do batch-send-text '{"jids":["33612345678","invalid"],"text":"Hello!"}'\`
+        → {"total":2,"sent":1,"failed":1,"results":[{"jid":"33612345678@s.whatsapp.net","status":"sent","message_id":"BATCH005"},{"jid":"invalid@s.whatsapp.net","status":"failed","error":"Invalid JID"}]}`,
   },
   // ── send-batch: unified multi-recipient multi-part send ──────────────────
   {
@@ -637,5 +889,23 @@ export default [
       return okResult({ total: totalSends, sent, failed, results });
     },
     schema: sendBatchSchema,
+    docstring: `Send multiple content types to one or more recipients in a single call. Each part becomes one WhatsApp message; every part is sent to every recipient.
+
+Parameters:
+    - to (required): Recipient(s): a single JID/phone string or an array of them.
+    - parts (required): Array of content objects. Each must have a 'type' key (text, image, video, audio, document, sticker, location, contact, poll) plus type-specific fields.
+    - quoted_id (optional): Global message ID to reply/quote (overridable per part).
+    - delay_ms (optional): Delay in ms between individual sends. Default 500.
+
+Examples:
+    - Text to two recipients:
+        \`whats-proxy do send-batch '{"to":["33612345678","33600000000"],"parts":[{"type":"text","text":"Meeting at 3pm."}]}'\`
+        → {"total":2,"sent":2,"failed":0,"results":[{"jid":"33612345678@s.whatsapp.net","type":"text","status":"sent","message_id":"BAT001","timestamp":1756614000},{"jid":"33600000000@s.whatsapp.net","type":"text","status":"sent","message_id":"BAT002","timestamp":1756614000}]}
+    - Image + text to a group:
+        \`whats-proxy do send-batch '{"to":"120363000000000@g.us","parts":[{"type":"text","text":"Check this out"},{"type":"image","source":"/tmp/photo.jpg","caption":"Figure 1"}]}'\`
+        → {"total":2,"sent":2,"failed":0,"results":[{"jid":"120363000000000@g.us","type":"text","status":"sent","message_id":"BAT003","timestamp":1756614001},{"jid":"120363000000000@g.us","type":"image","status":"sent","message_id":"BAT004","timestamp":1756614001}]}
+    - Mixed parts with per-part reply targets:
+        \`whats-proxy do send-batch '{"to":"33612345678","parts":[{"type":"text","text":"See attached"},{"type":"image","source":"/tmp/chart.png","quoted_id":"MSG123"}]}'\`
+        → {"total":2,"sent":2,"failed":0,"results":[{"jid":"33612345678@s.whatsapp.net","type":"text","status":"sent","message_id":"BAT005","timestamp":1756614002},{"jid":"33612345678@s.whatsapp.net","type":"image","status":"sent","message_id":"BAT006","timestamp":1756614002}]}`,
   },
 ] satisfies ActionDef[];

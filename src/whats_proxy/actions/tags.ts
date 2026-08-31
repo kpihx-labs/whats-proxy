@@ -87,5 +87,23 @@ export default [
       }
     },
     schema: contactTagsSchema,
+    docstring: `Manage custom contact tags/labels for classification.
+
+Parameters:
+    - action (required): Action to perform: set | add | remove | get | list | list_by_tag.
+    - jid (optional): Contact JID or phone number (required for set/add/remove/get).
+    - tags (optional): Tags to set/add/remove.
+    - tag (optional): Tag name for list_by_tag action.
+
+Examples:
+    - Set tags on a contact:
+        \`whats-proxy do contact-tags '{"action":"set","jid":"33612345678","tags":["x24","important"]}'\`
+        → {"jid":"33612345678@s.whatsapp.net","tags":["x24","important"]}
+    - List all tags with counts:
+        \`whats-proxy do contact-tags '{"action":"list"}'\`
+        → {"tags":["x24","important","family","work"],"counts":{"x24":12,"important":8,"family":5,"work":20}}
+    - Get contacts by tag:
+        \`whats-proxy do contact-tags '{"action":"list_by_tag","tag":"x24"}'\`
+        → {"tag":"x24","count":12,"contacts":[{"jid":"33612345678@s.whatsapp.net","phone":"33612345678","name":"Alice","tags":["x24","important"]}]}`,
   },
 ] satisfies ActionDef[];

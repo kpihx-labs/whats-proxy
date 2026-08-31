@@ -31,6 +31,21 @@ export default [
       return okResult({ status: "updated", name: value });
     },
     schema: profileNameSchema,
+    docstring: `Change your WhatsApp display name.
+
+Parameters:
+    - name (required): New display name (max 25 characters).
+
+Examples:
+    - Update display name:
+        \`whats-proxy do profile-name '{"name":"Ivann"}'\`
+        → {"status":"updated","name":"Ivann"}
+    - Set a shorter name:
+        \`whats-proxy do profile-name '{"name":"KπX"}'\`
+        → {"status":"updated","name":"KπX"}
+    - Name too long (error):
+        \`whats-proxy do profile-name '{"name":"This name is way too long for WhatsApp"}'\`
+        → {"meta":{"status":"error","comment":"Name must be between 1 and 25 characters.","edited":false},"data":{"error":"Name must be between 1 and 25 characters."}}`,
   },
   {
     meta: {
@@ -48,6 +63,21 @@ export default [
       return okResult({ status: "updated", about: text });
     },
     schema: profileAboutSchema,
+    docstring: `Change your WhatsApp 'About' status text.
+
+Parameters:
+    - text (required): New about text (max 139 characters). Empty string to clear.
+
+Examples:
+    - Set about text:
+        \`whats-proxy do profile-about '{"text":"Building things."}'\`
+        → {"status":"updated","about":"Building things."}
+    - Set a longer status:
+        \`whats-proxy do profile-about '{"text":"System architect | École Polytechnique X24 | Open to opportunities"}'\`
+        → {"status":"updated","about":"System architect | École Polytechnique X24 | Open to opportunities"}
+    - Clear about text:
+        \`whats-proxy do profile-about '{"text":""}'\`
+        → {"status":"updated","about":""}`,
   },
   {
     meta: {
@@ -79,6 +109,21 @@ export default [
       return okResult({ status: "updated" });
     },
     schema: profilePictureSchema,
+    docstring: `Change your WhatsApp profile picture.
+
+Parameters:
+    - source (required): Image source: URL, base64, or local file path. Use 'remove' to delete.
+
+Examples:
+    - Set profile picture from local file:
+        \`whats-proxy do profile-picture '{"source":"/home/user/Pictures/avatar.jpg"}'\`
+        → {"status":"updated"}
+    - Set from URL:
+        \`whats-proxy do profile-picture '{"source":"https://example.com/photo.png"}'\`
+        → {"status":"updated"}
+    - Remove profile picture:
+        \`whats-proxy do profile-picture '{"source":"remove"}'\`
+        → {"status":"removed"}`,
   },
   {
     meta: {
@@ -129,5 +174,22 @@ export default [
       return errResult(`Unknown action: ${action}`);
     },
     schema: profilePrivacySchema,
+    docstring: `Get or update WhatsApp privacy settings.
+
+Parameters:
+    - action (required): 'get' to retrieve all privacy settings, 'set' to update one.
+    - setting (optional): Privacy setting: last_seen | online | profile_picture | about | read_receipts | groups_add | default_disappearing.
+    - value (optional): New value: all | contacts | contact_blacklist | none | match_last_seen.
+
+Examples:
+    - Get all privacy settings:
+        \`whats-proxy do profile-privacy '{"action":"get"}'\`
+        → {"privacy":{"last_seen":"contacts","online":"match_last_seen","profile_picture":"contacts","about":"contacts","read_receipts":"all","groups_add":"contacts"}}
+    - Set last_seen to contacts only:
+        \`whats-proxy do profile-privacy '{"action":"set","setting":"last_seen","value":"contacts"}'\`
+        → {"status":"updated","setting":"last_seen","value":"contacts"}
+    - Disable read receipts:
+        \`whats-proxy do profile-privacy '{"action":"set","setting":"read_receipts","value":"none"}'\`
+        → {"status":"updated","setting":"read_receipts","value":"none"}`,
   },
 ] satisfies ActionDef[];

@@ -34,7 +34,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { loadConfig, migrateLegacyState, getDefaultAccount, canonicalPhone, type AppConfig } from "./config.ts";
 import { logger } from "./logger.ts";
 import { print_json, output_result, print_error } from "./display.ts";
-import { getCompactHelp, getActionHelp } from "./doc.ts";
+import { getCompactHelp, getFullHelp, getCatalogHelp } from "./doc.ts";
 import { WhatsProxyError } from "./exceptions.ts";
 import { REGISTRY } from "./actions/registry.ts";
 import { validateRequiredArguments } from "./actions/types.ts";
@@ -202,7 +202,7 @@ async function cmdDo(argv: string[]): Promise<number> {
           ) + "\n",
         );
       } else {
-        process.stdout.write(getActionHelp(action, REGISTRY) + "\n");
+        process.stdout.write(getFullHelp(REGISTRY[action]!) + "\n");
       }
       return 0;
     }
@@ -210,7 +210,7 @@ async function cmdDo(argv: string[]): Promise<number> {
       "For detailed information and examples on a specific action, run:\n" +
         "  whats-proxy do <action> --help\n\n",
     );
-    process.stdout.write(getCompactHelp(REGISTRY) + "\n");
+    process.stdout.write(getCatalogHelp(REGISTRY) + "\n");
     return 0;
   }
 

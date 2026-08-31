@@ -243,6 +243,24 @@ export default [
       });
     },
     schema: whatsupSchema,
+    docstring: `DAILY WHATSAPP OVERVIEW — returns a complete structured overview from midnight today to now.
+
+Parameters:
+    - since (optional): Start Unix timestamp. Default: midnight today.
+    - until (optional): End Unix timestamp. Default: now.
+    - watchlists (optional): Only show these watchlists (default: all).
+    - limit_per_chat (optional): Max messages per chat (default: 50, max: 200).
+
+Examples:
+    - Get today's overview:
+        \`whats-proxy do whatsup '{}'\`
+        → {"date":"30/08/2026","period":{"since":1756550400,"until":1756614000},"summary":{"total_active_chats":12,"watchlist_chats":3,"other_chats":9,"total_messages":156,"needs_reply_count":4},"watchlist_chats":[{"jid":"120363000000000@g.us","name":"X24 Project","message_count":45,"needs_reply":true}],"other_chats":[],"needs_reply":[{"jid":"33612345678","name":"Alice","last_message":{"text":"Are you available?","from_me":false}}]}
+    - Overview for a specific watchlist:
+        \`whats-proxy do whatsup '{"watchlists":["work"]}'\`
+        → {"date":"30/08/2026","summary":{"total_active_chats":5,"watchlist_chats":2,"other_chats":3,"total_messages":89,"needs_reply_count":1}}
+    - Overview with custom time range:
+        \`whats-proxy do whatsup '{"since":1756580000,"until":1756614000}'\`
+        → {"date":"30/08/2026","period":{"since":1756580000,"until":1756614000},"summary":{"total_active_chats":8,"watchlist_chats":2,"other_chats":6,"total_messages":67,"needs_reply_count":2}}`,
   },
   {
     meta: {
@@ -348,5 +366,24 @@ export default [
       });
     },
     schema: findMessagesSchema,
+    docstring: `SMART SEMANTIC MESSAGE SEARCH — intelligent multi-keyword search with automatic topic expansion.
+
+Parameters:
+    - query (required): Topic or question to search for (French or English).
+    - since (optional): Only include messages after this Unix timestamp.
+    - until (optional): Only include messages before this Unix timestamp.
+    - limit (optional): Max total results (default: 80, max: 300).
+    - watchlist_only (optional): If true, restrict search to watchlist chats only.
+
+Examples:
+    - Search for AI-related messages:
+        \`whats-proxy do find-messages '{"query":"IA"}'\`
+        → {"query":"IA","expanded_keywords":["ia","intelligence artificielle","ai","machine learning","llm","gpt"],"total_messages":12,"total_chats":4,"watchlist_matches":2,"chats":[{"jid":"120363000000000@g.us","name":"X24 Project","messages":[{"id":"MSG001","text":"L'IA avance vite","matched_keywords":["ia","ai"]}]}]}
+    - Search for job offers:
+        \`whats-proxy do find-messages '{"query":"offres emploi","since":1786550400}'\`
+        → {"query":"offres emploi","expanded_keywords":["offre","emploi","job","poste","cdi"],"total_messages":8,"total_chats":3,"watchlist_matches":1,"chats":[]}
+    - Watchlist-only search:
+        \`whats-proxy do find-messages '{"query":"urgence","watchlist_only":true}'\`
+        → {"query":"urgence","expanded_keywords":["urgent","urgence","asap","help"],"total_messages":3,"total_chats":2,"watchlist_matches":2,"chats":[{"jid":"33612345678","name":"Alice","messages":[{"id":"MSG002","text":"Urgent: need reply ASAP","matched_keywords":["urgence","urgent"]}]}]}`,
   },
 ] satisfies ActionDef[];

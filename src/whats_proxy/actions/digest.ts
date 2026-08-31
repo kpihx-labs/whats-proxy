@@ -103,6 +103,27 @@ export default [
       });
     },
     schema: messagesMultiSchema,
+    docstring: `Get messages from multiple chats in one call. Specify JIDs directly or use a named watchlist from config.
+
+Parameters:
+    - jids (optional): Array of chat JIDs or phone numbers to fetch messages from.
+    - watchlist (optional): Name of a watchlist from config. Used if jids is empty.
+    - limit_per_chat (optional): Max messages per chat (default 50, max 200).
+    - since (optional): Unix timestamp: only include messages at or after this time.
+    - until (optional): Unix timestamp: only include messages at or before this time.
+    - include_types (optional): Only include messages of these types.
+    - exclude_types (optional): Exclude messages of these types.
+
+Examples:
+    - Fetch messages from two chats:
+        \`whats-proxy do messages-multi '{"jids":["33612345678","120363000000000@g.us"]}'\`
+        → {"total_chats":2,"total_messages":45,"filters":{"limit_per_chat":50},"chats":[{"jid":"33612345678@s.whatsapp.net","name":"Alice","is_group":false,"count":20,"messages":[]},{"jid":"120363000000000@g.us","name":"X24 Project","is_group":true,"count":25,"messages":[]}]}
+    - Fetch from a watchlist with time filter:
+        \`whats-proxy do messages-multi '{"watchlist":"work","since":1756600000}'\`
+        → {"total_chats":3,"total_messages":28,"filters":{"since":1756600000,"limit_per_chat":50},"chats":[]}
+    - Fetch with type filter:
+        \`whats-proxy do messages-multi '{"jids":["33612345678"],"include_types":["text"],"limit_per_chat":10}'\`
+        → {"total_chats":1,"total_messages":10,"filters":{"include_types":["text"],"limit_per_chat":10},"chats":[{"jid":"33612345678@s.whatsapp.net","name":"Alice","is_group":false,"count":10,"messages":[]}]}`,
   },
   {
     meta: {
@@ -199,5 +220,25 @@ export default [
       });
     },
     schema: dailyDigestSchema,
+    docstring: `Generate a structured daily digest of messages across specified chats. Defaults to the last 24 hours.
+
+Parameters:
+    - jids (optional): Array of chat JIDs or phone numbers.
+    - watchlist (optional): Name of a watchlist from config. Used if jids is empty.
+    - since (optional): Unix timestamp for period start. Default: 24 hours ago.
+    - until (optional): Unix timestamp for period end. Default: now.
+    - limit_per_chat (optional): Max messages per chat (default 100, max 500).
+    - exclude_types (optional): Exclude these message types (e.g. reaction, protocol).
+
+Examples:
+    - Daily digest from a watchlist:
+        \`whats-proxy do daily-digest '{"watchlist":"evening_digest"}'\`
+        → {"period":{"since":1756527600,"until":1756614000,"since_iso":"2026-08-29T18:00:00.000Z","until_iso":"2026-08-30T18:00:00.000Z"},"summary":{"total_chats":5,"total_messages":89,"total_from_me":23,"total_from_others":66},"chats":[{"jid":"120363000000000@g.us","name":"X24 Project","message_count":45,"from_me":12,"from_others":33}]}
+    - Digest with custom time range:
+        \`whats-proxy do daily-digest '{"since":1756580000,"until":1756614000}'\`
+        → {"period":{"since":1756580000,"until":1756614000},"summary":{"total_chats":8,"total_messages":67,"total_from_me":18,"total_from_others":49}}
+    - Digest excluding reactions:
+        \`whats-proxy do daily-digest '{"exclude_types":["reaction","protocol"]}'\`
+        → {"period":{"since":1756527600,"until":1756614000},"summary":{"total_chats":12,"total_messages":156,"total_from_me":34,"total_from_others":122}}`,
   },
 ] satisfies ActionDef[];

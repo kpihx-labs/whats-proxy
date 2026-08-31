@@ -68,6 +68,24 @@ export default [
       return errResult(`Unknown action: ${action}`);
     },
     schema: labelManageSchema,
+    docstring: `Create, edit, or delete a WhatsApp Business label. Only available for WhatsApp Business accounts.
+
+Parameters:
+    - action (required): Action to perform: create | edit | delete | list.
+    - label_id (optional): Label ID (required for edit/delete).
+    - name (optional): Label name (required for create/edit).
+    - color (optional): Label color index (0-19).
+
+Examples:
+    - List all labels:
+        \`whats-proxy do label-manage '{"action":"list"}'\`
+        → {"count":4,"labels":[{"id":"1","name":"Important","color":3,"predefined":false},{"id":"2","name":"Follow Up","color":7,"predefined":false}]}
+    - Create a new label:
+        \`whats-proxy do label-manage '{"action":"create","name":"VIP","color":5}'\`
+        → {"status":"created","label":{"id":"5","name":"VIP","color":5}}
+    - Edit a label:
+        \`whats-proxy do label-manage '{"action":"edit","label_id":"5","name":"VIP Client","color":6}'\`
+        → {"status":"edited","label_id":"5"}`,
   },
   {
     meta: {
@@ -95,6 +113,23 @@ export default [
       return errResult(`Unknown action: ${action}`);
     },
     schema: labelChatSchema,
+    docstring: `Add or remove a label from a chat (WhatsApp Business).
+
+Parameters:
+    - action (required): Add or remove the label.
+    - jid (required): Chat JID or phone number.
+    - label_id (required): Label ID to add/remove.
+
+Examples:
+    - Add a label to a chat:
+        \`whats-proxy do label-chat '{"action":"add","jid":"33612345678","label_id":"1"}'\`
+        → {"status":"label_added","jid":"33612345678@s.whatsapp.net","label_id":"1"}
+    - Add a label to a group:
+        \`whats-proxy do label-chat '{"action":"add","jid":"120363000000000@g.us","label_id":"3"}'\`
+        → {"status":"label_added","jid":"120363000000000@g.us","label_id":"3"}
+    - Remove a label from a chat:
+        \`whats-proxy do label-chat '{"action":"remove","jid":"33612345678","label_id":"1"}'\`
+        → {"status":"label_removed","jid":"33612345678@s.whatsapp.net","label_id":"1"}`,
   },
   {
     meta: {
@@ -123,5 +158,23 @@ export default [
       return errResult(`Unknown action: ${action}`);
     },
     schema: labelMessageSchema,
+    docstring: `Add or remove a label from a specific message (WhatsApp Business).
+
+Parameters:
+    - action (required): Add or remove the label.
+    - jid (required): Chat JID.
+    - message_id (required): Message ID to label.
+    - label_id (required): Label ID.
+
+Examples:
+    - Label a message:
+        \`whats-proxy do label-message '{"action":"add","jid":"33612345678","message_id":"ABC123","label_id":"1"}'\`
+        → {"status":"label_added","jid":"33612345678@s.whatsapp.net","message_id":"ABC123","label_id":"1"}
+    - Label an order confirmation:
+        \`whats-proxy do label-message '{"action":"add","jid":"120363000000000@g.us","message_id":"MSG456","label_id":"2"}'\`
+        → {"status":"label_added","jid":"120363000000000@g.us","message_id":"MSG456","label_id":"2"}
+    - Remove a label from a message:
+        \`whats-proxy do label-message '{"action":"remove","jid":"33612345678","message_id":"ABC123","label_id":"1"}'\`
+        → {"status":"label_removed","jid":"33612345678@s.whatsapp.net","message_id":"ABC123","label_id":"1"}`,
   },
 ] satisfies ActionDef[];

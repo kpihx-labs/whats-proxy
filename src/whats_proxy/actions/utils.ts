@@ -34,6 +34,21 @@ export default [
       return okResult(info as unknown as Record<string, unknown>);
     },
     schema: connectionStatusSchema,
+    docstring: `Check the WhatsApp connection status, account info, and store statistics.
+
+Parameters:
+    (none)
+
+Examples:
+    - Check connection status:
+        \`whats-proxy do connection-status '{}'\`
+        → {"state":"open","user":{"id":"33612345678@s.whatsapp.net","name":"Ivann"},"store_stats":{"chats":85,"contacts":250,"messages":12500},"reconnect_attempts":0}
+    - Status when disconnected:
+        \`whats-proxy do connection-status '{}'\`
+        → {"state":"close","user":null,"store_stats":{"chats":85,"contacts":250,"messages":12500},"reconnect_attempts":3}
+    - Status during connecting:
+        \`whats-proxy do connection-status '{}'\`
+        → {"state":"connecting","user":null,"store_stats":{"chats":85,"contacts":250,"messages":12500},"reconnect_attempts":1}`,
   },
   {
     meta: {
@@ -97,6 +112,21 @@ export default [
       });
     },
     schema: guideSchema,
+    docstring: `Get a comprehensive guide on how to use whats-proxy actions.
+
+Parameters:
+    - category (optional): Category: overview | messaging | chats | contacts | groups | profile | channels | labels | analytics | utilities.
+
+Examples:
+    - Get full guide:
+        \`whats-proxy do guide '{}'\`
+        → {"server":"whats-proxy","version":"0.6.0","total_tools":66,"categories":{"messaging":["send-text","send-image","send-video","send-audio","send-document","send-sticker","send-location","send-contact","send-reaction","send-poll","edit-message","delete-message","forward-message","batch-send-text","send-batch"],"chats":["chat-list","chat-read","chat-manage","chat-star","chat-disappearing"]},"tips":["JIDs: Use phone numbers or full JIDs.","Groups: Group JIDs end with @g.us."]}
+    - Get messaging category guide:
+        \`whats-proxy do guide '{"category":"messaging"}'\`
+        → {"category":"messaging","tools":[{"name":"send-text","description":"Send a text message to a contact or group.","parameters":["jid","text","quoted_id","mentions"],"required":["jid","text"]}]}
+    - Get utilities guide:
+        \`whats-proxy do guide '{"category":"utilities"}'\`
+        → {"category":"utilities","tools":[{"name":"connection-status","description":"Check the WhatsApp connection status.","parameters":[],"required":[]}]}`,
   },
   {
     meta: {
@@ -124,6 +154,22 @@ export default [
       return okResult({ status: type, jid: chatJid });
     },
     schema: presenceSchema,
+    docstring: `Send a presence update or typing indicator.
+
+Parameters:
+    - type (required): Presence type: available | unavailable | composing | recording | paused.
+    - jid (optional): Chat JID for composing/recording/paused (required for typing indicators).
+
+Examples:
+    - Show as online:
+        \`whats-proxy do presence '{"type":"available"}'\`
+        → {"status":"available"}
+    - Show typing indicator:
+        \`whats-proxy do presence '{"type":"composing","jid":"33612345678"}'\`
+        → {"status":"composing","jid":"33612345678@s.whatsapp.net"}
+    - Show recording indicator in a group:
+        \`whats-proxy do presence '{"type":"recording","jid":"120363000000000@g.us"}'\`
+        → {"status":"recording","jid":"120363000000000@g.us"}`,
   },
   {
     meta: {
@@ -155,6 +201,23 @@ export default [
       });
     },
     schema: readMessagesSchema,
+    docstring: `Mark specific messages as read (send read receipts).
+
+Parameters:
+    - jid (required): Chat JID.
+    - message_ids (required): Array of message IDs to mark as read.
+    - participant (optional): Sender JID (required for group messages to send proper receipts).
+
+Examples:
+    - Mark one message as read:
+        \`whats-proxy do read-messages '{"jid":"33612345678","message_ids":["ABC123"]}'\`
+        → {"status":"read","jid":"33612345678@s.whatsapp.net","count":1}
+    - Mark multiple messages as read:
+        \`whats-proxy do read-messages '{"jid":"120363000000000@g.us","message_ids":["MSG001","MSG002","MSG003"]}'\`
+        → {"status":"read","jid":"120363000000000@g.us","count":3}
+    - Mark group message as read with participant:
+        \`whats-proxy do read-messages '{"jid":"120363000000000@g.us","message_ids":["MSG004"],"participant":"33612345678@s.whatsapp.net"}'\`
+        → {"status":"read","jid":"120363000000000@g.us","count":1}`,
   },
   {
     meta: {
@@ -196,6 +259,28 @@ export default [
       });
     },
     schema: searchMessagesSchema,
+    docstring: `Search messages in the local store by text content.
+
+Parameters:
+    - query (required): Text to search for (case-insensitive).
+    - jid (optional): Limit search to this chat JID or phone number.
+    - jids (optional): Search across multiple chat JIDs. Takes precedence over jid.
+    - limit (optional): Max results (default 50, max 200).
+    - since (optional): Unix timestamp: only include messages at or after this time.
+    - until (optional): Unix timestamp: only include messages at or before this time.
+    - include_types (optional): Only include messages of these types.
+    - exclude_types (optional): Exclude messages of these types.
+
+Examples:
+    - Global text search:
+        \`whats-proxy do search-messages '{"query":"stage"}'\`
+        → {"query":"stage","count":8,"messages":[{"id":"MSG001","jid":"33612345678","text":"Stage chez DxO confirmé","timestamp":1756614000,"from_me":false}]}
+    - Search in one chat:
+        \`whats-proxy do search-messages '{"query":"meeting","jid":"33612345678","limit":10}'\`
+        → {"query":"meeting","count":5,"messages":[{"id":"MSG002","jid":"33612345678","text":"Meeting scheduled for Friday","timestamp":1756610000,"from_me":true}]}
+    - Search with time range:
+        \`whats-proxy do search-messages '{"query":"deadline","since":1756600000,"until":1756620000}'\`
+        → {"query":"deadline","count":3,"messages":[{"id":"MSG003","jid":"120363000000000@g.us","text":"Deadline moved to next week","timestamp":1756615000,"from_me":false}]}`,
   },
   {
     meta: {
@@ -280,6 +365,21 @@ export default [
       });
     },
     schema: mediaDownloadSchema,
+    docstring: `Download media (image, video, audio, document, sticker) from a message.
+
+Parameters:
+    - message_id (required): Message ID containing media.
+
+Examples:
+    - Download an image:
+        \`whats-proxy do media-download '{"message_id":"IMG001"}'\`
+        → {"message_id":"IMG001","media_type":"image","mimetype":"image/jpeg","filename":"IMG001.jpg","file_length":125000,"saved_to":"/home/kpihx/.cache/whats_media/IMG001.jpg"}
+    - Download a document:
+        \`whats-proxy do media-download '{"message_id":"DOC001"}'\`
+        → {"message_id":"DOC001","media_type":"document","mimetype":"application/pdf","filename":"report.pdf","file_length":2500000,"saved_to":"/home/kpihx/.cache/whats_media/report.pdf"}
+    - Download a video:
+        \`whats-proxy do media-download '{"message_id":"VID001"}'\`
+        → {"message_id":"VID001","media_type":"video","mimetype":"video/mp4","filename":"VID001.mp4","file_length":15000000,"saved_to":"/home/kpihx/.cache/whats_media/VID001.mp4"}`,
   },
   {
     meta: {
@@ -317,5 +417,20 @@ export default [
       });
     },
     schema: mediaCleanupSchema,
+    docstring: `Clear the local WhatsApp media cache directory.
+
+Parameters:
+    (none)
+
+Examples:
+    - Clean up media cache:
+        \`whats-proxy do media-cleanup '{}'\`
+        → {"status":"cleaned","files_deleted":12,"bytes_freed":156250000,"cache_dir":"/home/kpihx/.cache/whats_media"}
+    - Empty cache directory:
+        \`whats-proxy do media-cleanup '{}'\`
+        → {"status":"cleaned","files_deleted":0,"bytes_freed":0,"cache_dir":"/home/kpihx/.cache/whats_media"}
+    - Cache directory doesn't exist:
+        \`whats-proxy do media-cleanup '{}'\`
+        → {"status":"skipped","message":"Cache directory does not exist."}`,
   },
 ] satisfies ActionDef[];

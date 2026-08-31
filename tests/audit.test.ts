@@ -16,7 +16,7 @@ import { describe, expect, test } from "bun:test";
 import { REGISTRY, ACTION_COUNT, ALL } from "../src/whats_proxy/actions/registry.ts";
 import { ACTION_POLICIES } from "../src/whats_proxy/actions/policies.ts";
 import { SCHEMAS } from "../src/whats_proxy/actions/schemas.ts";
-import { getActionExamples, getActionHelp } from "../src/whats_proxy/doc.ts";
+import { getCompactHelp, getFullHelp } from "../src/whats_proxy/doc.ts";
 
 // ── P2: Registration audit ──────────────────────────────────────────────────
 
@@ -38,25 +38,26 @@ describe("Registration audit", () => {
     }
   });
 
-  test("every action has ≥3 executable examples", () => {
+  test("every action has a non-empty docstring", () => {
     for (const definition of Object.values(REGISTRY)) {
-      const examples = getActionExamples(definition);
-      expect(examples.length).toBeGreaterThanOrEqual(3);
+      expect(definition.docstring).toBeDefined();
+      expect(typeof definition.docstring).toBe("string");
+      expect(definition.docstring!.length).toBeGreaterThan(0);
     }
   });
 
   test("every action help contains Examples section", () => {
     for (const name of Object.keys(REGISTRY)) {
-      const help = getActionHelp(name, REGISTRY);
+      const help = getFullHelp(REGISTRY[name]!);
       expect(help).toContain("Examples:");
     }
   });
 
-  test("actions with arguments have Arguments section in help", () => {
+  test("actions with arguments have Parameters section in help", () => {
     for (const [name, def] of Object.entries(REGISTRY)) {
       if (def.meta.arguments.length > 0) {
-        const help = getActionHelp(name, REGISTRY);
-        expect(help).toContain("Arguments:");
+        const help = getFullHelp(def);
+        expect(help).toContain("Parameters:");
       }
     }
   });

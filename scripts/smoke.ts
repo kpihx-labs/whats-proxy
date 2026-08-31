@@ -61,7 +61,7 @@ console.log("\n[2] per-action help");
   process.stdout.write = orig;
   const text = out.join("");
   check("exit 0", code === 0);
-  check("has Arguments section", text.includes("Arguments:"));
+  check("has Parameters section", text.includes("Parameters:"));
   check("has jid arg", text.includes("jid"));
   check("has usage line", text.includes("whats-proxy do send-text"));
 }

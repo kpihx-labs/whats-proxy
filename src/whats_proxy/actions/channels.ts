@@ -59,6 +59,23 @@ export default [
       });
     },
     schema: channelCreateSchema,
+    docstring: `Create a new WhatsApp Channel (Newsletter). Returns the channel metadata including JID.
+
+Parameters:
+    - name (required): Channel name.
+    - description (optional): Channel description.
+    - picture (optional): Profile picture: URL, base64, or file path.
+
+Examples:
+    - Create a channel:
+        \`whats-proxy do channel-create '{"name":"My Channel","description":"Updates"}'\`
+        → {"status":"created","channel":{"jid":"120363000000000@newsletter","name":"My Channel","description":"Updates","subscriber_count":0}}
+    - Create with picture:
+        \`whats-proxy do channel-create '{"name":"Tech News","description":"Latest in tech","picture":"/home/user/logo.png"}'\`
+        → {"status":"created","channel":{"jid":"120363000000001@newsletter","name":"Tech News","description":"Latest in tech","subscriber_count":0}}
+    - Create minimal channel:
+        \`whats-proxy do channel-create '{"name":"Quick Updates"}'\`
+        → {"status":"created","channel":{"jid":"120363000000002@newsletter","name":"Quick Updates","description":null,"subscriber_count":0}}`,
   },
   {
     meta: {
@@ -85,6 +102,21 @@ export default [
       return okResult({ channel: _fmtChannel(meta) });
     },
     schema: channelInfoSchema,
+    docstring: `Get metadata for a WhatsApp Channel (Newsletter). You can fetch by JID or invite link.
+
+Parameters:
+    - jid (required): Channel JID (e.g. 120363xxx@newsletter) or invite link.
+
+Examples:
+    - Get channel info by JID:
+        \`whats-proxy do channel-info '{"jid":"120363000000000@newsletter"}'\`
+        → {"channel":{"jid":"120363000000000@newsletter","name":"Tech News","description":"Latest in tech","subscriber_count":1500,"state":"ACTIVE"}}
+    - Get channel by invite link:
+        \`whats-proxy do channel-info '{"jid":"https://whatsapp.com/channel/120363000000000"}'\`
+        → {"channel":{"jid":"120363000000000@newsletter","name":"Tech News","subscriber_count":1500}}
+    - Get channel with no description:
+        \`whats-proxy do channel-info '{"jid":"120363000000001@newsletter"}'\`
+        → {"channel":{"jid":"120363000000001@newsletter","name":"Quick Updates","description":null,"subscriber_count":42}}`,
   },
   {
     meta: {
@@ -120,6 +152,22 @@ export default [
       return errResult(`Unknown action: ${action}`);
     },
     schema: channelManageSchema,
+    docstring: `Follow (subscribe), unfollow, mute, or unmute a WhatsApp Channel.
+
+Parameters:
+    - jid (required): Channel JID.
+    - action (required): Action to perform: follow | unfollow | mute | unmute.
+
+Examples:
+    - Follow a channel:
+        \`whats-proxy do channel-manage '{"jid":"120363000000000@newsletter","action":"follow"}'\`
+        → {"status":"followed","jid":"120363000000000@newsletter"}
+    - Mute a channel:
+        \`whats-proxy do channel-manage '{"jid":"120363000000000@newsletter","action":"mute"}'\`
+        → {"status":"muted","jid":"120363000000000@newsletter"}
+    - Unfollow a channel:
+        \`whats-proxy do channel-manage '{"jid":"120363000000000@newsletter","action":"unfollow"}'\`
+        → {"status":"unfollowed","jid":"120363000000000@newsletter"}`,
   },
   {
     meta: {
@@ -173,6 +221,24 @@ export default [
       return okResult({ status: "updated", jid: channelJid, updated: updates });
     },
     schema: channelUpdateSchema,
+    docstring: `Update a channel's name, description, or picture.
+
+Parameters:
+    - jid (required): Channel JID.
+    - name (optional): New channel name.
+    - description (optional): New channel description.
+    - picture (optional): New picture: URL, base64, or file path. Use 'remove' to delete.
+
+Examples:
+    - Rename a channel:
+        \`whats-proxy do channel-update '{"jid":"120363000000000@newsletter","name":"Tech Digest"}'\`
+        → {"status":"updated","jid":"120363000000000@newsletter","updated":["name"]}
+    - Update description:
+        \`whats-proxy do channel-update '{"jid":"120363000000000@newsletter","description":"Daily tech news and insights"}'\`
+        → {"status":"updated","jid":"120363000000000@newsletter","updated":["description"]}
+    - Remove channel picture:
+        \`whats-proxy do channel-update '{"jid":"120363000000000@newsletter","picture":"remove"}'\`
+        → {"status":"updated","jid":"120363000000000@newsletter","updated":["picture (removed)"]}`,
   },
   {
     meta: {
@@ -191,5 +257,20 @@ export default [
       return okResult({ status: "deleted", jid: channelJid });
     },
     schema: channelDeleteSchema,
+    docstring: `Delete a WhatsApp Channel that you own. This action is irreversible.
+
+Parameters:
+    - jid (required): Channel JID to delete.
+
+Examples:
+    - Delete a channel:
+        \`whats-proxy do channel-delete '{"jid":"120363000000000@newsletter"}'\`
+        → {"status":"deleted","jid":"120363000000000@newsletter"}
+    - Delete another channel:
+        \`whats-proxy do channel-delete '{"jid":"120363000000001@newsletter"}'\`
+        → {"status":"deleted","jid":"120363000000001@newsletter"}
+    - Delete with bare ID:
+        \`whats-proxy do channel-delete '{"jid":"120363000000002"}'\`
+        → {"status":"deleted","jid":"120363000000002@newsletter"}`,
   },
 ] satisfies ActionDef[];

@@ -1,0 +1,48 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Whats-Proxy — HITL</title><link rel="stylesheet" href="/assets/hitl.css"></head><body>
+<header class="hitl-header"><div><h1 class="hitl-brand">Whats-Proxy · HITL review</h1><p class="hitl-subtitle">Action: {{FUNC_NAME}}</p></div><div class="hitl-actions"><button class="hitl-button hitl-reject" onclick="submit('rejected')">Reject</button><button class="hitl-button hitl-approve" onclick="submit('approved')">Approve & send</button></div></header>
+<main class="hitl-container"><section class="hitl-card"><h2>Full action JSON</h2><div class="hitl-card-body"><textarea class="hitl-input" id="payload">{{PAYLOAD_JSON}}</textarea></div></section></main>
+<footer class="hitl-footer"><textarea class="hitl-input" id="comment" placeholder="Comment (optional)"></textarea></footer>
+<script>
+const ORIGINAL_PAYLOAD_STR = JSON.stringify(JSON.parse('{{PAYLOAD_JSON_SAFE}}'));
+
+async function submit(status) {
+    let payload;
+    const raw = document.getElementById('payload').value;
+    try {
+        payload = JSON.parse(raw);
+    } catch (e) {
+        payload = raw;
+        const comment = document.getElementById('comment').value;
+        const resp = await fetch('/submit', {
+            method: 'POST',
+            body: JSON.stringify({
+                id: '{{REQUEST_ID}}',
+                status: status,
+                comment: comment,
+                payload: payload,
+                edited: raw !== ORIGINAL_PAYLOAD_STR
+            })
+        });
+        if (resp.ok) {
+            document.body.innerHTML = '<h2>✅ ' + status + '</h2><p>You can close this window.</p>';
+        }
+        return;
+    }
+    const comment = document.getElementById('comment').value;
+    const edited = (JSON.stringify(payload) !== ORIGINAL_PAYLOAD_STR);
+    const resp = await fetch('/submit', {
+        method: 'POST',
+        body: JSON.stringify({
+            id: '{{REQUEST_ID}}',
+            status: status,
+            comment: comment,
+            payload: payload,
+            edited: edited
+        })
+    });
+    if (resp.ok) {
+        document.body.innerHTML = '<h2>✅ ' + status + '</h2><p>You can close this window.</p>';
+    }
+}
+</script>
+</body></html>

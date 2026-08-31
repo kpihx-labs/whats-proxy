@@ -103,5 +103,22 @@ export default [
       return okResult({ status: "removed", name: wlName, removed: resolvedJids.length, remaining: updated.length, chats: withNames(updated) });
     },
     schema: watchlistSchema,
+    docstring: `Dynamically manage personal chat watchlists — named groups of chats to monitor together.
+
+Parameters:
+    - action (required): Action to perform: set | add | remove | get | list | delete.
+    - name (optional): Watchlist name (e.g. 'family', 'x24'). Required for all actions except list.
+    - jids (optional): Array of chat JIDs or phone numbers. Required for set/add/remove.
+
+Examples:
+    - Create a watchlist:
+        \`whats-proxy do watchlist '{"action":"set","name":"x24","jids":["120363000000000@g.us","33612345678"]}'\`
+        → {"status":"set","name":"x24","count":2,"chats":[{"jid":"120363000000000@g.us","name":"X24 Project"},{"jid":"33612345678@s.whatsapp.net","name":"Alice"}]}
+    - List all watchlists:
+        \`whats-proxy do watchlist '{"action":"list"}'\`
+        → {"total":3,"watchlists":[{"name":"x24","count":2,"source":"dynamic","chats":[]},{"name":"family","count":5,"source":"config","chats":[]}]}
+    - Add to an existing watchlist:
+        \`whats-proxy do watchlist '{"action":"add","name":"x24","jids":["33600000000"]}'\`
+        → {"status":"added","name":"x24","added":1,"total":3,"chats":[{"jid":"120363000000000@g.us","name":"X24 Project"},{"jid":"33612345678@s.whatsapp.net","name":"Alice"},{"jid":"33600000000@s.whatsapp.net","name":"Bob"}]}`,
   },
 ] satisfies ActionDef[];

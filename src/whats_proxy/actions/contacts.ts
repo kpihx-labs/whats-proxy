@@ -43,6 +43,21 @@ export default [
       });
     },
     schema: contactCheckSchema,
+    docstring: `Check if one or more phone numbers are registered on WhatsApp.
+
+Parameters:
+    - phones (required): Array of phone numbers to check.
+
+Examples:
+    - Check a single number:
+        \`whats-proxy do contact-check '{"phones":["33612345678"]}'\`
+        → {"total":1,"on_whatsapp":1,"results":[{"phone":"33612345678","jid":"33612345678@s.whatsapp.net","exists":true}]}
+    - Check multiple numbers:
+        \`whats-proxy do contact-check '{"phones":["33612345678","33699999999"]}'\`
+        → {"total":2,"on_whatsapp":1,"results":[{"phone":"33612345678","jid":"33612345678@s.whatsapp.net","exists":true},{"phone":"33699999999","jid":"33699999999@s.whatsapp.net","exists":false}]}
+    - Check with international format:
+        \`whats-proxy do contact-check '{"phones":["+15550001234"]}'\`
+        → {"total":1,"on_whatsapp":0,"results":[{"phone":"15550001234","jid":"15550001234@s.whatsapp.net","exists":false}]}`,
   },
   {
     meta: {
@@ -83,6 +98,21 @@ export default [
       return okResult(info);
     },
     schema: contactInfoSchema,
+    docstring: `Get info about a contact: name, about/status text, and profile picture URL.
+
+Parameters:
+    - jid (required): Contact JID or phone number.
+
+Examples:
+    - Get contact info:
+        \`whats-proxy do contact-info '{"jid":"33612345678"}'\`
+        → {"jid":"33612345678@s.whatsapp.net","name":"Alice","short_name":"Alice","about":"Building things.","profile_picture_url":"https://pps.whatsapp.net/v/t61..."}
+    - Get info by phone number:
+        \`whats-proxy do contact-info '{"jid":"33600000000"}'\`
+        → {"jid":"33600000000@s.whatsapp.net","name":"Bob","about":null,"profile_picture_url":null}
+    - Get info for unknown contact:
+        \`whats-proxy do contact-info '{"jid":"33611111111"}'\`
+        → {"jid":"33611111111@s.whatsapp.net","name":null,"about":null,"profile_picture_url":null}`,
   },
   {
     meta: {
@@ -116,6 +146,22 @@ export default [
       }
     },
     schema: contactPictureSchema,
+    docstring: `Get the profile picture URL for any JID (contact, group, or your own).
+
+Parameters:
+    - jid (required): JID or phone number. Use 'me' for your own picture.
+    - type (optional): Resolution: 'image' for full size, 'preview' for thumbnail. Default 'image'.
+
+Examples:
+    - Get your own profile picture:
+        \`whats-proxy do contact-picture '{"jid":"me"}'\`
+        → {"jid":"33612345678@s.whatsapp.net","profile_picture_url":"https://pps.whatsapp.net/v/t61..."}
+    - Get a contact's picture:
+        \`whats-proxy do contact-picture '{"jid":"33600000000","type":"preview"}'\`
+        → {"jid":"33600000000@s.whatsapp.net","profile_picture_url":"https://pps.whatsapp.net/v/t61...preview"}
+    - Get a group picture:
+        \`whats-proxy do contact-picture '{"jid":"120363000000000@g.us"}'\`
+        → {"jid":"120363000000000@g.us","profile_picture_url":"https://pps.whatsapp.net/v/t61..."}`,
   },
   {
     meta: {
@@ -150,6 +196,22 @@ export default [
       return errResult(`Unknown action: ${action}`);
     },
     schema: contactBlockSchema,
+    docstring: `Block, unblock a contact, or list blocked contacts.
+
+Parameters:
+    - action (required): Action to perform: block | unblock | list.
+    - jid (optional): Contact JID or phone number (required for block/unblock).
+
+Examples:
+    - Block a contact:
+        \`whats-proxy do contact-block '{"action":"block","jid":"33612345678"}'\`
+        → {"status":"blocked","jid":"33612345678@s.whatsapp.net"}
+    - List blocked contacts:
+        \`whats-proxy do contact-block '{"action":"list"}'\`
+        → {"count":3,"blocked":[{"jid":"33611111111@s.whatsapp.net","phone":"33611111111"},{"jid":"33622222222@s.whatsapp.net","phone":"33622222222"}]}
+    - Unblock a contact:
+        \`whats-proxy do contact-block '{"action":"unblock","jid":"33612345678"}'\`
+        → {"status":"unblocked","jid":"33612345678@s.whatsapp.net"}`,
   },
   {
     meta: {
@@ -180,6 +242,21 @@ export default [
       }
     },
     schema: contactBusinessSchema,
+    docstring: `Get the WhatsApp Business profile of a contact. Returns business info: description, category, website, email, etc.
+
+Parameters:
+    - jid (required): Business contact JID or phone number.
+
+Examples:
+    - Get business profile:
+        \`whats-proxy do contact-business '{"jid":"33612345678"}'\`
+        → {"jid":"33612345678@s.whatsapp.net","business_profile":{"description":"Premium coffee roasters","category":"Food & Beverage","website":"https://example.com","email":"hello@example.com"}}
+    - Non-business contact:
+        \`whats-proxy do contact-business '{"jid":"33600000000"}'\`
+        → {"jid":"33600000000@s.whatsapp.net","business_profile":null,"note":"Could not retrieve business profile. Contact may not be a business account."}
+    - Business with full details:
+        \`whats-proxy do contact-business '{"jid":"33622222222"}'\`
+        → {"jid":"33622222222@s.whatsapp.net","business_profile":{"description":"Tech solutions","category":"Technology","website":"https://tech.example.com","email":"support@tech.example.com","address":"123 Main St"}}`,
   },
   {
     meta: {
@@ -224,5 +301,25 @@ export default [
       });
     },
     schema: contactListSchema,
+    docstring: `List contacts from the local store with optional filtering by name, tag, or type.
+
+Parameters:
+    - limit (optional): Max contacts to return (default 100, max 1000).
+    - offset (optional): Offset for pagination (default 0).
+    - name (optional): Filter by name (case-insensitive substring match).
+    - tag (optional): Filter to contacts with this custom tag.
+    - has_tags (optional): If true, only contacts with tags; if false, only without tags.
+    - exclude_groups (optional): Exclude group JIDs from results (default true).
+
+Examples:
+    - List all contacts:
+        \`whats-proxy do contact-list '{}'\`
+        → {"total":250,"offset":0,"count":100,"contacts":[{"jid":"33612345678@s.whatsapp.net","phone":"33612345678","name":"Alice","tags":["x24"]},{"jid":"33600000000@s.whatsapp.net","phone":"33600000000","name":"Bob","tags":[]}]}
+    - Filter by tag:
+        \`whats-proxy do contact-list '{"tag":"important","limit":50}'\`
+        → {"total":12,"offset":0,"count":12,"contacts":[{"jid":"33612345678@s.whatsapp.net","phone":"33612345678","name":"Alice","tags":["important","x24"]}]}
+    - Filter by name:
+        \`whats-proxy do contact-list '{"name":"alice"}'\`
+        → {"total":2,"offset":0,"count":2,"contacts":[{"jid":"33612345678@s.whatsapp.net","phone":"33612345678","name":"Alice"},{"jid":"33699999999@s.whatsapp.net","phone":"33699999999","name":"Alice B."}]}`,
   },
 ] satisfies ActionDef[];

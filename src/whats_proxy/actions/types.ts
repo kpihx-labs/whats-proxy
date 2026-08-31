@@ -61,6 +61,11 @@ export interface ActionDef {
   handler: ActionHandler;
   /** Optional Zod schema for payload validation (safety net, never breaks existing functionality). */
   schema?: z.ZodObject<Record<string, z.ZodTypeAny>>;
+  /**
+   * Full docstring (replaces meta.description, meta.arguments, meta.examples for help rendering).
+   * Format: description + optional Parameters/Examples sections with → output lines.
+   */
+  docstring?: string;
 }
 
 /** Registry: kebab-case action name → definition. */

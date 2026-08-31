@@ -93,6 +93,23 @@ export default [
       });
     },
     schema: groupCreateSchema,
+    docstring: `Create a new WhatsApp group. You must provide at least 1 participant besides yourself.
+
+Parameters:
+    - subject (required): Group name/subject.
+    - participants (required): Array of participant JIDs or phone numbers to add.
+    - description (optional): Group description.
+
+Examples:
+    - Create a group with one participant:
+        \`whats-proxy do group-create '{"subject":"X24 Project","participants":["33612345678"]}'\`
+        → {"status":"created","jid":"120363000000000@g.us","subject":"X24 Project","participants":[{"jid":"33612345678@s.whatsapp.net"}]}
+    - Create a group with description:
+        \`whats-proxy do group-create '{"subject":"Sprint Team","participants":["33612345678","33600000000"],"description":"Weekly sprint coordination"}'\`
+        → {"status":"created","jid":"120363000000001@g.us","subject":"Sprint Team","participants":[{"jid":"33612345678@s.whatsapp.net"},{"jid":"33600000000@s.whatsapp.net"}]}
+    - Create a large group:
+        \`whats-proxy do group-create '{"subject":"Event Attendees","participants":["33612345678","33600000000","33611111111","33622222222"]}'\`
+        → {"status":"created","jid":"120363000000002@g.us","subject":"Event Attendees","participants":[{"jid":"33612345678@s.whatsapp.net"},{"jid":"33600000000@s.whatsapp.net"},{"jid":"33611111111@s.whatsapp.net"},{"jid":"33622222222@s.whatsapp.net"}]}`,
   },
   {
     meta: {
@@ -175,6 +192,27 @@ export default [
       }));
     },
     schema: groupInfoSchema,
+    docstring: `Get full metadata for a group: subject, description, participants, settings, etc.
+
+Parameters:
+    - jid (required): Group JID (e.g. 120363xxx@g.us).
+    - recent_messages_limit (optional): Include up to this many recent cached messages (default 10, max 50).
+    - hydrate_messages (optional): If true (default), request additional older history when cache is too small.
+    - history_count (optional): How many older messages to request during history sync.
+    - history_wait_ms (optional): How long to wait for history-sync events (default 3500ms).
+    - include_participants (optional): Whether to include participant details (default true).
+    - participant_limit (optional): Maximum number of participants to include (default 200).
+
+Examples:
+    - Get group info:
+        \`whats-proxy do group-info '{"jid":"120363000000000@g.us"}'\`
+        → {"jid":"120363000000000@g.us","subject":"X24 Project","description":"Sprint coordination","participant_count":12,"announce":false,"restrict":false,"ephemeral":0}
+    - Get group info without participants:
+        \`whats-proxy do group-info '{"jid":"120363000000000@g.us","include_participants":false}'\`
+        → {"jid":"120363000000000@g.us","subject":"X24 Project","participant_count":12,"participants_returned":0}
+    - Get group with recent messages:
+        \`whats-proxy do group-info '{"jid":"120363000000000@g.us","recent_messages_limit":5}'\`
+        → {"jid":"120363000000000@g.us","subject":"X24 Project","recent_messages":[{"id":"MSG001","text":"Sprint update","from_me":false}],"recent_message_count":5}`,
   },
   {
     meta: {
@@ -233,6 +271,21 @@ export default [
       return okResult({ count: results.length, groups: results });
     },
     schema: groupListSchema,
+    docstring: `List all groups you are a member of.
+
+Parameters:
+    - limit (optional): Max number of groups to return (default 50).
+
+Examples:
+    - List all groups:
+        \`whats-proxy do group-list '{}'\`
+        → {"count":15,"groups":[{"jid":"120363000000000@g.us","subject":"X24 Project","participant_count":12,"announce":false},{"jid":"120363000000001@g.us","subject":"Family","participant_count":8}]}
+    - List with limit:
+        \`whats-proxy do group-list '{"limit":5}'\`
+        → {"count":5,"groups":[{"jid":"120363000000000@g.us","subject":"X24 Project","participant_count":12}]}
+    - List groups (empty):
+        \`whats-proxy do group-list '{"limit":100}'\`
+        → {"count":0,"groups":[]}`,
   },
   {
     meta: {
@@ -252,6 +305,22 @@ export default [
       return okResult({ status: "updated", jid: gJid, subject });
     },
     schema: groupSubjectSchema,
+    docstring: `Change the group name/subject.
+
+Parameters:
+    - jid (required): Group JID.
+    - subject (required): New group name (max 25 characters).
+
+Examples:
+    - Rename a group:
+        \`whats-proxy do group-subject '{"jid":"120363000000000@g.us","subject":"Sprint Team v2"}'\`
+        → {"status":"updated","jid":"120363000000000@g.us","subject":"Sprint Team v2"}
+    - Short name update:
+        \`whats-proxy do group-subject '{"jid":"120363000000000@g.us","subject":"X24"}'\`
+        → {"status":"updated","jid":"120363000000000@g.us","subject":"X24"}
+    - Rename using bare ID:
+        \`whats-proxy do group-subject '{"jid":"120363000000000","subject":"New Name"}'\`
+        → {"status":"updated","jid":"120363000000000@g.us","subject":"New Name"}`,
   },
   {
     meta: {
@@ -271,6 +340,22 @@ export default [
       return okResult({ status: "updated", jid: gJid });
     },
     schema: groupDescriptionSchema,
+    docstring: `Update or clear the group description.
+
+Parameters:
+    - jid (required): Group JID.
+    - description (required): New description. Empty string to clear.
+
+Examples:
+    - Set group description:
+        \`whats-proxy do group-description '{"jid":"120363000000000@g.us","description":"Weekly sprint coordination and updates"}'\`
+        → {"status":"updated","jid":"120363000000000@g.us"}
+    - Update description:
+        \`whats-proxy do group-description '{"jid":"120363000000000@g.us","description":"Updated: daily standups at 9:30"}'\`
+        → {"status":"updated","jid":"120363000000000@g.us"}
+    - Clear description:
+        \`whats-proxy do group-description '{"jid":"120363000000000@g.us","description":""}'\`
+        → {"status":"updated","jid":"120363000000000@g.us"}`,
   },
   {
     meta: {
@@ -302,6 +387,23 @@ export default [
       });
     },
     schema: groupParticipantsSchema,
+    docstring: `Add, remove, promote (to admin), or demote (from admin) group participants.
+
+Parameters:
+    - jid (required): Group JID.
+    - action (required): Action to perform: add | remove | promote | demote.
+    - participants (required): Array of participant JIDs or phone numbers.
+
+Examples:
+    - Add a participant:
+        \`whats-proxy do group-participants '{"jid":"120363000000000@g.us","action":"add","participants":["33612345678"]}'\`
+        → {"status":"add","jid":"120363000000000@g.us","participants":[{"jid":"33612345678@s.whatsapp.net","status":"ok"}]}
+    - Promote to admin:
+        \`whats-proxy do group-participants '{"jid":"120363000000000@g.us","action":"promote","participants":["33612345678"]}'\`
+        → {"status":"promote","jid":"120363000000000@g.us","participants":[{"jid":"33612345678@s.whatsapp.net","status":"ok"}]}
+    - Remove a participant:
+        \`whats-proxy do group-participants '{"jid":"120363000000000@g.us","action":"remove","participants":["33612345678"]}'\`
+        → {"status":"remove","jid":"120363000000000@g.us","participants":[{"jid":"33612345678@s.whatsapp.net","status":"ok"}]}`,
   },
   {
     meta: {
@@ -320,6 +422,21 @@ export default [
       return okResult({ status: "left", jid: gJid });
     },
     schema: groupLeaveSchema,
+    docstring: `Leave a group.
+
+Parameters:
+    - jid (required): Group JID.
+
+Examples:
+    - Leave a group:
+        \`whats-proxy do group-leave '{"jid":"120363000000000@g.us"}'\`
+        → {"status":"left","jid":"120363000000000@g.us"}
+    - Leave using bare ID:
+        \`whats-proxy do group-leave '{"jid":"120363000000000"}'\`
+        → {"status":"left","jid":"120363000000000@g.us"}
+    - Leave a different group:
+        \`whats-proxy do group-leave '{"jid":"120363000000001@g.us"}'\`
+        → {"status":"left","jid":"120363000000001@g.us"}`,
   },
   {
     meta: {
@@ -371,6 +488,23 @@ export default [
       return errResult(`Unknown action: ${action}`);
     },
     schema: groupInviteSchema,
+    docstring: `Get, revoke, or join a group via invite link/code.
+
+Parameters:
+    - action (required): Action to perform: get | revoke | join.
+    - jid (optional): Group JID (required for 'get' and 'revoke').
+    - code (optional): Invite code or full link (required for 'join').
+
+Examples:
+    - Get the current invite link:
+        \`whats-proxy do group-invite '{"action":"get","jid":"120363000000000@g.us"}'\`
+        → {"jid":"120363000000000@g.us","invite_code":"ABcdEfGhIjK","invite_link":"https://chat.whatsapp.com/ABcdEfGhIjK"}
+    - Revoke and rotate invite:
+        \`whats-proxy do group-invite '{"action":"revoke","jid":"120363000000000@g.us"}'\`
+        → {"jid":"120363000000000@g.us","invite_code":"XyZ123AbC","invite_link":"https://chat.whatsapp.com/XyZ123AbC","note":"Previous invite link has been revoked."}
+    - Join via invite link:
+        \`whats-proxy do group-invite '{"action":"join","code":"https://chat.whatsapp.com/ABcdEfGhIjK"}'\`
+        → {"status":"joined","jid":"120363000000000@g.us","invite_code":"ABcdEfGhIjK"}`,
   },
   {
     meta: {
@@ -420,6 +554,26 @@ export default [
       return okResult({ status: "updated", jid: gJid, changes: updates });
     },
     schema: groupSettingsSchema,
+    docstring: `Update group settings: announcement mode, locked mode, disappearing messages, member add mode, and join approval mode.
+
+Parameters:
+    - jid (required): Group JID.
+    - announce (optional): true = only admins can send messages.
+    - locked (optional): true = only admins can edit group info.
+    - ephemeral (optional): Disappearing messages timer in seconds.
+    - member_add_mode (optional): true = all members can add participants.
+    - join_approval_mode (optional): true = admin approval required for join requests.
+
+Examples:
+    - Set announcement mode:
+        \`whats-proxy do group-settings '{"jid":"120363000000000@g.us","announce":true}'\`
+        → {"status":"updated","jid":"120363000000000@g.us","changes":["announce=true"]}
+    - Lock group info:
+        \`whats-proxy do group-settings '{"jid":"120363000000000@g.us","locked":true,"ephemeral":604800}'\`
+        → {"status":"updated","jid":"120363000000000@g.us","changes":["locked=true","ephemeral=604800"]}
+    - Enable join approval:
+        \`whats-proxy do group-settings '{"jid":"120363000000000@g.us","join_approval_mode":true}'\`
+        → {"status":"updated","jid":"120363000000000@g.us","changes":["join_approval_mode=true"]}`,
   },
   {
     meta: {
@@ -449,5 +603,21 @@ export default [
       return okResult({ status: "updated", jid: gJid });
     },
     schema: groupPictureSchema,
+    docstring: `Set or update the group profile picture.
+
+Parameters:
+    - jid (required): Group JID.
+    - source (required): Image source: URL, base64, or local file path.
+
+Examples:
+    - Set group picture from local file:
+        \`whats-proxy do group-picture '{"jid":"120363000000000@g.us","source":"/home/user/Pictures/group-logo.jpg"}'\`
+        → {"status":"updated","jid":"120363000000000@g.us"}
+    - Set group picture from URL:
+        \`whats-proxy do group-picture '{"jid":"120363000000000@g.us","source":"https://example.com/logo.png"}'\`
+        → {"status":"updated","jid":"120363000000000@g.us"}
+    - Update with base64 image:
+        \`whats-proxy do group-picture '{"jid":"120363000000000@g.us","source":"data:image/png;base64,iVBOR..."}'\`
+        → {"status":"updated","jid":"120363000000000@g.us"}`,
   },
 ] satisfies ActionDef[];
