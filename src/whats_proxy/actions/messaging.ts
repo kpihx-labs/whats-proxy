@@ -1,9 +1,9 @@
 /**
- * whats-proxy — Messaging actions (15).
+ * whats-proxy — Messaging actions (14).
  *
  * send-text, send-image, send-video, send-audio, send-document, send-sticker,
  * send-location, send-contact, send-reaction, send-poll, edit-message,
- * delete-message, forward-message, batch-send-text, send-batch.
+ * delete-message, forward-message, send-batch.
  *
  * Faithful port of whats-mcp `messaging.js` + unified send-batch.
  */
@@ -15,7 +15,7 @@ import {
   sendTextSchema, sendImageSchema, sendVideoSchema, sendAudioSchema,
   sendDocumentSchema, sendStickerSchema, sendLocationSchema, sendContactSchema,
   sendReactionSchema, sendPollSchema, editMessageSchema, deleteMessageSchema,
-  forwardMessageSchema, batchSendTextSchema, sendBatchSchema, mediaUploadSchema,
+  forwardMessageSchema, sendBatchSchema, mediaUploadSchema,
 } from "./schemas.ts";
 import type { AnyMsg } from "../store.ts";
 
@@ -752,67 +752,6 @@ Examples:
     - Forward with error (message not found):
         \`whats-proxy do forward-message '{"to_jid":"33612345678","message_id":"NONEXISTENT"}'\`
         → {"meta":{"status":"error","comment":"Message NONEXISTENT not found in store. It must be a recent message.","edited":false},"data":{"error":"Message NONEXISTENT not found in store. It must be a recent message."}}`,
-  },
-  {
-    meta: {
-      action: "batch-send-text",
-      category: "messaging",
-      description: "Send the same text message to multiple recipients. Returns a summary of successes and failures.",
-      arguments: [
-        { name: "jids", description: "Array of recipient JIDs or phone numbers.", required: true },
-        { name: "text", description: "Message text to send to all recipients.", required: true },
-        { name: "delay_ms", description: "Delay in ms between sends to avoid rate-limiting. Default 1000.", required: false },
-      ],
-      example: { jids: ["33612345678", "33600000000"], text: "Hi all!" },
-      examples: [
-        { description: "Two contacts", payload: { jids: ["33612345678", "33600000000"], text: "Meeting starts in ten minutes." } },
-        { description: "Contacts and a group", payload: { jids: ["33612345678", "120363000000000@g.us"], text: "The document is ready." } },
-        { description: "Rate-limited broadcast", payload: { jids: ["33612345678", "33600000000"], text: "*Reminder*\nPlease confirm attendance.", delay_ms: 1500 } },
-      ],
-      returns: "{ total, sent, failed, results }",
-    },
-    handler: requireApproval("default")(async ({ jids, text, delay_ms }, { sock }) => {
-      const list = Array.isArray(jids) ? jids.map(String) : [];
-      if (list.length === 0) {
-        return errResult("At least one recipient is required.");
-      }
-      const delay = delay_ms !== undefined ? Number(delay_ms) : 1000;
-      const results: Record<string, unknown>[] = [];
-      for (const jid of list) {
-        const to = phoneToJid(jid);
-        try {
-          const r: any = await sock.sendMessage(to, { text: String(text) } as any);
-          results.push({ jid: to, status: "sent", message_id: r?.key?.id || null });
-        } catch (err) {
-          results.push({ jid: to, status: "failed", error: (err as Error).message });
-        }
-        const idx = list.indexOf(jid);
-        if (delay > 0 && idx < list.length - 1) {
-          await new Promise((r) => setTimeout(r, delay));
-        }
-      }
-      const sent = results.filter((r) => r.status === "sent").length;
-      const failed = results.filter((r) => r.status === "failed").length;
-      return okResult({ total: list.length, sent, failed, results });
-    }),
-    schema: batchSendTextSchema,
-    docstring: `Send the same text message to multiple recipients. Returns a summary of successes and failures.
-
-Parameters:
-    - jids (required): Array of recipient JIDs or phone numbers.
-    - text (required): Message text to send to all recipients.
-    - delay_ms (optional): Delay in ms between sends to avoid rate-limiting. Default 1000.
-
-Examples:
-    - Broadcast to two contacts:
-        \`whats-proxy do batch-send-text '{"jids":["33612345678","33600000000"],"text":"Meeting starts in ten minutes."}'\`
-        → {"total":2,"sent":2,"failed":0,"results":[{"jid":"33612345678@s.whatsapp.net","status":"sent","message_id":"BATCH001"},{"jid":"33600000000@s.whatsapp.net","status":"sent","message_id":"BATCH002"}]}
-    - Broadcast with rate limiting:
-        \`whats-proxy do batch-send-text '{"jids":["33612345678","33600000000"],"text":"*Reminder*\nPlease confirm attendance.","delay_ms":1500}'\`
-        → {"total":2,"sent":2,"failed":0,"results":[{"jid":"33612345678@s.whatsapp.net","status":"sent","message_id":"BATCH003"},{"jid":"33600000000@s.whatsapp.net","status":"sent","message_id":"BATCH004"}]}
-    - Broadcast with some failures:
-        \`whats-proxy do batch-send-text '{"jids":["33612345678","invalid"],"text":"Hello!"}'\`
-        → {"total":2,"sent":1,"failed":1,"results":[{"jid":"33612345678@s.whatsapp.net","status":"sent","message_id":"BATCH005"},{"jid":"invalid@s.whatsapp.net","status":"failed","error":"Invalid JID"}]}`,
   },
   // ── send-batch: unified multi-recipient multi-part send ──────────────────
   {

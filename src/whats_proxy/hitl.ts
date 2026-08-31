@@ -163,7 +163,7 @@ function handleGet(request: IncomingMessage, response: ServerResponse): void {
     // Select template based on review mode (message actions get the message template)
     const isMessage = ["send-text", "send-image", "send-video", "send-audio",
       "send-document", "send-sticker", "send-location", "send-contact",
-      "send-poll", "edit-message", "forward-message", "batch-send-text",
+      "send-poll", "edit-message", "forward-message",
       "send-batch", "send-reaction", "delete-message"].includes(req.action);
     const templatePath = isMessage ? MESSAGE_TEMPLATE_PATH : TEMPLATE_PATH;
 

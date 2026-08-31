@@ -89,7 +89,7 @@ whats-proxy (CLI, Bun)                daemon (detached background process)
 
 | Category | Actions |
 |---|---|
-| messaging (14) | send-text, send-media, send-document, send-image, send-video, send-audio, send-sticker, send-buttons, send-location, send-contact, send-link-preview, send-reaction, batch-send-text, forward-message |
+| messaging (13) | send-text, send-media, send-document, send-image, send-video, send-audio, send-sticker, send-buttons, send-location, send-contact, send-link-preview, send-reaction, forward-message |
 | chats (5) | chat-list, chat-history, chat-info, mark-read, archive-chat |
 | contacts (6) | contact-list, contact-info, contact-by-phone, block-list, block-contact, unblock-contact |
 | groups (10) | group-list, group-info, group-create, group-add-participants, group-remove-participants, group-promote, group-demote, group-update, group-leave, group-invite-code |

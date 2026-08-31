@@ -40,7 +40,7 @@
 - **No .env file:** Removed `.env.example` entirely. Defaults live in `config.ts`. Only 2 env
   overrides remain (both for operational/test needs): `WHATS_PROXY_STATE_DIR`,
   `WHATS_PROXY_MAX_IDLE_MINUTES`. Default `max_idle_minutes` changed from 0 to 30 (safe default).
-- **Zod payload validation (P1+P3):** 66 Zod schemas in `schemas.ts`, validated at CLI
+- **Zod payload validation (P1+P3):** 65 Zod schemas in `schemas.ts`, validated at CLI
   (pre-daemon) and daemon-side (`protectAction`). Required-argument check runs first, then
   Zod type validation.
 - **Auto-wrapped envelope examples (P4):** `--help` output now shows full `{"meta":{...},"data":{...}}`
@@ -51,7 +51,7 @@
   (text, image, video, audio, document, sticker, location, contact, poll) to one or more
   recipients in a single call. Each part becomes one WhatsApp message; every part is sent to
   every recipient. Text parts support `@mentions`. Any part can override the global `quoted_id`
-  to reply to a different message. Return shape: `{ total, sent, failed, results }`. 66 actions
+  to reply to a different message. Return shape: `{ total, sent, failed, results }`. 65 actions
   total (was 65).
 - **CONTRACT.md rewritten:** Full architecture contract, dense and complete, matching tick-proxy's
   documentation standard.

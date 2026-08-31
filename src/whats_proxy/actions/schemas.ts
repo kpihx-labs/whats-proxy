@@ -103,12 +103,6 @@ export const forwardMessageSchema = z.object({
   message_id: z.string(),
 });
 
-export const batchSendTextSchema = z.object({
-  jids: z.array(z.string()).min(1),
-  text: z.string(),
-  delay_ms: z.number().optional(),
-});
-
 export const sendBatchPartText = z.object({ type: z.literal("text"), text: z.string(), mentions: z.array(z.string()).optional(), quoted_id: z.string().optional() });
 export const sendBatchPartImage = z.object({ type: z.literal("image"), source: z.string(), caption: z.string().optional(), quoted_id: z.string().optional() });
 export const sendBatchPartVideo = z.object({ type: z.literal("video"), source: z.string(), caption: z.string().optional(), gif_playback: z.boolean().optional(), ptv: z.boolean().optional(), quoted_id: z.string().optional() });
@@ -477,7 +471,6 @@ export const SCHEMAS: Record<string, z.ZodObject<Record<string, z.ZodTypeAny>>> 
   "edit-message": editMessageSchema,
   "delete-message": deleteMessageSchema,
   "forward-message": forwardMessageSchema,
-  "batch-send-text": batchSendTextSchema,
   "send-batch": sendBatchSchema,
   "media-upload": mediaUploadSchema,
   // Chats

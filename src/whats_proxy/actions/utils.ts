@@ -94,7 +94,7 @@ Examples:
             "Groups: Group JIDs end with @g.us (e.g. 120363xxx@g.us).",
             "Channels: Newsletter JIDs end with @newsletter.",
             "Media: Send images/videos/documents via URL, base64, or local file path.",
-            "Batch: Use batch-send-text to send the same message to multiple recipients.",
+            "Batch: Use send-batch to send multiple content types to one or more recipients.",
             "Reactions: Use send-reaction with an emoji to react, empty string to remove.",
             "Reply: Use quoted_id parameter in send-* actions to reply to a specific message.",
           ],
@@ -121,7 +121,7 @@ Parameters:
 Examples:
     - Get full guide:
         \`whats-proxy do guide '{}'\`
-        → {"server":"whats-proxy","version":"0.6.0","total_tools":66,"categories":{"messaging":["send-text","send-image","send-video","send-audio","send-document","send-sticker","send-location","send-contact","send-reaction","send-poll","edit-message","delete-message","forward-message","batch-send-text","send-batch"],"chats":["chat-list","chat-read","chat-manage","chat-star","chat-disappearing"]},"tips":["JIDs: Use phone numbers or full JIDs.","Groups: Group JIDs end with @g.us."]}
+        → {"server":"whats-proxy","version":"0.6.0","total_tools":65,"categories":{"messaging":["send-text","send-image","send-video","send-audio","send-document","send-sticker","send-location","send-contact","send-reaction","send-poll","edit-message","delete-message","forward-message","send-batch"],"chats":["chat-list","chat-read","chat-manage","chat-star","chat-disappearing"]},"tips":["JIDs: Use phone numbers or full JIDs.","Groups: Group JIDs end with @g.us."]}
     - Get messaging category guide:
         \`whats-proxy do guide '{"category":"messaging"}'\`
         → {"category":"messaging","tools":[{"name":"send-text","description":"Send a text message to a contact or group.","parameters":["jid","text","quoted_id","mentions"],"required":["jid","text"]}]}

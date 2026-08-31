@@ -50,7 +50,7 @@ whats-proxy
    │   └── stop                             # graceful shutdown, persist Store, keep auth
    │
    └── do <action> [payload|file] [--output-file/-o] [--format/-f] [--help/-h]
-                                            # RPC — 66 flat actions, JSON payload (inline or file)
+                                            # RPC — 65 flat actions, JSON payload (inline or file)
 ```
 
 ### `whats-proxy admin` — Admin (ALWAYS JSON to stdout — hardcoded, no `--format`)
@@ -139,7 +139,6 @@ domain FIRST.** All `whats-mcp` `verb_noun` names are flipped.
 | `edit-message` | `edit_message` | WS | ✅ | mandatory approval; message_id + new text |
 | `delete-message` | `delete_message` | WS | ✅ | **preflight + lockIdentity** (jid, message_id); irreversible |
 | `forward-message` | `forward_message` | WS | ✅ | mandatory approval; source + targetjid |
-| `batch-send-text` | `batch_send_message` | WS | ✅ | mandatory approval; jid[] + text; one HITL review for the batch |
 | `send-batch` | *(new)* | WS | ✅ | **unified multi-recipient multi-part send**: N recipients × M content parts (text/image/video/audio/document/sticker/location/contact/poll); per-part `quoted_id` override; per-part `mentions` on text; per-message HITL review |
 
 ### Chats (5)
@@ -253,7 +252,7 @@ domain FIRST.** All `whats-mcp` `verb_noun` names are flipped.
 | Overview | 5 |
 | Analytics | 5 |
 | Utilities | 7 |
-| **TOTAL `do` actions** | **66** |
+| **TOTAL `do` actions** | **65** |
 
 **Coverage proof — all 65 `whats-mcp` tools accounted for:**
 
@@ -290,7 +289,7 @@ writes (`contact-tags`, `watchlist`) where a read-back confirms the local state 
 
 | HITL Level | Count | Actions |
 |------------|------:|---------|
-| **approval: always** | 28 | send-text, send-image, send-video, send-audio, send-document, send-sticker, send-location, send-contact, send-reaction, send-poll, edit-message, delete-message, forward-message, batch-send-text, chat-manage (dangerous), chat-star, chat-disappearing, group-create, group-subject, group-description, group-participants, group-leave, group-settings, group-picture, channel-create, channel-manage, channel-update, channel-delete |
+| **approval: always** | 27 | send-text, send-image, send-video, send-audio, send-document, send-sticker, send-location, send-contact, send-reaction, send-poll, edit-message, delete-message, forward-message, chat-manage (dangerous), chat-star, chat-disappearing, group-create, group-subject, group-description, group-participants, group-leave, group-settings, group-picture, channel-create, channel-manage, channel-update, channel-delete |
 | **approval: conditional** | 10 | contact-block (dangerous), group-invite (revoke), label-manage (delete), profile-privacy (set), contact-tags (mutates collection), watchlist (mutates collection), presence, read-messages, media-download, media-cleanup |
 | **approval: never** | 27 | chat-list, chat-read, contact-list, contact-info, contact-check, contact-business, group-list, group-info, channel-info, daily-digest, whatsup, find-messages, messages-multi, analytics-overview, analytics-top-chats, analytics-chat-insights, analytics-timeline, analytics-search, profile-about, profile-name, connection-status, guide, search-messages, label-chat, label-message, contact-picture, store-stats |
 
@@ -317,7 +316,7 @@ writes (`contact-tags`, `watchlist`) where a read-back confirms the local state 
    exists. Required verification appears only under `data.verification`.
 
 **If no browser is available:** the URL is printed with an `ssh -L` hint. Timeout 600 s → automatic
-`rejected`. HITL-required actions: 28 always-approval + 10 conditional = 38 total (of 66).
+`rejected`. HITL-required actions: 27 always-approval + 10 conditional = 37 total (of 65).
 
 ---
 
@@ -329,7 +328,7 @@ Unlike stateless TickTick REST calls, Baileys needs a durable socket and local S
 CLI do/admin ── JSON-RPC over Unix socket ── daemon
                                              ├── Baileys session (persistent socket)
                                              ├── Store (WhatsApp history snapshot)
-                                             ├── 66-action registry + safety policies
+                                             ├── 65-action registry + safety policies
                                              ├── Zod validation (CLI pre-daemon + daemon-side)
                                              └── O_EXCL lock + socket-first ownership
 ```
@@ -495,7 +494,7 @@ action declaring a schema has a matching entry in `schemas.ts`. A missing schema
 whats-proxy
    │
    ├── admin setup|status|stop               # ALWAYS JSON
-   └── do <action> [payload|file] [-o] [-f]  # 66 flat RPC actions
+   └── do <action> [payload|file] [-o] [-f]  # 65 flat RPC actions
        │
        ▼
 ┌─────────────────────────────────────────────────────────────────┐
@@ -515,12 +514,12 @@ whats-proxy
 │  ├── types.ts            shared type definitions                 │
 │  ├── hitl.ts             HITL web UI (free port, browser auto)   │
 │  │                                                              │
-│  ├── actions/            THE 66 ACTIONS                           │
+│  ├── actions/            THE 65 ACTIONS                           │
 │  │   ├── registry.ts     name → ActionDef map, duplicate = error │
 │  │   ├── policies.ts     approval/preflight/verification truth   │
-│  │   ├── schemas.ts      66 Zod schemas (one per action)         │
+│  │   ├── schemas.ts      65 Zod schemas (one per action)         │
 │  │   ├── messaging.ts    send-* · edit-message · delete-message  │
-│  │   │                   · forward-message · batch-send-text     │
+│  │   │                   · forward-message · send-batch           │
 │  │   ├── chats.ts        chat-*                                   │
 │  │   ├── contacts.ts     contact-*                                │
 │  │   ├── groups.ts       group-*                                  │
@@ -613,7 +612,7 @@ it spawns `tsx` under Node.js with the correct module resolution.
 ## Porting Proof
 
 **65/65 `whats-mcp` tools ported + 1 new (`send-batch`).** Every tool in `$HOME/Work/AI/MCPs/whats_mcp/src/tools/*.js`
-is accounted for in the 66-action registry. The porting was verified at runtime — every action
+is accounted for in the 65-action registry. The porting was verified at runtime — every action
 name maps to a working handler backed by a Baileys operation or local Store read.
 
 | Domain | whats-mcp tools | whats-proxy actions | Fate |
@@ -628,7 +627,7 @@ name maps to a working handler backed by a Baileys operation or local Store read
 | Overview | 5 | 5 | 1:1 rename |
 | Analytics | 5 | 5 | 1:1 rename |
 | Utilities | 7 | 7 | 1:1 rename + `guide` folded into `do --help` |
-| **TOTAL ported** | **65** | **65** | ✅ zero gaps from whats-mcp + 1 new (`send-batch`) = **66 total** |
+| **TOTAL ported** | **65** | **65** | ✅ zero gaps from whats-mcp + 1 new (`send-batch`) = **65 total** |
 
 **No tools were dropped, merged, or split.** The 1:1 mapping is possible because `whats-mcp` was
 already well-structured (domain-grouped tools with clear inputs/outputs). The porting is a
@@ -707,4 +706,4 @@ WhatsApp device. Authentication failures are fail-closed; never invent a browser
 - See `README.md` for user-facing documentation.
 
 *Architecture contract drafted 2026-08-31 — rewrite of `whats-mcp` (65 MCP tools) into
-`whats-proxy` (66 RPC actions: 65 ported + 1 new `send-batch`), modelled on `tick-proxy` v1.1.0 (52 RPC actions).*
+`whats-proxy` (65 RPC actions: 65 ported + 0 new), modelled on `tick-proxy` v1.1.0 (52 RPC actions).*
