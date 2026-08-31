@@ -57,10 +57,12 @@
 </footer>
 
 <script>
-// ── Initialize from JSON safely ─────────────────────────────────────────────
+// ── Initialize from base64-encoded payload (safe transport) ────────────────
 var ORIGINAL, payload;
 try {
-    ORIGINAL = JSON.parse(document.getElementById('payload').getAttribute('data-original') || '{{PAYLOAD_JSON_SAFE}}');
+    var b64 = '{{PAYLOAD_B64}}';
+    var jsonStr = atob(b64);
+    ORIGINAL = JSON.parse(jsonStr);
     payload = ORIGINAL;
 } catch(e) {
     ORIGINAL = {};

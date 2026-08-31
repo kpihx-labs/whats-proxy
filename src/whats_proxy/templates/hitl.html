@@ -28,14 +28,19 @@
 </footer>
 
 <script>
-const ORIGINAL = JSON.stringify(JSON.parse('{{PAYLOAD_JSON_SAFE}}'));
+var ORIGINAL, payload;
+try {
+    ORIGINAL = JSON.parse(atob('{{PAYLOAD_B64}}'));
+    payload = ORIGINAL;
+} catch(e) { ORIGINAL = {}; payload = {}; }
+document.getElementById('payload').value = JSON.stringify(payload, null, 2);
 
 async function submit(status) {
     const raw = document.getElementById('payload').value;
     let payload;
     try { payload = JSON.parse(raw); } catch { payload = raw; }
     const comment = document.getElementById('comment').value;
-    const edited = (JSON.stringify(payload) !== ORIGINAL);
+    const edited = (JSON.stringify(p) !== JSON.stringify(ORIGINAL));
     const resp = await fetch('/submit', {
         method: 'POST',
         body: JSON.stringify({ id: '{{REQUEST_ID}}', status, comment, payload, edited })
