@@ -1,53 +1,24 @@
 <!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Whats-Proxy — HITL Review</title>
+<title>Whats-Proxy — Review</title>
 <link rel="stylesheet" href="/assets/hitl.css">
 </head><body>
-
+<script type="application/json" id="payload-data">{{PAYLOAD_JSON}}</script>
 <header class="hitl-header">
-  <div>
-    <h1 class="hitl-brand">🟢 Whats-Proxy · Action Review</h1>
-    <p class="hitl-subtitle">Action: {{FUNC_NAME}} — review before execution</p>
-  </div>
+  <div><h1 class="hitl-brand">🟢 Whats-Proxy · Review</h1><p class="hitl-subtitle">{{FUNC_NAME}}</p></div>
   <div class="hitl-actions">
     <button class="hitl-button hitl-reject" onclick="submit('rejected')">✕ Reject</button>
-    <button class="hitl-button hitl-approve" onclick="submit('approved')">✓ Approve &amp; execute</button>
+    <button class="hitl-button hitl-approve" onclick="submit('approved')">✓ Approve</button>
   </div>
 </header>
-
 <main class="hitl-container">
-  <section class="hitl-card">
-    <h2>📋 Action JSON — edit below to modify</h2>
-    <div class="hitl-card-body">
-      <textarea class="hitl-input" id="payload" rows="16">{{PAYLOAD_JSON}}</textarea>
-    </div>
-  </section>
+  <section class="hitl-card"><h2>📋 Action JSON</h2><div class="hitl-card-body">
+    <textarea class="hitl-input" id="payload" rows="16"></textarea>
+  </div></section>
 </main>
-
-<footer class="hitl-footer">
-  <textarea class="hitl-input" id="comment" placeholder="Comment (optional)" rows="2"></textarea>
-</footer>
-
+<footer class="hitl-footer"><textarea class="hitl-input" id="comment" placeholder="Comment" rows="2"></textarea></footer>
 <script>
-var ORIGINAL, payload;
-try {
-    var jsonStr = document.getElementById('payload').value;
-    ORIGINAL = JSON.parse(jsonStr);
-    payload = ORIGINAL;
-} catch(e) { ORIGINAL = {}; payload = {}; }
-
-async function submit(status) {
-    const raw = document.getElementById('payload').value;
-    let payload;
-    try { payload = JSON.parse(raw); } catch { payload = raw; }
-    const comment = document.getElementById('comment').value;
-    const edited = (JSON.stringify(p) !== JSON.stringify(ORIGINAL));
-    const resp = await fetch('/submit', {
-        method: 'POST',
-        body: JSON.stringify({ id: '{{REQUEST_ID}}', status, comment, payload, edited })
-    });
-    if (resp.ok) {
-        document.body.innerHTML = '<div class="hitl-done"><h2>✅ ' + status.toUpperCase() + '</h2><p>You can close this window.</p></div>';
-    }
-}
+var ORIGINAL,payload;try{payload=JSON.parse(document.getElementById('payload-data').textContent);ORIGINAL=JSON.parse(JSON.stringify(payload))}catch(e){payload={};ORIGINAL={}}
+document.getElementById('payload').value=JSON.stringify(payload,null,2);
+async function submit(s){var raw=document.getElementById('payload').value;var p;try{p=JSON.parse(raw)}catch(e){p=raw};var c=document.getElementById('comment').value;var edited=JSON.stringify(p)!==JSON.stringify(ORIGINAL);var r=await fetch('/submit',{method:'POST',body:JSON.stringify({id:'{{REQUEST_ID}}',status:s,comment:c,payload:p,edited:edited})});if(r.ok)document.body.innerHTML='<div class="hitl-done"><h2>'+(s==='approved'?'✅ SENT':'❌ REJECTED')+'</h2><p style="opacity:.6">Close this window.</p></div>';}
 </script>
 </body></html>

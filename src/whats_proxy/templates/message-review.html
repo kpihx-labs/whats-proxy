@@ -3,10 +3,12 @@
 <link rel="stylesheet" href="/assets/hitl.css">
 </head><body>
 
+<script type="application/json" id="payload-data">{{PAYLOAD_JSON}}</script>
+
 <header class="hitl-header">
   <div>
     <h1 class="hitl-brand">🟢 Whats-Proxy · Message Review</h1>
-    <p class="hitl-subtitle">Action: {{FUNC_NAME}} — edit freely, approve to send</p>
+    <p class="hitl-subtitle">{{FUNC_NAME}} — edit freely, approve to send</p>
   </div>
   <div class="hitl-actions">
     <button class="hitl-button hitl-reject" onclick="submit('rejected')">✕ Reject</button>
@@ -15,10 +17,8 @@
 </header>
 
 <main class="hitl-container">
-
-  <!-- ===== Visual Editor (editable, syncs with JSON) ===== -->
   <section class="hitl-card">
-    <h2>✏️ Message Editor — edit directly below, changes sync to JSON</h2>
+    <h2>✏️ Editor</h2>
     <div class="hitl-card-body">
       <div class="editor-row">
         <label class="editor-label">To (JID)</label>
@@ -26,30 +26,25 @@
       </div>
       <div class="editor-row">
         <label class="editor-label">Message</label>
-        <div class="editor-toolbar" id="toolbar">
-          <button class="tb-btn" onclick="wrapText('*','*')" title="Bold">B</button>
-          <button class="tb-btn" onclick="wrapText('_','_')" title="Italic"><i>I</i></button>
-          <button class="tb-btn" onclick="wrapText('~','~')" title="Strikethrough"><s>S</s></button>
-          <button class="tb-btn" onclick="wrapText('```','```')" title="Code">{'<>'}</button>
-          <button class="tb-btn" onclick="insertText('\n')" title="Line break">↵</button>
-          <button class="tb-btn" onclick="insertText('\n• ')" title="Bullet">•</button>
-          <button class="tb-btn" onclick="insertText('\n# ')" title="Title">#</button>
-          <button class="tb-btn" onclick="insertText('\n---\n')" title="Separator">—</button>
+        <div class="editor-toolbar">
+          <button class="tb-btn" onclick="wrap('*','*')" title="Bold">B</button>
+          <button class="tb-btn" onclick="wrap('_','_')" title="Italic"><i>I</i></button>
+          <button class="tb-btn" onclick="wrap('~','~')" title="Strikethrough"><s>S</s></button>
+          <button class="tb-btn" onclick="ins('\n• ')" title="Bullet">•</button>
+          <button class="tb-btn" onclick="ins('\n# ')" title="Title">#</button>
         </div>
         <textarea class="editor-textarea" id="ed-text" rows="8"></textarea>
       </div>
-      <div class="editor-row" id="ed-extra-fields"></div>
+      <div class="editor-row" id="ed-extra"></div>
     </div>
   </section>
 
-  <!-- ===== Raw JSON Editor ===== -->
   <section class="hitl-card">
-    <h2>🔧 Raw JSON — edit directly or sync from visual editor</h2>
+    <h2>🔧 Raw JSON</h2>
     <div class="hitl-card-body">
-      <textarea class="hitl-input" id="payload" rows="14">{{PAYLOAD_JSON}}</textarea>
+      <textarea class="hitl-input" id="payload" rows="14"></textarea>
     </div>
   </section>
-
 </main>
 
 <footer class="hitl-footer">
@@ -57,155 +52,46 @@
 </footer>
 
 <script>
-// ── Initialize from textarea (already contains {{PAYLOAD_JSON}}) ────────────
 var ORIGINAL, payload;
 try {
-    var jsonStr = document.getElementById('payload').value;
-    ORIGINAL = JSON.parse(jsonStr);
-    payload = ORIGINAL;
+    payload = JSON.parse(document.getElementById('payload-data').textContent);
+    ORIGINAL = JSON.parse(JSON.stringify(payload));
 } catch(e) {
-    ORIGINAL = {};
     payload = {};
+    ORIGINAL = {};
+}
+document.getElementById('ed-jid').value = payload.jid || payload.to || payload.to_jid || '';
+document.getElementById('ed-text').value = payload.text || payload.caption || payload.question || payload.name || payload.new_text || '';
+document.getElementById('payload').value = JSON.stringify(payload, null, 2);
+
+// Extra fields
+var extra = document.getElementById('ed-extra');
+if (payload.options) addField(extra,'options','Poll options (one per line)',(payload.options||[]).join('\n'),'textarea');
+if (payload.latitude!=null) addField(extra,'latitude','Latitude',payload.latitude,'number');
+if (payload.longitude!=null) addField(extra,'longitude','Longitude',payload.longitude,'number');
+if (payload.contacts) addField(extra,'contacts','Contacts',JSON.stringify(payload.contacts,null,2),'textarea');
+if (payload.source) addField(extra,'source','Source',payload.source,'text');
+if (payload.new_text) addField(extra,'new_text','New text',payload.new_text,'textarea');
+if (payload.to_jid) addField(extra,'to_jid','Forward to',payload.to_jid,'text');
+extra.querySelectorAll('input,textarea').forEach(function(el){el.addEventListener('input',sync)});
+
+function wrap(b,a){var t=document.getElementById('ed-text'),s=t.selectionStart,e=t.selectionEnd,sel=t.value.substring(s,e);t.value=t.value.substring(0,s)+b+(sel||'text')+a+t.value.substring(e);t.focus();t.setSelectionRange(s+b.length,s+b.length+(sel?sel.length:4));sync()}
+function ins(txt){var t=document.getElementById('ed-text'),p=t.selectionStart;t.value=t.value.substring(0,p)+txt+t.value.substring(p);t.focus();t.setSelectionRange(p+txt.length,p+txt.length);sync()}
+function addField(c,k,l,v,t){var r=document.createElement('div');r.className='editor-row';var lb=document.createElement('label');lb.className='editor-label';lb.textContent=l;r.appendChild(lb);if(t==='textarea'){var ta=document.createElement('textarea');ta.className='editor-textarea';ta.id='ed-'+k;ta.value=v;ta.rows=3;r.appendChild(ta)}else{var i=document.createElement('input');i.className='editor-input';i.id='ed-'+k;i.type=t;i.value=v;r.appendChild(i)}c.appendChild(r);el=function(e){el.addEventListener('input',sync)}}
+
+function sync(){var u=JSON.parse(JSON.stringify(payload));u.jid=document.getElementById('ed-jid').value||u.jid;u.to=u.jid;var t=document.getElementById('ed-text').value;if('text' in u)u.text=t;else if('caption' in u)u.caption=t;else if('question' in u)u.question=t;else if('name' in u)u.name=t;else if('new_text' in u)u.new_text=t;var o=document.getElementById('ed-options');if(o&&'options'in u)u.options=o.value.split('\n').filter(Boolean);var n=document.getElementById('ed-new_text');if(n)u.new_text=n.value;document.getElementById('payload').value=JSON.stringify(u,null,2)}
+
+async function submit(status){
+    sync();
+    var raw=document.getElementById('payload').value;
+    var p;try{p=JSON.parse(raw)}catch(e){p=raw}
+    var c=document.getElementById('comment').value;
+    var edited=JSON.stringify(p)!==JSON.stringify(ORIGINAL);
+    var r=await fetch('/submit',{method:'POST',body:JSON.stringify({id:'{{REQUEST_ID}}',status:status,comment:c,payload:p,edited:edited})});
+    if(r.ok)document.body.innerHTML='<div class="hitl-done"><h2>'+(status==='approved'?'✅ SENT':'❌ REJECTED')+'</h2><p style="opacity:.6">Close this window.</p></div>';
 }
 
-// Populate visual editor from payload
-function initEditor() {
-    document.getElementById('ed-jid').value = payload.jid || payload.to || payload.to_jid || '';
-    document.getElementById('ed-text').value = payload.text || payload.caption || payload.question || payload.name || payload.new_text || payload.message || '';
-    document.getElementById('payload').value = JSON.stringify(payload, null, 2);
-
-    // Extra fields
-    var extra = document.getElementById('ed-extra-fields');
-    extra.innerHTML = '';
-    if (payload.options) addField(extra, 'options', 'Poll options (one per line)', (payload.options||[]).join('\n'), 'textarea');
-    if (payload.latitude != null) addField(extra, 'latitude', 'Latitude', payload.latitude, 'number');
-    if (payload.longitude != null) addField(extra, 'longitude', 'Longitude', payload.longitude, 'number');
-    if (payload.contacts) addField(extra, 'contacts', 'Contacts', JSON.stringify(payload.contacts, null, 2), 'textarea');
-    if (payload.source) addField(extra, 'source', 'Source / Path', payload.source, 'text');
-    if (payload.new_text) addField(extra, 'new_text', 'New text (edit)', payload.new_text, 'textarea');
-    if (payload.to_jid) addField(extra, 'to_jid', 'Forward to', payload.to_jid, 'text');
-
-    // Attach sync listeners to all extra fields
-    extra.querySelectorAll('input, textarea').forEach(function(el) {
-        el.addEventListener('input', syncFromVisual);
-    });
-
-    renderPreview();
-}
-
-function addField(container, key, label, value, type) {
-    var row = document.createElement('div');
-    row.className = 'editor-row';
-    var lbl = document.createElement('label');
-    lbl.className = 'editor-label';
-    lbl.textContent = label;
-    row.appendChild(lbl);
-    if (type === 'textarea') {
-        var ta = document.createElement('textarea');
-        ta.className = 'editor-textarea';
-        ta.id = 'ed-' + key;
-        ta.value = value;
-        ta.rows = 3;
-        row.appendChild(ta);
-    } else {
-        var inp = document.createElement('input');
-        inp.className = 'editor-input';
-        inp.id = 'ed-' + key;
-        inp.type = type;
-        inp.value = value;
-        row.appendChild(inp);
-    }
-    container.appendChild(row);
-}
-
-// ── Toolbar helpers ─────────────────────────────────────────────────────────
-function wrapText(before, after) {
-    var ta = document.getElementById('ed-text');
-    var s = ta.selectionStart, e = ta.selectionEnd;
-    var sel = ta.value.substring(s, e);
-    ta.value = ta.value.substring(0, s) + before + (sel||'text') + after + ta.value.substring(e);
-    ta.focus();
-    ta.setSelectionRange(s + before.length, s + before.length + (sel ? sel.length : 4));
-    syncFromVisual();
-}
-
-function insertText(text) {
-    var ta = document.getElementById('ed-text');
-    var p = ta.selectionStart;
-    ta.value = ta.value.substring(0, p) + text + ta.value.substring(p);
-    ta.focus();
-    ta.setSelectionRange(p + text.length, p + text.length);
-    syncFromVisual();
-}
-
-function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-// ── Sync visual → JSON ─────────────────────────────────────────────────────
-function syncFromVisual() {
-    var updated = JSON.parse(JSON.stringify(payload));
-    updated.jid = document.getElementById('ed-jid').value || updated.jid;
-    updated.to = updated.jid;
-    var text = document.getElementById('ed-text').value;
-    if ('text' in updated) updated.text = text;
-    else if ('caption' in updated) updated.caption = text;
-    else if ('question' in updated) updated.question = text;
-    else if ('name' in updated) updated.name = text;
-    else if ('new_text' in updated) updated.new_text = text;
-
-    var optsEl = document.getElementById('ed-options');
-    if (optsEl && 'options' in updated) updated.options = optsEl.value.split('\n').filter(Boolean);
-    var latEl = document.getElementById('ed-latitude');
-    if (latEl) updated.latitude = parseFloat(latEl.value) || 0;
-    var lngEl = document.getElementById('ed-longitude');
-    if (lngEl) updated.longitude = parseFloat(lngEl.value) || 0;
-    var contactsEl = document.getElementById('ed-contacts');
-    if (contactsEl) { try { updated.contacts = JSON.parse(contactsEl.value); } catch {} }
-    var toJidEl = document.getElementById('ed-to_jid');
-    if (toJidEl) updated.to_jid = toJidEl.value;
-    var newTextEl = document.getElementById('ed-new_text');
-    if (newTextEl) updated.new_text = newTextEl.value;
-
-    document.getElementById('payload').value = JSON.stringify(updated, null, 2);
-}
-
-// ── Sync JSON → visual ─────────────────────────────────────────────────────
-function syncFromJson() {
-    try {
-        var parsed = JSON.parse(document.getElementById('payload').value);
-        document.getElementById('ed-jid').value = parsed.jid || parsed.to || '';
-        document.getElementById('ed-text').value = parsed.text || parsed.caption || parsed.question || parsed.name || parsed.new_text || '';
-        var optsEl = document.getElementById('ed-options');
-        if (optsEl && parsed.options) optsEl.value = (parsed.options || []).join('\n');
-        var latEl = document.getElementById('ed-latitude');
-        if (latEl && parsed.latitude != null) latEl.value = parsed.latitude;
-        var lngEl = document.getElementById('ed-longitude');
-        if (lngEl && parsed.longitude != null) lngEl.value = parsed.longitude;
-        var toJidEl = document.getElementById('ed-to_jid');
-        if (toJidEl && parsed.to_jid) toJidEl.value = parsed.to_jid;
-        var newTextEl = document.getElementById('ed-new_text');
-        if (newTextEl && parsed.new_text) newTextEl.value = parsed.new_text;
-        payload = parsed;
-    } catch(e) {}
-}
-
-// ── Submit ──────────────────────────────────────────────────────────────────
-async function submit(status) {
-    syncFromVisual();
-    var raw = document.getElementById('payload').value;
-    var p;
-    try { p = JSON.parse(raw); } catch(e) { p = raw; }
-    var comment = document.getElementById('comment').value;
-    var edited = (JSON.stringify(p) !== JSON.stringify(ORIGINAL));
-    var resp = await fetch('/submit', {
-        method: 'POST',
-        body: JSON.stringify({ id: '{{REQUEST_ID}}', status: status, comment: comment, payload: p, edited: edited })
-    });
-    if (resp.ok) {
-        document.body.innerHTML = '<div class="hitl-done"><h2>' + (status === 'approved' ? '✅ SENT' : '❌ REJECTED') + '</h2><p style="opacity:0.6">You can close this window.</p></div>';
-    }
-}
-
-// ── Init ────────────────────────────────────────────────────────────────────
-initEditor();
+document.querySelectorAll('[id^="ed-"]').forEach(function(el){el.addEventListener('input',sync)});
+document.getElementById('payload').addEventListener('input',sync);
 </script>
 </body></html>
