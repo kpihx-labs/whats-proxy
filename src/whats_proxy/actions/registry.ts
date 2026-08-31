@@ -23,7 +23,7 @@ import watchlists from "./watchlists.ts";
 import utils from "./utils.ts";
 
 const ALL: ActionDef[] = [
-  ...messaging, // 14
+  ...messaging, // 15
   ...chats,     // 5
   ...contacts,  // 6
   ...groups,    // 10

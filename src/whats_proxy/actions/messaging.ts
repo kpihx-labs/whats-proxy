@@ -1,11 +1,11 @@
 /**
- * whats-proxy — Messaging actions (14).
+ * whats-proxy — Messaging actions (15).
  *
  * send-text, send-image, send-video, send-audio, send-document, send-sticker,
  * send-location, send-contact, send-reaction, send-poll, edit-message,
- * delete-message, forward-message, batch-send-text.
+ * delete-message, forward-message, batch-send-text, send-batch.
  *
- * Faithful port of whats-mcp `messaging.js`.
+ * Faithful port of whats-mcp `messaging.js` + unified send-batch.
  */
 
 import type { ActionDef } from "./types.ts";
@@ -14,7 +14,7 @@ import {
   sendTextSchema, sendImageSchema, sendVideoSchema, sendAudioSchema,
   sendDocumentSchema, sendStickerSchema, sendLocationSchema, sendContactSchema,
   sendReactionSchema, sendPollSchema, editMessageSchema, deleteMessageSchema,
-  forwardMessageSchema, batchSendTextSchema,
+  forwardMessageSchema, batchSendTextSchema, sendBatchSchema,
 } from "./schemas.ts";
 import type { AnyMsg } from "../store.ts";
 
@@ -39,6 +39,78 @@ function _fmtSent(result: any, jid: string) {
       ? Number(result.messageTimestamp)
       : Math.floor(Date.now() / 1000),
   });
+}
+
+/** Map a send-batch part to a Baileys content object. */
+function _mapPart(part: Record<string, unknown>): Record<string, unknown> {
+  switch (part.type) {
+    case "text":
+      return { text: String(part.text) };
+    case "image":
+      return { image: resolveMedia(String(part.source)) as any, ...(part.caption ? { caption: part.caption } : {}) };
+    case "video": {
+      const c: Record<string, unknown> = { video: resolveMedia(String(part.source)) as any };
+      if (part.caption) c.caption = part.caption;
+      if (part.gif_playback) c.gifPlayback = true;
+      if (part.ptv) c.ptv = true;
+      return c;
+    }
+    case "audio": {
+      const c: Record<string, unknown> = { audio: resolveMedia(String(part.source)) as any };
+      if (part.ptt) c.ptt = true;
+      return c;
+    }
+    case "document": {
+      const c: Record<string, unknown> = {
+        document: resolveMedia(String(part.source)) as any,
+        mimetype: String(part.mimetype || "application/octet-stream"),
+      };
+      if (part.filename) c.fileName = part.filename;
+      if (part.caption) c.caption = part.caption;
+      return c;
+    }
+    case "sticker":
+      return { sticker: resolveMedia(String(part.source)) as any };
+    case "location": {
+      const loc: Record<string, unknown> = {
+        degreesLatitude: Number(part.latitude),
+        degreesLongitude: Number(part.longitude),
+      };
+      if (part.name) loc.name = part.name;
+      if (part.address) loc.address = part.address;
+      return { location: loc };
+    }
+    case "contact": {
+      const list = (part.contacts as { name: string; phone: string }[]) || [];
+      const vCards = list.map((c) => {
+        const phone = String(c.phone).replace(/[^0-9+]/g, "");
+        return (
+          "BEGIN:VCARD\nVERSION:3.0\n" +
+          `FN:${c.name}\n` +
+          `TEL;type=CELL;type=VOICE;waid=${phone.replace("+", "")}:${phone}\n` +
+          "END:VCARD"
+        );
+      });
+      return {
+        contacts: {
+          displayName: list.length === 1 ? list[0]!.name : `${list.length} contacts`,
+          contacts: vCards.map((vcard) => ({ vcard })),
+        },
+      };
+    }
+    case "poll": {
+      const opts = Array.isArray(part.options) ? part.options.map(String) : [];
+      return {
+        poll: {
+          name: String(part.question),
+          values: opts,
+          selectableCount: part.selectable_count ?? 1,
+        },
+      };
+    }
+    default:
+      return {};
+  }
 }
 
 export default [
@@ -471,5 +543,87 @@ export default [
       return okResult({ total: list.length, sent, failed, results });
     },
     schema: batchSendTextSchema,
+  },
+  // ── send-batch: unified multi-recipient multi-part send ──────────────────
+  {
+    meta: {
+      action: "send-batch",
+      category: "messaging",
+      description: "Send multiple content types (text, image, video, audio, document, sticker, location, contact, poll) to one or more recipients in a single call. Each part becomes one WhatsApp message; every part is sent to every recipient. Returns a unified result with per-message success/failure.",
+      arguments: [
+        { name: "to", description: "Recipient(s): a single JID/phone string or an array of them.", required: true },
+        { name: "parts", description: "Array of content objects. Each must have a 'type' key (text, image, video, audio, document, sticker, location, contact, poll) plus the type-specific fields.", required: true },
+        { name: "quoted_id", description: "Optional: message ID to reply/quote on every sent message.", required: false },
+        { name: "delay_ms", description: "Delay in ms between individual sends. Default 500.", required: false },
+      ],
+      example: { to: ["33612345678", "120363000000000@g.us"], parts: [{ type: "text", text: "Hello!" }] },
+      examples: [
+        { description: "Text to two recipients", payload: { to: ["33612345678", "33600000000"], parts: [{ type: "text", text: "Meeting at 3pm." }] } },
+        { description: "Image + text to a group", payload: { to: "120363000000000@g.us", parts: [{ type: "text", text: "Check this out" }, { type: "image", source: "/tmp/photo.jpg", caption: "Figure 1" }] } },
+        { description: "Multi-type broadcast", payload: { to: ["33612345678", "33600000000"], parts: [{ type: "text", text: "Report attached" }, { type: "document", source: "/tmp/report.pdf", filename: "report.pdf" }, { type: "poll", question: "Status?", options: ["OK", "Needs fix"] }] } },
+      ],
+      returns: "{ total, sent, failed, results }",
+    },
+    handler: async ({ to, parts, quoted_id, delay_ms }, { sock, store }) => {
+      // Normalize `to` to always be an array.
+      const recipients: string[] = Array.isArray(to)
+        ? to.map(String)
+        : [String(to)];
+      if (recipients.length === 0) return errResult("At least one recipient is required.");
+
+      const partList = parts as Record<string, unknown>[];
+      if (!Array.isArray(partList) || partList.length === 0) {
+        return errResult("At least one content part is required.");
+      }
+
+      const delay = delay_ms !== undefined ? Number(delay_ms) : 500;
+
+      // Resolve quoted message once (shared across all sends).
+      let quotedMsg: AnyMsg | undefined;
+      if (quoted_id) {
+        const m = store.getMessage(String(quoted_id));
+        if (m) quotedMsg = m as AnyMsg;
+      }
+
+      const results: Record<string, unknown>[] = [];
+      let sent = 0;
+      let failed = 0;
+      let sendIndex = 0;
+      const totalSends = recipients.length * partList.length;
+
+      for (const jid of recipients) {
+        const toJid = phoneToJid(jid);
+        for (const part of partList) {
+          try {
+            const content = _mapPart(part);
+            const opts: Record<string, unknown> = {};
+            if (quotedMsg) opts.quoted = quotedMsg;
+            const r: any = await sock.sendMessage(toJid, content as any, opts as any);
+            results.push({
+              jid: toJid,
+              type: part.type,
+              status: "sent",
+              message_id: r?.key?.id || null,
+              timestamp: r?.messageTimestamp ? Number(r.messageTimestamp) : Math.floor(Date.now() / 1000),
+            });
+            sent++;
+          } catch (err) {
+            results.push({
+              jid: toJid,
+              type: part.type,
+              status: "failed",
+              error: (err as Error).message,
+            });
+            failed++;
+          }
+          sendIndex++;
+          if (delay > 0 && sendIndex < totalSends) {
+            await new Promise((r) => setTimeout(r, delay));
+          }
+        }
+      }
+      return okResult({ total: totalSends, sent, failed, results });
+    },
+    schema: sendBatchSchema,
   },
 ] satisfies ActionDef[];

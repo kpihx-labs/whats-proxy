@@ -113,6 +113,7 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   "edit-message": { approval: always },
   "delete-message": { approval: always, preflight: requireStoreMessage, identityFields: ["jid", "message_id"] },
   "forward-message": { approval: always }, "batch-send-text": { approval: always },
+  "send-batch": { approval: always },
   "chat-manage": { approval: always, preflight: (args, context) => hasDangerousChatOperation(args) ? requireChat(args, context) : null, identityFields: ["jid"], lockIdentity: hasDangerousChatOperation },
   "chat-star": { approval: always }, "chat-disappearing": { approval: always },
   "contact-block": { approval: hasDangerousContactOperation },
