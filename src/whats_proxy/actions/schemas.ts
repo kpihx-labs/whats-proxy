@@ -450,6 +450,16 @@ export const mediaDownloadSchema = z.object({
 
 export const mediaCleanupSchema = z.object({});
 
+export const mediaUploadSchema = z.object({
+  jid: z.string(),
+  source: z.string(),
+  mimetype: z.string().optional(),
+  caption: z.string().optional(),
+  filename: z.string().optional(),
+  quoted_id: z.string().optional(),
+  ptt: z.boolean().optional(),
+});
+
 // ── Schema registry (action name → schema) — used by audit tests ───────────
 
 export const SCHEMAS: Record<string, z.ZodObject<Record<string, z.ZodTypeAny>>> = {
@@ -469,6 +479,7 @@ export const SCHEMAS: Record<string, z.ZodObject<Record<string, z.ZodTypeAny>>> 
   "forward-message": forwardMessageSchema,
   "batch-send-text": batchSendTextSchema,
   "send-batch": sendBatchSchema,
+  "media-upload": mediaUploadSchema,
   // Chats
   "chat-list": chatListSchema,
   "chat-read": chatReadSchema,

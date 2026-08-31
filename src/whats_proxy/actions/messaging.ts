@@ -15,7 +15,7 @@ import {
   sendTextSchema, sendImageSchema, sendVideoSchema, sendAudioSchema,
   sendDocumentSchema, sendStickerSchema, sendLocationSchema, sendContactSchema,
   sendReactionSchema, sendPollSchema, editMessageSchema, deleteMessageSchema,
-  forwardMessageSchema, batchSendTextSchema, sendBatchSchema,
+  forwardMessageSchema, batchSendTextSchema, sendBatchSchema, mediaUploadSchema,
 } from "./schemas.ts";
 import type { AnyMsg } from "../store.ts";
 
@@ -920,5 +920,78 @@ Examples:
     - Mixed parts with per-part reply targets:
         \`whats-proxy do send-batch '{"to":"33612345678","parts":[{"type":"text","text":"See attached"},{"type":"image","source":"/tmp/chart.png","quoted_id":"MSG123"}]}'\`
         → {"total":2,"sent":2,"failed":0,"results":[{"jid":"33612345678@s.whatsapp.net","type":"text","status":"sent","message_id":"BAT005","timestamp":1756614002},{"jid":"33612345678@s.whatsapp.net","type":"image","status":"sent","message_id":"BAT006","timestamp":1756614002}]}`,
+  },
+  // ── media-upload: generic media upload ────────────────────────────────────
+  {
+    meta: {
+      action: "media-upload",
+      category: "messaging",
+      description: "Upload a file (image, video, audio, document, sticker) to a contact or group. Mimetype is auto-detected from the file extension.",
+      arguments: [
+        { name: "jid", description: "Recipient JID or phone number.", required: true },
+        { name: "source", description: "File path (local), URL, or base64 data.", required: true },
+        { name: "mimetype", description: "Override mimetype (auto-detected if omitted).", required: false },
+        { name: "caption", description: "Optional caption for image/video/document.", required: false },
+        { name: "filename", description: "Override filename sent to recipient.", required: false },
+        { name: "quoted_id", description: "Optional: message ID to reply/quote.", required: false },
+        { name: "ptt", description: "Push-to-talk: true for voice note (audio only).", required: false },
+      ],
+      example: { jid: "33612345678", source: "/tmp/photo.jpg", caption: "Check this!" },
+      examples: [
+        { description: "Upload an image with caption", payload: { jid: "33612345678", source: "/tmp/photo.jpg", caption: "Voici la photo" } },
+        { description: "Upload a document", payload: { jid: "33612345678", source: "/tmp/report.pdf", filename: "Rapport.pdf" } },
+        { description: "Upload voice note", payload: { jid: "33612345678", source: "/tmp/voice.ogg", ptt: true } },
+      ],
+      returns: "{ status, jid, message_id, timestamp, media_type, mimetype, file_length }",
+    },
+    handler: requireApproval("default")(async ({ jid, source, mimetype, caption, filename, quoted_id, ptt }, { sock, store }) => {
+      const to = phoneToJid(String(jid));
+      const media = await resolveMedia(String(source));
+      const content: Record<string, unknown> = {};
+      let mime = String(mimetype || "");
+      if (!mime) {
+        const ext = String(source).split(".").pop()?.toLowerCase() || "";
+        const mimeMap: Record<string, string> = {
+          jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp",
+          mp4: "video/mp4", webm: "video/webm", ogg: "audio/ogg", opus: "audio/ogg", mp3: "audio/mpeg", wav: "audio/wav",
+          pdf: "application/pdf", doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          zip: "application/zip", txt: "text/plain", csv: "text/csv",
+        };
+        mime = mimeMap[ext] || "application/octet-stream";
+      }
+      if (mime.startsWith("image/")) { content.image = media; if (caption) content.caption = caption; }
+      else if (mime.startsWith("video/")) { content.video = media; if (caption) content.caption = caption; }
+      else if (mime.startsWith("audio/")) { content.audio = media; if (ptt) content.ptt = true; }
+      else { content.document = media; content.mimetype = mime; if (filename) content.fileName = filename; if (caption) content.caption = caption; }
+      const opts = _buildSendOpts({ quoted_id }, store);
+      const result = await sock.sendMessage(to, content as any, opts as any);
+      return _fmtSent(result, to, { jid, source, mimetype: mime, caption, filename, ptt, quoted_id });
+    }),
+    schema: mediaUploadSchema,
+    docstring: `Upload a file (image, video, audio, document, sticker) to a contact or group.
+
+The mimetype is auto-detected from the file extension. Voice notes (ptt=true) are
+sent as push-to-talk. A preview of the media is shown in the HITL editor.
+
+Parameters:
+    - jid (required): Recipient JID or phone number.
+    - source (required): File path, URL, or base64 data.
+    - mimetype (optional): Override mimetype (default: auto-detect from extension).
+    - caption (optional): Caption for image/video/document.
+    - filename (optional): Override filename sent to recipient.
+    - quoted_id (optional): Message ID to reply/quote.
+    - ptt (optional): true for voice note (audio only).
+
+Examples:
+    - Upload an image with caption:
+        \`whats-proxy do media-upload '{"jid":"33612345678","source":"/tmp/photo.jpg","caption":"Voici la photo"}'\`
+        → {"status":"sent","jid":"33612345678@s.whatsapp.net","message_id":"UPL001","timestamp":1756614000,"media_type":"image","mimetype":"image/jpeg","file_length":125000}
+    - Upload a document:
+        \`whats-proxy do media-upload '{"jid":"33612345678","source":"/tmp/report.pdf","filename":"Rapport.pdf"}'\`
+        → {"status":"sent","jid":"33612345678@s.whatsapp.net","message_id":"UPL002","timestamp":1756614001,"media_type":"document","mimetype":"application/pdf","file_length":2500000}
+    - Upload a voice note:
+        \`whats-proxy do media-upload '{"jid":"33612345678","source":"/tmp/voice.ogg","ptt":true}'\`
+        → {"status":"sent","jid":"33612345678@s.whatsapp.net","message_id":"UPL003","timestamp":1756614002,"media_type":"audio","mimetype":"audio/ogg","file_length":50000}`,
   },
 ] satisfies ActionDef[];

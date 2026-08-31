@@ -183,7 +183,7 @@ console.log("\n[8] store-only actions via CLI (daemon auto-spawn)");
   process.stdout.write = orig;
   const text = out.join("");
   check("guide exit 0", code === 0);
-  check("guide lists 65 tools", text.includes("65"), text.match(/"total_tools": (\d+)/)?.[1]);
+  check("guide lists 66 tools", text.includes("66"), text.match(/"total_tools": (\d+)/)?.[1]);
   check("guide has categories", text.includes("categories"));
 
   // Stop the auto-spawned daemon through `admin service stop`
