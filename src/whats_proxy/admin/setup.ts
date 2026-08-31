@@ -102,6 +102,7 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
 
     let codeRequested = false;
     let receivedQr = false;
+    let firstQrShown = false;
     let pairingCode: string | null = null;
     let transientCloses = 0;
     const MAX_TRANSIENT_CLOSES = 3;
@@ -133,6 +134,13 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
               return;
             }
           } else if (!opts.code) {
+            if (!firstQrShown) {
+              process.stderr.write(
+                "\n⚠️  FIRST QR — DO NOT SCAN YET. Wait ~5s for the refreshed QR below.\n" +
+                "    WhatsApp rotates the secret; a NEW QR will appear. Scan THAT one.\n\n"
+              );
+              firstQrShown = true;
+            }
             logger.info("Scan this QR code with WhatsApp (Linked Devices):");
             qrcode.toString(qr, { type: "terminal", small: true }, (err, code) => {
               process.stderr.write((err ? err.message : code) + "\n");
