@@ -59,6 +59,7 @@ function renderTemplate(
   action: string,
   payload: Record<string, unknown>,
   referencedMsg?: Record<string, unknown> | null,
+  resolvedNames?: Record<string, string>,
 ): string {
   // Add referenced message data if available
   let refMsgDisplay = "";
@@ -91,6 +92,7 @@ function renderTemplate(
   html = html.replace(/\{\{PAYLOAD_JSON\}\}/g, payloadDisplay);
   html = html.replace(/\{\{REQUEST_ID\}\}/g, requestId);
   html = html.replace(/\{\{REFERENCED_MSG\}\}/g, refMsgDisplay);
+  html = html.replace(/\{\{RESOLVED_NAMES\}\}/g, JSON.stringify(resolvedNames || {}));
   return html;
 }
 
@@ -171,21 +173,60 @@ function handleGet(request: IncomingMessage, response: ServerResponse): void {
       "send-batch", "send-reaction"].includes(req.action);
     const templatePath = isMessage ? MESSAGE_TEMPLATE_PATH : TEMPLATE_PATH;
 
+    // Resolve JIDs to names for all actions that reference contacts/groups
+    const resolvedNames: Record<string, string> = {};
+    if (req.store) {
+      const jidsToResolve = new Set<string>();
+      const payload = req.payload;
+      if (payload.jid) jidsToResolve.add(String(payload.jid));
+      if (payload.to) jidsToResolve.add(String(payload.to));
+      if (payload.to_jid) jidsToResolve.add(String(payload.to_jid));
+      if (payload.from_chat) jidsToResolve.add(String(payload.from_chat));
+      if (Array.isArray(payload.jids)) for (const j of payload.jids) jidsToResolve.add(String(j));
+      if (Array.isArray(payload.to)) for (const j of payload.to) jidsToResolve.add(String(j));
+      if (Array.isArray(payload.contacts)) {
+        for (const c of payload.contacts) if (c.phone) jidsToResolve.add(String(c.phone));
+      }
+      for (const jid of jidsToResolve) {
+        try {
+          const name = req.store.resolveContactName(jid);
+          if (name) resolvedNames[jid] = name;
+        } catch { /* non-fatal */ }
+      }
+    }
+
     // Fetch referenced message for actions that reference existing messages
     let referencedMsg: Record<string, unknown> | null = null;
     const refActions = ["delete-message", "edit-message", "send-reaction", "forward-message"];
     if (refActions.includes(req.action) && req.store) {
       const messageId = String(req.payload.message_id || req.payload.from_message_id || "");
       const jid = String(req.payload.jid || "");
-      if (messageId && jid) {
+      if (messageId) {
         try {
           const msg = req.store.getMessage(messageId);
-          if (msg) referencedMsg = msg as unknown as Record<string, unknown>;
+          if (msg) {
+            referencedMsg = msg as unknown as Record<string, unknown>;
+            // Also resolve JIDs in the referenced message
+            const msgJid = (msg as any)?.key?.remoteJid;
+            if (msgJid && !resolvedNames[msgJid]) {
+              try {
+                const name = req.store.resolveContactName(msgJid);
+                if (name) resolvedNames[msgJid] = name;
+              } catch { /* non-fatal */ }
+            }
+          }
         } catch { /* message not in store — non-fatal */ }
+        if (!referencedMsg && jid) {
+          // Fallback: try to get chat info for the JID
+          try {
+            const chat = req.store.getChat(jid);
+            if (chat) referencedMsg = { info: { name: (chat as any)?.name || (chat as any)?.pushName || jid, jid } } as Record<string, unknown>;
+          } catch { /* non-fatal */ }
+        }
       }
     }
 
-    const html = renderTemplate(templatePath, requestId, req.action, req.payload, referencedMsg);
+    const html = renderTemplate(templatePath, requestId, req.action, req.payload, referencedMsg, resolvedNames);
     response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     response.end(html);
     return;

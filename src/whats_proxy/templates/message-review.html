@@ -4,6 +4,8 @@
 </head><body>
 
 <script type="application/json" id="payload-data">{{PAYLOAD_JSON}}</script>
+<script type="application/json" id="ref-msg-data">{{REFERENCED_MSG}}</script>
+<script type="application/json" id="resolved-names">{{RESOLVED_NAMES}}</script>
 
 <header class="hitl-header">
   <div>
@@ -62,18 +64,51 @@ try {
     payload = {};
     ORIGINAL = {};
 }
-document.getElementById('ed-jid').value = payload.jid || payload.to || payload.to_jid || '';
+// Show resolved contact/group names next to JIDs
+var resolvedNames = {};
+try { resolvedNames = JSON.parse(document.getElementById('resolved-names').textContent || '{}'); } catch(e) {}
 
-// Show referenced message if available
-var refMsgStr = '{{REFERENCED_MSG}}';
-if (refMsgStr && refMsgStr.length > 0) {
-  document.getElementById('ref-msg-section').style.display = '';
-  try {
-    document.getElementById('ref-msg-content').textContent = refMsgStr;
-  } catch(e) {
-    document.getElementById('ref-msg-content').textContent = refMsgStr;
+// Annotate JID fields with resolved names
+function resolveJid(raw) {
+  if (!raw) return '';
+  var name = resolvedNames[raw];
+  return name ? raw + ' (' + name + ')' : raw;
+}
+
+document.getElementById('ed-jid').value = payload.jid || payload.to || payload.to_jid || '';
+var jidLabel = document.querySelector('label[for="ed-jid"]') || document.getElementById('ed-jid-row')?.querySelector('.editor-label');
+if (jidLabel) {
+  var rawJid = payload.jid || payload.to || payload.to_jid || '';
+  var resolvedName = resolvedNames[rawJid];
+  if (resolvedName) {
+    jidLabel.textContent = 'To — ' + resolvedName;
   }
 }
+
+// Show referenced message if available (delete/edit/reaction/forward)
+try {
+  var refMsgStr = document.getElementById('ref-msg-data').textContent;
+  if (refMsgStr && refMsgStr.length > 2) {
+    var refParsed = JSON.parse(refMsgStr);
+    document.getElementById('ref-msg-section').style.display = '';
+    // Try to extract readable text, fallback to full JSON
+    var refText = refParsed?.conversation || refParsed?.message?.conversation
+      || refParsed?.extendedTextMessage?.text || refParsed?.message?.extendedTextMessage?.text
+      || refParsed?.stickerMessage && '[sticker]'
+      || refParsed?.imageMessage && '[image]'
+      || refParsed?.videoMessage && '[video]'
+      || refParsed?.documentMessage && (refParsed.message?.documentMessage?.fileName || '[document]')
+      || refParsed?.contactMessage && '[contact]'
+      || refParsed?.locationMessage && '[location]'
+      || refParsed?.buttonsResponseMessage && '[button response]'
+      || null;
+    if (refText) {
+      document.getElementById('ref-msg-content').textContent = refText;
+    } else {
+      document.getElementById('ref-msg-content').textContent = JSON.stringify(refParsed, null, 2);
+    }
+  }
+} catch(e) { /* non-fatal */ }
 
 // Hide Message field + toolbar for actions without text content
 var hasText = 'text' in payload || 'caption' in payload || 'question' in payload || 'name' in payload || 'new_text' in payload;
