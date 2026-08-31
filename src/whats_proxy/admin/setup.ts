@@ -18,6 +18,7 @@ import {
   fetchLatestBaileysVersion,
   DisconnectReason,
   Browsers,
+  type WASocket,
 } from "@whiskeysockets/baileys";
 import pino from "pino";
 import qrcode from "qrcode";
@@ -85,26 +86,6 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
       mkdirSync(paths.auth, { recursive: true });
     }
 
-    const { state, saveCreds } = await useMultiFileAuthState(paths.auth);
-    const sock = makeWASocket({
-      version,
-      auth: {
-        creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, silent),
-      },
-      browser: Browsers.ubuntu("Chrome"),
-      logger: silent,
-      markOnlineOnConnect: false,
-      generateHighQualityLinkPreview: false,
-      syncFullHistory: true,
-    });
-    sock.ev.on("creds.update", (update) => {
-      if (update.advSecretKey) {
-        logger.info("advSecretKey rotated (companion_reg_refresh handler fired)");
-      }
-      saveCreds();
-    });
-
     let codeRequested = false;
     let receivedQr = false;
     let firstQrShown = false;
@@ -113,101 +94,134 @@ export async function adminSetup(opts: SetupOptions): Promise<Output> {
     const MAX_TRANSIENT_CLOSES = 3;
 
     return await new Promise<Output>((resolve) => {
+      let currentSock: WASocket | null = null;
+
       const timeout = setTimeout(() => {
-        sock.end(undefined);
+        currentSock?.end(undefined);
         resolve(errResult("Setup timed out after 3 minutes. Run again for a fresh QR/code."));
       }, 180_000);
 
-      sock.ev.on("connection.update", async (update) => {
-        const { connection, lastDisconnect, qr } = update;
-        logger.info(`[DEBUG] connection.update: connection=${connection} qr=${!!qr} receivedQr=${receivedQr}`);
+      // Create a fresh login socket. Re-usable: on 515 (restartRequired)
+      // WhatsApp has ACCEPTED the scan/code and asks us to reconnect with the
+      // session credentials it just handed over — the old socket is dead, so
+      // we create a new one that authenticates with the saved creds and
+      // reaches "open" (pair-success). This is the reconnection that was
+      // missing and caused "couldn't link device" on the phone.
+      const connect = async (): Promise<void> => {
+        const { state, saveCreds } = await useMultiFileAuthState(paths.auth);
+        const sock = makeWASocket({
+          version,
+          auth: {
+            creds: state.creds,
+            keys: makeCacheableSignalKeyStore(state.keys, silent),
+          },
+          browser: Browsers.ubuntu("Chrome"),
+          logger: silent,
+          markOnlineOnConnect: false,
+          generateHighQualityLinkPreview: false,
+          syncFullHistory: true,
+        });
+        currentSock = sock;
 
-        if (qr) {
-          receivedQr = true;
-          transientCloses = 0; // QR received = connection works, reset counter
-          if (opts.code && !codeRequested) {
-            codeRequested = true;
-            try {
-              pairingCode = await sock.requestPairingCode(phone);
-              logger.info(`Pairing Code: ${pairingCode}`);
-              logger.info(
-                "Go to WhatsApp → Linked Devices → Link with Phone Number → enter this code.",
-              );
-            } catch (err) {
-              clearTimeout(timeout);
-              sock.end(undefined);
-              resolve(errResult(`Failed to get pairing code: ${(err as Error).message}`));
-              return;
-            }
-          } else if (!opts.code) {
-            if (!firstQrShown) {
-              process.stderr.write(
-                "\n⚠️  FIRST QR — DO NOT SCAN YET. Wait ~5s for the refreshed QR below.\n" +
-                "    WhatsApp rotates the secret; a NEW QR will appear. Scan THAT one.\n\n"
-              );
-              firstQrShown = true;
-            }
-            logger.info("Scan this QR code with WhatsApp (Linked Devices):");
-            qrcode.toString(qr, { type: "terminal", small: true }, (err, code) => {
-              process.stderr.write((err ? err.message : code) + "\n");
-            });
+        sock.ev.on("creds.update", (update) => {
+          if (update.advSecretKey) {
+            logger.info("advSecretKey rotated (companion_reg_refresh handler fired)");
           }
-        }
+          saveCreds();
+        });
 
-        if (connection === "open") {
-          clearTimeout(timeout);
-          const user = sock.user;
-          logger.info(`Connected as ${user?.name || "?"} (${user?.id?.split(":")[0] || "?"})`);
-          // Give creds a moment to flush to disk, then wrap up.
-          setTimeout(() => {
-            sock.end(undefined);
-            resolve(
-              okResult({
-                status: "paired",
-                phone: opts.code ? phone : undefined,
-                pairing_code: pairingCode,
-                user: user
-                  ? { id: user.id, name: user.name || user.verifiedName, phone: user.id?.split(":")[0] }
-                  : null,
-                auth_directory: paths.auth,
-              }),
-            );
-          }, 2000);
-        }
+        sock.ev.on("connection.update", async (update) => {
+          const { connection, lastDisconnect, qr } = update;
+          logger.info(`[DEBUG] connection.update: connection=${connection} qr=${!!qr} receivedQr=${receivedQr}`);
 
-        if (connection === "close") {
-          const disconnectErr = lastDisconnect?.error;
-          const statusCode = (disconnectErr as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
-          if (statusCode === DisconnectReason.loggedOut) {
-            clearTimeout(timeout);
-            sock.end(undefined);
-            resolve(errResult("Pairing failed or session rejected (401)."));
-          } else if (statusCode === DisconnectReason.connectionReplaced) {
-            clearTimeout(timeout);
-            sock.end(undefined);
-            resolve(errResult("Connection replaced by another session (440)."));
-          } else {
-            // 515 = restartRequired — NORMAL during pairing (WhatsApp asks
-            // Baileys to restart the handshake). Do NOT count it as a
-            // transient failure — Baileys reconnects automatically.
-            if (statusCode === DisconnectReason.restartRequired) {
-              logger.info("Restart required by WhatsApp — reconnecting (normal during pairing).");
-              return; // let Baileys reconnect, don't increment counter
-            }
-            // Other transient closes (428, network blip): count toward limit.
-            transientCloses++;
-            logger.info(`Transient close (status ${statusCode ?? "?"}) ${transientCloses}/${MAX_TRANSIENT_CLOSES}`);
-            if (transientCloses >= MAX_TRANSIENT_CLOSES) {
-              clearTimeout(timeout);
-              sock.end(undefined);
-              resolve(errResult(
-                `Connection failed ${MAX_TRANSIENT_CLOSES} times (last: status ${statusCode ?? "?"}). ` +
-                (receivedQr ? "QR was scanned but pairing was rejected — retry later." : "Check network and retry.")
-              ));
+          if (qr) {
+            receivedQr = true;
+            transientCloses = 0; // QR received = connection works, reset counter
+            if (opts.code && !codeRequested) {
+              codeRequested = true;
+              try {
+                pairingCode = await sock.requestPairingCode(phone);
+                logger.info(`Pairing Code: ${pairingCode}`);
+                logger.info(
+                  "Go to WhatsApp → Linked Devices → Link with Phone Number → enter this code.",
+                );
+              } catch (err) {
+                clearTimeout(timeout);
+                sock.end(undefined);
+                resolve(errResult(`Failed to get pairing code: ${(err as Error).message}`));
+                return;
+              }
+            } else if (!opts.code) {
+              if (!firstQrShown) {
+                process.stderr.write(
+                  "\n⚠️  Scan the QR below. WhatsApp will briefly disconnect to finalize — that's normal.\n\n"
+                );
+                firstQrShown = true;
+              }
+              logger.info("Scan this QR code with WhatsApp (Linked Devices):");
+              qrcode.toString(qr, { type: "terminal", small: true }, (err, code) => {
+                process.stderr.write((err ? err.message : code) + "\n");
+              });
             }
           }
-        }
-      });
+
+          if (connection === "open") {
+            clearTimeout(timeout);
+            const user = sock.user;
+            logger.info(`Connected as ${user?.name || "?"} (${user?.id?.split(":")[0] || "?"})`);
+            // Give creds a moment to flush to disk, then wrap up.
+            setTimeout(() => {
+              sock.end(undefined);
+              resolve(
+                okResult({
+                  status: "paired",
+                  phone: opts.code ? phone : undefined,
+                  pairing_code: pairingCode,
+                  user: user
+                    ? { id: user.id, name: user.name || user.verifiedName, phone: user.id?.split(":")[0] }
+                    : null,
+                  auth_directory: paths.auth,
+                }),
+              );
+            }, 2000);
+          }
+
+          if (connection === "close") {
+            const disconnectErr = lastDisconnect?.error;
+            const statusCode = (disconnectErr as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
+            if (statusCode === DisconnectReason.loggedOut) {
+              clearTimeout(timeout);
+              sock.end(undefined);
+              resolve(errResult("Pairing failed or session rejected (401)."));
+            } else if (statusCode === DisconnectReason.connectionReplaced) {
+              clearTimeout(timeout);
+              sock.end(undefined);
+              resolve(errResult("Connection replaced by another session (440)."));
+            } else if (statusCode === DisconnectReason.restartRequired) {
+              // 515 — WhatsApp accepted the pairing and now asks us to
+              // reconnect with the freshly-saved session creds to finalize.
+              // The old socket is dead: create a NEW one (the missing step).
+              logger.info("Pairing accepted — reconnecting to finalize session...");
+              sock.end(undefined);
+              void connect();
+            } else {
+              // Other transient closes (428, network blip): count toward limit.
+              transientCloses++;
+              logger.info(`Transient close (status ${statusCode ?? "?"}) ${transientCloses}/${MAX_TRANSIENT_CLOSES}`);
+              if (transientCloses >= MAX_TRANSIENT_CLOSES) {
+                clearTimeout(timeout);
+                sock.end(undefined);
+                resolve(errResult(
+                  `Connection failed ${MAX_TRANSIENT_CLOSES} times (last: status ${statusCode ?? "?"}). ` +
+                  (receivedQr ? "QR was scanned but pairing was rejected — retry later." : "Check network and retry.")
+                ));
+              }
+            }
+          }
+        });
+      };
+
+      void connect();
     });
   } catch (err) {
     return errResult(`Setup failed: ${(err as Error).message}`);
