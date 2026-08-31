@@ -107,9 +107,17 @@ export function getCatalogHelp(registry: ActionRegistry): string {
     byCategory.get(cat)!.push(name);
   }
   for (const [cat, names] of [...byCategory.entries()].sort()) {
-    lines.push(`${cat}:`);
+    lines.push(`\x1b[1;35m── ${cat} ──\x1b[0m`);
     for (const name of names.sort()) {
-      lines.push(`  ${name}`);
+      const def = registry[name]!;
+      lines.push(`  \x1b[1;36m${name}\x1b[0m`);
+      const compact = getCompactHelp(def);
+      if (compact) {
+        // Show only the first line of the description
+        const firstLine = compact.split("\n").find(l => l.trim()) || "";
+        lines.push(`  ${firstLine.trim()}`);
+      }
+      lines.push("");
     }
   }
   return lines.join("\n");

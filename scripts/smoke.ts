@@ -43,11 +43,12 @@ console.log("\n[1] catalog help");
   const code = await main(["do", "--help"]);
   process.stdout.write = orig;
   const text = out.join("");
+  const stripped = text.replace(/\x1b\[[0-9;]*m/g, "");
   check("exit 0", code === 0);
-  check("mentions send-text", text.includes("send-text"));
-  check("mentions find-messages", text.includes("find-messages"));
-  check("mentions daily-digest", text.includes("daily-digest"));
-  const actionCount = (text.match(/^  [a-z-]+$/gm) || []).length;
+  check("mentions send-text", stripped.includes("send-text"));
+  check("mentions find-messages", stripped.includes("find-messages"));
+  check("mentions daily-digest", stripped.includes("daily-digest"));
+  const actionCount = (stripped.match(/^  [a-z-]+$/gm) || []).length;
   check(`catalog lists ~65 actions (found ${actionCount})`, actionCount >= 60, `count=${actionCount}`);
 }
 
