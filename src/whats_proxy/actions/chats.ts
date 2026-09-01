@@ -1,14 +1,14 @@
 /**
- * whats-proxy — Chat actions (5).
+ * whats-proxy — Chat actions (7).
  *
- * chat-list, chat-read, chat-manage, chat-star, chat-disappearing.
+ * chat-list, chat-read, chat-manage, chat-star, chat-disappearing, message-status, chat-read-batch.
  *
  * Faithful port of whats-mcp `chats.js`.
  */
 
 import type { ActionDef } from "./types.ts";
 import { requireApproval } from "../decorators.ts";
-import { chatListSchema, chatReadSchema, chatManageSchema, chatStarSchema, chatDisappearingSchema, messageStatusSchema } from "./schemas.ts";
+import { chatListSchema, chatReadSchema, chatManageSchema, chatStarSchema, chatDisappearingSchema, messageStatusSchema, chatReadBatchSchema } from "./schemas.ts";
 import { phoneToJid, isGroupJid, okResult, errResult, formatChat, formatMessage } from "../helpers.ts";
 import { fetchAdditionalHistory, type HistorySyncResult } from "./history.ts";
 
@@ -406,5 +406,84 @@ Examples:
     - Check your sent messages with read status:
         \`whats-proxy do message-status '{"action":"sent","chat_jid":"237675836168@s.whatsapp.net"}'\`
         → {"chat_jid":"237675836168@s.whatsapp.net","total":5,"messages":[{"id":"3EB0...","text":"Hello","read_count":1,"receipts":[...]}]}`,
+  },
+  {
+    meta: {
+      action: "chat-read-batch",
+      category: "chats",
+      description:
+        "Fetch messages from multiple chats in one call. Pass JIDs directly. No limits, no truncation — full data returned.",
+      arguments: [
+        { name: "jids", description: "Array of chat JIDs or phone numbers.", required: true },
+        { name: "limit_per_chat", description: "Max messages per chat (default: no limit).", required: false },
+        { name: "since", description: "Unix timestamp: only messages after this time.", required: false },
+        { name: "until", description: "Unix timestamp: only messages before this time.", required: false },
+        { name: "include_types", description: "Only include these message types.", required: false },
+        { name: "exclude_types", description: "Exclude these message types.", required: false },
+      ],
+      example: { jids: ["33612345678", "120363000000000@g.us"] },
+      returns: "{ total_chats, total_messages, chats }",
+    },
+    handler: async (
+      { jids, limit_per_chat, since, until, include_types, exclude_types },
+      { store },
+    ) => {
+      if (!Array.isArray(jids) || jids.length === 0) {
+        return errResult("'jids' is required — a non-empty array of chat JIDs.");
+      }
+
+      const resolvedJids = jids.map((j) => {
+        const s = String(j).trim();
+        return s.includes("@") ? s : `${s}@s.whatsapp.net`;
+      });
+
+      const lim = Number(limit_per_chat) || 99999;
+      const filterOpts = {
+        since: since !== undefined ? Number(since) : undefined,
+        until: until !== undefined ? Number(until) : undefined,
+        types: Array.isArray(include_types) ? include_types.map(String) : undefined,
+        excludeTypes: Array.isArray(exclude_types) ? exclude_types.map(String) : undefined,
+      };
+
+      const chats: any[] = [];
+      let totalMessages = 0;
+
+      for (const jid of resolvedJids) {
+        const messages = store.getMessages(jid, lim, undefined, filterOpts);
+        const formatted = messages.map(formatMessage).filter((m: any): m is NonNullable<typeof m> => Boolean(m));
+
+        const chat = store.getChat(jid);
+        const contact = store.getContact(jid);
+
+        chats.push({
+          jid,
+          name: chat?.name || chat?.subject || contact?.name || contact?.notify || jid,
+          is_group: isGroupJid(jid),
+          count: formatted.length,
+          messages: formatted,
+        });
+        totalMessages += formatted.length;
+      }
+
+      return okResult({
+        total_chats: chats.length,
+        total_messages: totalMessages,
+        chats,
+      });
+    },
+    schema: chatReadBatchSchema,
+    docstring: `Fetch messages from multiple chats in one call. Full data, no truncation.
+
+Parameters:
+    - jids (required): Array of chat JIDs or phone numbers.
+    - limit_per_chat (optional): Max messages per chat (default: no limit).
+    - since / until (optional): Time range filter.
+    - include_types / exclude_types (optional): Type filters.
+
+Examples:
+    - Batch read two chats:
+        \`whats-proxy do chat-read-batch '{"jids":["33612345678","120363000000000@g.us"]}'\`
+    - Batch read with time filter:
+        \`whats-proxy do chat-read-batch '{"jids":["33612345678"],"since":1788000000}'\``,
   },
 ] satisfies ActionDef[];

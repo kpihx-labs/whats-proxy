@@ -15,9 +15,7 @@ import groups from "./groups.ts";
 import profile from "./profile.ts";
 import analytics from "./analytics.ts";
 import overview from "./overview.ts";
-import digest from "./digest.ts";
 import tags from "./tags.ts";
-import watchlists from "./watchlists.ts";
 import utils from "./utils.ts";
 import stories from "./stories.ts";
 import communities from "./communities.ts";
@@ -30,9 +28,7 @@ const ALL: ActionDef[] = [
   ...profile,   // 4
   ...analytics, // 5
   ...overview,  // 2
-  ...digest,    // 2
   ...tags,      // 1
-  ...watchlists,// 1
   ...utils,     // 7
   ...stories,   // 3
   ...communities, // 13

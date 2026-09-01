@@ -1,6 +1,6 @@
 # whats-proxy
 
-Non-MCP CLI proxy for WhatsApp — the full `whats-mcp` tool catalog (76 actions) exposed as a flat JSON-RPC CLI with a local background daemon. Its sole proxy-standard reference is the sibling [`tick_proxy`](../tick_proxy/); Bun + Baileys are retained only for WhatsApp's persistent local Store.
+Non-MCP CLI proxy for WhatsApp — the full `whats-mcp` tool catalog (75 actions) exposed as a flat JSON-RPC CLI with a local background daemon. Its sole proxy-standard reference is the sibling [`tick_proxy`](../tick_proxy/); Bun + Baileys are retained only for WhatsApp's persistent local Store.
 
 Built with **Bun** + **Baileys** (`@whiskeysockets/baileys`): `meta`+`data` envelope, `do`/`admin` namespaces, `--format json|table`, `--output-file`, autosave, declarative mandatory HITL, destructive preflight identity locks, and local read-back proofs. Bun owns package/test operations; the installed TypeScript CLI is launched through Node.js + bundled `tsx` because Baileys needs Node-compatible WebSocket upgrade events.
 
@@ -141,7 +141,7 @@ src/whats_proxy/
 ├── exceptions.ts   # WhatsProxyError hierarchy
 ├── types.ts        # ActionDef, ActionContext, Output envelope
 ├── hitl.ts         # local editable review page; port 0, 600-second fail-closed timeout
-├── actions/        # 14 category modules + registry.ts + policies.ts (76 actions)
+├── actions/        # 14 category modules + registry.ts + policies.ts (75 actions)
 └── admin/          # setup (QR/pairing code) + status (independent probe)
 ```
 

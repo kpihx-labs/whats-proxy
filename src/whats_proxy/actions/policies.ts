@@ -42,7 +42,6 @@ const actionIs = (...values: string[]): Predicate => (args) => values.includes(S
 const hasDangerousChatOperation = actionIs("delete", "clear");
 const hasDangerousInviteOperation = actionIs("revoke", "join");
 const hasDangerousContactOperation = actionIs("block", "unblock");
-const deletesWatchlist = actionIs("delete");
 const mutatesLocalCollection = (args: Record<string, unknown>): boolean => !["get", "list", "list_by_tag"].includes(String(args.action));
 
 // ---------------------------------------------------------------------------
@@ -53,10 +52,6 @@ const requireStoreMessage: Preflight = (args, context) =>
   context.store.getMessage(String(args.message_id))
     ? null
     : `Message ${String(args.message_id)} is not present in the local store; refusing a destructive review without a preflighted target.`;
-const requireWatchlist: Preflight = (args, context) =>
-  context.store.resolveWatchlist(String(args.name), context.config.watchlists)
-    ? null
-    : `Watchlist ${String(args.name)} does not exist.`;
 const requireChat: Preflight = (args, context) => {
   const jid = String(args.jid);
   const normalized = jid.includes("@") ? jid : `${jid}@s.whatsapp.net`;
@@ -85,16 +80,6 @@ const requireChannel: Preflight = async (args, context) => {
 // Verify helpers (used by conditional policies)
 // ---------------------------------------------------------------------------
 
-const verifyWatchlist: Verify = (args, context) => {
-  const name = String(args.name);
-  const actual = context.store.getWatchlist(name) ?? null;
-  return {
-    method: "local Store read-back",
-    checked: ["watchlist"],
-    actual,
-    ok: String(args.action) === "delete" ? actual === null : actual !== null,
-  };
-};
 const verifyContactTags: Verify = (args, context) => {
   const jid = String(args.jid).includes("@") ? String(args.jid) : `${String(args.jid)}@s.whatsapp.net`;
   return {
@@ -119,7 +104,6 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   "profile-picture": { approval: (args) => String(args.action) === "edit" || String(args.action) === "remove" },
   "profile-privacy": { approval: actionIs("set") },
   "contact-tags": { approval: mutatesLocalCollection, verify: verifyContactTags },
-  "watchlist": { approval: mutatesLocalCollection, preflight: (args, context) => deletesWatchlist(args) ? requireWatchlist(args, context) : null, identityFields: ["name"], lockIdentity: deletesWatchlist, verify: verifyWatchlist },
 };
 
 // ---------------------------------------------------------------------------

@@ -338,8 +338,6 @@ export const analyticsSearchSchema = z.object({
 export const whatsupSchema = z.object({
   since: z.number().or(z.string()).optional(),
   until: z.number().or(z.string()).optional(),
-  watchlists: z.array(z.string()).optional(),
-  limit_per_chat: z.number().or(z.string()).optional(),
 });
 
 export const findMessagesSchema = z.object({
@@ -347,27 +345,16 @@ export const findMessagesSchema = z.object({
   since: z.number().or(z.string()).optional(),
   until: z.number().or(z.string()).optional(),
   limit: z.number().or(z.string()).optional(),
-  watchlist_only: z.unknown().optional(),
 });
 
-// ── Digest (2) ──────────────────────────────────────────────────────────────
+// ── Chats (6) ──────────────────────────────────────────────────────────────
 
-export const messagesMultiSchema = z.object({
-  jids: z.array(z.string()).optional(),
-  watchlist: z.string().optional(),
+export const chatReadBatchSchema = z.object({
+  jids: z.array(z.string()),
   limit_per_chat: z.number().or(z.string()).optional(),
   since: z.number().or(z.string()).optional(),
   until: z.number().or(z.string()).optional(),
   include_types: z.array(z.string()).optional(),
-  exclude_types: z.array(z.string()).optional(),
-});
-
-export const dailyDigestSchema = z.object({
-  jids: z.array(z.string()).optional(),
-  watchlist: z.string().optional(),
-  since: z.number().or(z.string()).optional(),
-  until: z.number().or(z.string()).optional(),
-  limit_per_chat: z.number().or(z.string()).optional(),
   exclude_types: z.array(z.string()).optional(),
 });
 
@@ -378,14 +365,6 @@ export const contactTagsSchema = z.object({
   jid: z.string().optional(),
   tags: z.array(z.string()).optional(),
   tag: z.string().optional(),
-});
-
-// ── Watchlists (1) ──────────────────────────────────────────────────────────
-
-export const watchlistSchema = z.object({
-  action: z.string(),
-  name: z.string().optional(),
-  jids: z.array(z.string()).optional(),
 });
 
 // ── Utils (7) ───────────────────────────────────────────────────────────────
@@ -558,13 +537,10 @@ export const SCHEMAS: Record<string, z.ZodObject<Record<string, z.ZodTypeAny>>> 
   // Overview
   "whatsup": whatsupSchema,
   "find-messages": findMessagesSchema,
-  // Digest
-  "messages-multi": messagesMultiSchema,
-  "daily-digest": dailyDigestSchema,
+  // Chats
+  "chat-read-batch": chatReadBatchSchema,
   // Tags
   "contact-tags": contactTagsSchema,
-  // Watchlists
-  "watchlist": watchlistSchema,
   // Utils
   "connection-status": connectionStatusSchema,
   "guide": guideSchema,

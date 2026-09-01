@@ -57,12 +57,11 @@ describe("ACTION_POLICIES", () => {
 
   test("conditional policies distinguish local collection reads from mutations", () => {
     const chatManage = policyFor("chat-manage")!;
-    const watchlist = policyFor("watchlist")!;
+    const contactTags = policyFor("contact-tags")!;
     expect((chatManage.approval as (args: Record<string, unknown>) => boolean)({ action: "delete" })).toBe(true);
     expect((chatManage.approval as (args: Record<string, unknown>) => boolean)({ action: "archive" })).toBe(true);
-    expect((watchlist.approval as (args: Record<string, unknown>) => boolean)({ action: "delete" })).toBe(true);
-    expect((watchlist.approval as (args: Record<string, unknown>) => boolean)({ action: "add" })).toBe(true);
-    expect((watchlist.approval as (args: Record<string, unknown>) => boolean)({ action: "list" })).toBe(false);
+    expect((contactTags.approval as (args: Record<string, unknown>) => boolean)({ action: "add" })).toBe(true);
+    expect((contactTags.approval as (args: Record<string, unknown>) => boolean)({ action: "list_by_tag" })).toBe(false);
   });
 
   test("destructive policy declarations preflight and lock their real targets", () => {
