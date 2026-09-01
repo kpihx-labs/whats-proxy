@@ -80,16 +80,6 @@ const requireChannel: Preflight = async (args, context) => {
     return `Channel ${String(args.jid)} could not be read before destructive review.`;
   }
 };
-const requireLabel: Preflight = async (args, context) => {
-  try {
-    const labels: Array<{ id?: string }> = await (context.sock as any).getLabels();
-    return labels.some((label) => label.id === String(args.label_id))
-      ? null
-      : `Label ${String(args.label_id)} does not exist.`;
-  } catch {
-    return `Label ${String(args.label_id)} could not be read before destructive review.`;
-  }
-};
 
 // ---------------------------------------------------------------------------
 // Verify helpers (used by conditional policies)
@@ -124,7 +114,6 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   "chat-manage": { approval: always, preflight: (args, context) => hasDangerousChatOperation(args) ? requireChat(args, context) : null, identityFields: ["jid"], lockIdentity: hasDangerousChatOperation },
   "contact-block": { approval: hasDangerousContactOperation },
   "group-invite": { approval: hasDangerousInviteOperation, preflight: (args, context) => String(args.action) === "revoke" ? requireGroup(args, context) : null, identityFields: ["jid"], lockIdentity: actionIs("revoke") },
-  "label-manage": { approval: always, preflight: (args, context) => String(args.action) === "delete" ? requireLabel(args, context) : null, identityFields: ["label_id"], lockIdentity: actionIs("delete") },
   "profile-privacy": { approval: actionIs("set") },
   "contact-tags": { approval: mutatesLocalCollection, verify: verifyContactTags },
   "watchlist": { approval: mutatesLocalCollection, preflight: (args, context) => deletesWatchlist(args) ? requireWatchlist(args, context) : null, identityFields: ["name"], lockIdentity: deletesWatchlist, verify: verifyWatchlist },

@@ -286,28 +286,6 @@ export const channelDeleteSchema = z.object({
   jid: z.string(),
 });
 
-// ── Labels (3) ──────────────────────────────────────────────────────────────
-
-export const labelManageSchema = z.object({
-  action: z.string(),
-  label_id: z.string().optional(),
-  name: z.string().optional(),
-  color: z.number().or(z.string()).optional(),
-});
-
-export const labelChatSchema = z.object({
-  action: z.string(),
-  jid: z.string(),
-  label_id: z.string(),
-});
-
-export const labelMessageSchema = z.object({
-  action: z.string(),
-  jid: z.string(),
-  message_id: z.string(),
-  label_id: z.string(),
-});
-
 // ── Profile (4) ─────────────────────────────────────────────────────────────
 
 export const profileNameSchema = z.object({
@@ -454,6 +432,38 @@ export const mediaUploadSchema = z.object({
   ptt: z.boolean().optional(),
 });
 
+// ── Stories (5) ─────────────────────────────────────────────────────────────
+
+export const storyListSchema = z.object({
+  jid: z.string().optional(),
+  limit: z.number().or(z.string()).optional(),
+});
+
+export const storyPostSchema = z.object({
+  type: z.string().optional(),
+  text: z.string().optional(),
+  source: z.string().optional(),
+  caption: z.string().optional(),
+  status_jid_list: z.array(z.string()).optional(),
+});
+
+export const storyDownloadSchema = z.object({
+  message_id: z.string(),
+});
+
+export const storyViewSchema = z.object({
+  message_id: z.string(),
+});
+
+export const storyReplySchema = z.object({
+  message_id: z.string(),
+  text: z.string(),
+});
+
+export const storyDeleteSchema = z.object({
+  message_id: z.string(),
+});
+
 // ── Schema registry (action name → schema) — used by audit tests ───────────
 
 export const SCHEMAS: Record<string, z.ZodObject<Record<string, z.ZodTypeAny>>> = {
@@ -503,10 +513,6 @@ export const SCHEMAS: Record<string, z.ZodObject<Record<string, z.ZodTypeAny>>> 
   "channel-manage": channelManageSchema,
   "channel-update": channelUpdateSchema,
   "channel-delete": channelDeleteSchema,
-  // Labels
-  "label-manage": labelManageSchema,
-  "label-chat": labelChatSchema,
-  "label-message": labelMessageSchema,
   // Profile
   "profile-name": profileNameSchema,
   "profile-about": profileAboutSchema,
@@ -535,4 +541,11 @@ export const SCHEMAS: Record<string, z.ZodObject<Record<string, z.ZodTypeAny>>> 
   "read-messages": readMessagesSchema,
   "media-download": mediaDownloadSchema,
   "media-cleanup": mediaCleanupSchema,
+  // Stories
+  "story-list": storyListSchema,
+  "story-post": storyPostSchema,
+  "story-download": storyDownloadSchema,
+  "story-view": storyViewSchema,
+  "story-reply": storyReplySchema,
+  "story-delete": storyDeleteSchema,
 };
