@@ -57,12 +57,6 @@ CREATE TABLE IF NOT EXISTS contact_tags (
   PRIMARY KEY (jid, tag)
 );
 
-CREATE TABLE IF NOT EXISTS watchlists (
-  name TEXT NOT NULL,
-  jid TEXT NOT NULL,
-  PRIMARY KEY (name, jid)
-);
-
 CREATE TABLE IF NOT EXISTS message_receipts (
   msg_jid TEXT NOT NULL,
   chat_jid TEXT NOT NULL,

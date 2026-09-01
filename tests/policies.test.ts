@@ -32,7 +32,7 @@ describe("ACTION_POLICIES", () => {
   });
 
   test("complex action families have docstrings with Parameters section", () => {
-    for (const action of ["send-text", "send-image", "send-video", "send-document", "group-participants", "group-invite", "analytics-search"]) {
+    for (const action of ["send-text", "send-image", "send-video", "send-document", "group-participants", "group-invite"]) {
       const definition = REGISTRY[action];
       expect(definition).toBeDefined();
       expect(definition!.docstring).toBeDefined();

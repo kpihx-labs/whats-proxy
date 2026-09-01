@@ -523,7 +523,7 @@ export async function startDaemon(accountPhone?: string): Promise<void> {
   log.info(`whats-proxy daemon ${config.server?.version} starting (pid ${process.pid})`);
   log.info(`State directory: ${paths.dir}`);
 
-  // Store: restore snapshot, seed watchlists from config
+  // Store: restore snapshot
   store = new Store({
     ...(config.store || {}),
     onChange: () => schedulePersist(),
@@ -537,10 +537,6 @@ export async function startDaemon(accountPhone?: string): Promise<void> {
     } catch (err) {
       log.warn(`Failed to restore store snapshot: ${(err as Error).message}`);
     }
-  }
-  if (config.watchlists && Object.keys(config.watchlists).length > 0) {
-    const imported = store.importWatchlistsFromConfig(config.watchlists);
-    if (imported > 0) log.info(`Seeded ${imported} watchlist(s) from config into store`);
   }
 
   // Bind the socket FIRST (we hold the lock): losers probing the socket now

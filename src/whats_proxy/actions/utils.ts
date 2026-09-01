@@ -57,7 +57,7 @@ Examples:
       category: "utilities",
       description: "Get a comprehensive guide on how to use whats-proxy actions. Optionally filter by category.",
       arguments: [
-        { name: "category", description: "Category: overview | messaging | chats | contacts | groups | profile | channels | stories | analytics | utilities.", required: false },
+        { name: "category", description: "Category: overview | messaging | chats | contacts | groups | profile | channels | stories | utilities.", required: false },
       ],
       example: { category: "messaging" },
       returns: "{ server, version, total_tools, categories, tips } | { category, tools }",
@@ -116,7 +116,7 @@ Examples:
     docstring: `Get a comprehensive guide on how to use whats-proxy actions.
 
 Parameters:
-    - category (optional): Category: overview | messaging | chats | contacts | groups | profile | stories | analytics | utilities.
+    - category (optional): Category: overview | messaging | chats | contacts | groups | profile | stories | utilities.
 
 Examples:
     - Get full guide:

@@ -297,42 +297,6 @@ export const contactPresenceCheckSchema = z.object({
   timeout_ms: z.number().optional(),
 });
 
-// ── Analytics (5) ───────────────────────────────────────────────────────────
-
-export const analyticsOverviewSchema = z.object({
-  top_chats: z.number().or(z.string()).optional(),
-  top_tokens: z.number().or(z.string()).optional(),
-  top_senders: z.number().or(z.string()).optional(),
-  days: z.number().or(z.string()).optional(),
-});
-
-export const analyticsTopChatsSchema = z.object({
-  limit: z.number().or(z.string()).optional(),
-  sort_by: z.string().optional(),
-});
-
-export const analyticsChatInsightsSchema = z.object({
-  jid: z.string(),
-  top_tokens: z.number().or(z.string()).optional(),
-  top_senders: z.number().or(z.string()).optional(),
-  days: z.number().or(z.string()).optional(),
-  recent_messages: z.number().or(z.string()).optional(),
-});
-
-export const analyticsTimelineSchema = z.object({
-  jid: z.string().optional(),
-  days: z.number().or(z.string()).optional(),
-});
-
-export const analyticsSearchSchema = z.object({
-  query: z.string(),
-  jid: z.string().optional(),
-  jids: z.array(z.string()).optional(),
-  limit: z.number().or(z.string()).optional(),
-  since: z.number().or(z.string()).optional(),
-  until: z.number().or(z.string()).optional(),
-});
-
 // ── Overview (2) ────────────────────────────────────────────────────────────
 
 export const whatsupSchema = z.object({
@@ -528,12 +492,6 @@ export const SCHEMAS: Record<string, z.ZodObject<Record<string, z.ZodTypeAny>>> 
   "profile-about": profileAboutSchema,
   "profile-picture": profilePictureSchema,
   "profile-privacy": profilePrivacySchema,
-  // Analytics
-  "analytics-overview": analyticsOverviewSchema,
-  "analytics-top-chats": analyticsTopChatsSchema,
-  "analytics-chat-insights": analyticsChatInsightsSchema,
-  "analytics-timeline": analyticsTimelineSchema,
-  "analytics-search": analyticsSearchSchema,
   // Overview
   "whatsup": whatsupSchema,
   "find-messages": findMessagesSchema,

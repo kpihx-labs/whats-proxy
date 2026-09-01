@@ -63,7 +63,7 @@ describe("Store messages", () => {
   });
 });
 
-describe("Store chats/contacts/analytics", () => {
+describe("Store chats/contacts", () => {
   test("upsertChats + getChat", () => {
     const store = new Store();
     store.upsertChats([{ id: "3361@s.whatsapp.net", name: "Bob" }]);
@@ -76,24 +76,6 @@ describe("Store chats/contacts/analytics", () => {
     store.upsertContacts([{ id: "3362@s.whatsapp.net", name: "Alice" }]);
     const c = store.getContact("3362@s.whatsapp.net");
     expect(c?.name).toBe("Alice");
-  });
-
-  test("analytics overview counts", () => {
-    const store = new Store();
-    const jid = "3361@s.whatsapp.net";
-    store.upsertMessages([makeMsg("1", jid, 100, "a"), makeMsg("2", jid, 200, "b")]);
-    const ov = store.getAnalyticsOverview({});
-    expect(ov.totals.messages).toBe(2);
-    expect(ov.totals.chats).toBe(1);
-  });
-
-  test("getAnalyticsOverview daily activity respects days", () => {
-    const store = new Store();
-    const jid = "3361@s.whatsapp.net";
-    store.upsertMessages([makeMsg("1", jid, 100, "a"), makeMsg("2", jid, 200, "b")]);
-    const ov = store.getAnalyticsOverview({ days: 1 });
-    expect(ov.totals.messages).toBe(2);
-    expect(Array.isArray(ov.daily_activity)).toBe(true);
   });
 });
 
@@ -132,7 +114,6 @@ describe("Store persistence", () => {
         messages: [["3361@s.whatsapp.net", [makeMsg("1", "3361@s.whatsapp.net", 100, "hello")]]],
         groupMeta: [],
         contactTags: {},
-        watchlists: {},
         lidPnMap: {},
       };
       const jsonPath = join(dir, "store.json");
@@ -150,18 +131,5 @@ describe("Store persistence", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
-  });
-});
-
-describe("Watchlists", () => {
-  test("resolveWatchlist + import from config", () => {
-    const store = new Store();
-    const imported = store.importWatchlistsFromConfig({
-      family: ["3361", "3362"],
-    });
-    expect(imported).toBe(1);
-    const jids = store.resolveWatchlist("family");
-    expect(jids).toEqual(["3361", "3362"]);
-    expect(store.resolveWatchlist("missing")).toBeNull();
   });
 });

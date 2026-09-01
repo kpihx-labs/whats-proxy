@@ -46,7 +46,6 @@ export interface AppConfig {
     max_chats: number;
     persist: boolean;
   };
-  watchlists: Record<string, string[]>; // legacy — unused, kept for DB migration compat
 }
 
 const DEFAULTS: AppConfig = {
@@ -72,7 +71,6 @@ const DEFAULTS: AppConfig = {
     max_chats: 1000,
     persist: true,
   },
-  watchlists: {},
 };
 
 /** Expand a leading `~` to the home directory. */

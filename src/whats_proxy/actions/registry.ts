@@ -1,7 +1,7 @@
 /**
  * whats-proxy — Action registry.
  *
- * Aggregates all 65 actions from the category modules into a single
+ * Aggregates all 69 actions from the category modules into a single
  * kebab-case → definition map. Duplicate names are a hard error.
  */
 
@@ -13,7 +13,6 @@ import chats from "./chats.ts";
 import contacts from "./contacts.ts";
 import groups from "./groups.ts";
 import profile from "./profile.ts";
-import analytics from "./analytics.ts";
 import overview from "./overview.ts";
 import tags from "./tags.ts";
 import utils from "./utils.ts";
@@ -26,7 +25,6 @@ const ALL: ActionDef[] = [
   ...contacts,  // 6
   ...groups,    // 10
   ...profile,   // 4
-  ...analytics, // 5
   ...overview,  // 2
   ...tags,      // 1
   ...utils,     // 7

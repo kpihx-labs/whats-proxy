@@ -1,6 +1,6 @@
 # whats-proxy
 
-Non-MCP CLI proxy for WhatsApp — the full `whats-mcp` tool catalog (74 actions) exposed as a flat JSON-RPC CLI with a local background daemon. Its sole proxy-standard reference is the sibling [`tick_proxy`](../tick_proxy/); Bun + Baileys are retained only for WhatsApp's persistent local Store.
+Non-MCP CLI proxy for WhatsApp — the full `whats-mcp` tool catalog (69 actions) exposed as a flat JSON-RPC CLI with a local background daemon. Its sole proxy-standard reference is the sibling [`tick_proxy`](../tick_proxy/); Bun + Baileys are retained only for WhatsApp's persistent local Store.
 
 Built with **Bun** + **Baileys** (`@whiskeysockets/baileys`): `meta`+`data` envelope, `do`/`admin` namespaces, `--format json|table`, `--output-file`, autosave, declarative mandatory HITL, destructive preflight identity locks, and local read-back proofs. Bun owns package/test operations; the installed TypeScript CLI is launched through Node.js + bundled `tsx` because Baileys needs Node-compatible WebSocket upgrade events.
 
@@ -85,7 +85,7 @@ whats-proxy (CLI, Bun)                daemon (detached background process)
 - **Dispatch**: action handlers receive `{ args, store, config, sock, registry }` and return the full envelope.
 - **Isolation for tests**: `WHATS_PROXY_STATE_DIR` / `WHATS_PROXY_CONFIG_DIR` point the whole stack at a temp dir.
 
-## Actions (74)
+## Actions (69)
 
 | Category | Actions |
 |---|---|
@@ -95,17 +95,16 @@ whats-proxy (CLI, Bun)                daemon (detached background process)
 | groups (10) | group-list, group-info, group-create, group-add-participants, group-remove-participants, group-promote, group-demote, group-update, group-leave, group-invite-code |
 | labels (3) | label-list, label-create, label-associate |
 | profile (4) | profile-info, profile-update, profile-picture, profile-link-preview |
-| analytics (5) | analytics-overview, analytics-chat, analytics-top-chats, analytics-search, analytics-trends |
 | overview (2) | whatsup, find-messages |
 | tags (1) | contact-tag-list |
 | utils (7) | connection-status, guide, presence, read-messages, search-messages, media-download, media-cleanup |
 | communities (13) | community-list, community-info, community-groups, community-pending, community-create ⚠️, community-leave ⚠️, community-subject, community-description, community-participants, community-link ⚠️, community-unlink, community-invite, community-join ⚠️ |
 
-Run `whats-proxy do --help` or `whats-proxy do guide` for the live catalog; `whats-proxy do <action> -h` for per-action help. Every one of the 74 `do` pages renders at least three concrete executable forms from its action-owned payload: inline JSON, a payload file, and captured JSON output. Actions with required fields, local HITL, destructive preflight, or zero-argument table display show their additional branch explicitly. `WaClient.raw()` remains an internal lifecycle API rather than a public `do` escape hatch, so it cannot bypass validation or safety policies.
+Run `whats-proxy do --help` or `whats-proxy do guide` for the live catalog; `whats-proxy do <action> -h` for per-action help. Every one of the 69 `do` pages renders at least three concrete executable forms from its action-owned payload: inline JSON, a payload file, and captured JSON output. Actions with required fields, local HITL, destructive preflight, or zero-argument table display show their additional branch explicitly. `WaClient.raw()` remains an internal lifecycle API rather than a public `do` escape hatch, so it cannot bypass validation or safety policies.
 
 The complex families also own distinct semantic scenarios: direct/group/reply text; local/remote/reply
-media; broadcast recipient mixes and delays; group participant roles and invite lifecycle; and scoped
-analytics search. `make check` validates the universal three-example contract and these distinct
+media; broadcast recipient mixes and delays; group participant roles and invite lifecycle. `make check`
+validates the universal three-example contract and these distinct
 complex branches entirely offline. Pairing and a real WhatsApp account are intentionally excluded.
 
 ## Development
@@ -139,7 +138,7 @@ src/whats_proxy/
 ├── exceptions.ts   # WhatsProxyError hierarchy
 ├── types.ts        # ActionDef, ActionContext, Output envelope
 ├── hitl.ts         # local editable review page; port 0, 600-second fail-closed timeout
-├── actions/        # 14 category modules + registry.ts + policies.ts (74 actions)
+├── actions/        # 14 category modules + registry.ts + policies.ts (69 actions)
 └── admin/          # setup (QR/pairing code) + status (independent probe)
 ```
 

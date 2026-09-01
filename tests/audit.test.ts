@@ -21,9 +21,9 @@ import { getCompactHelp, getFullHelp } from "../src/whats_proxy/doc.ts";
 // ── P2: Registration audit ──────────────────────────────────────────────────
 
 describe("Registration audit", () => {
-  test("all 74 actions registered with correct count", () => {
-    expect(ACTION_COUNT).toBe(74);
-    expect(Object.keys(REGISTRY).length).toBe(74);
+  test("all 69 actions registered with correct count", () => {
+    expect(ACTION_COUNT).toBe(69);
+    expect(Object.keys(REGISTRY).length).toBe(69);
   });
 
   test("all action names are kebab-case", () => {
@@ -82,9 +82,6 @@ describe("Registry ↔ policies coherence", () => {
       "contact-check", "contact-info", "contact-picture", "contact-business", "contact-list", "contact-presence-check",
       // groups
       "group-info", "group-list",
-      // analytics (all pure reads)
-      "analytics-overview", "analytics-top-chats", "analytics-chat-insights",
-      "analytics-timeline", "analytics-search",
       // overview / digest (all pure reads)
       "whatsup", "find-messages", "chat-read-batch",
       // utilities (pure reads)
