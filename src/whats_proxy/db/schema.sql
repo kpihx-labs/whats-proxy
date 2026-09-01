@@ -63,6 +63,15 @@ CREATE TABLE IF NOT EXISTS watchlists (
   PRIMARY KEY (name, jid)
 );
 
+CREATE TABLE IF NOT EXISTS message_receipts (
+  msg_jid TEXT NOT NULL,
+  chat_jid TEXT NOT NULL,
+  reader_jid TEXT NOT NULL,
+  receipt_type TEXT NOT NULL,
+  timestamp INTEGER NOT NULL,
+  PRIMARY KEY (msg_jid, reader_jid, receipt_type)
+);
+
 -- ── Full-text search ────────────────────────────────────────────────────────
 
 CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts

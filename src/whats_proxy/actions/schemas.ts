@@ -163,6 +163,13 @@ export const chatDisappearingSchema = z.object({
   duration: z.number().or(z.string()),
 });
 
+export const messageStatusSchema = z.object({
+  action: z.enum(["get", "sent"]),
+  message_id: z.string().optional(),
+  chat_jid: z.string().optional(),
+  limit: z.number().optional(),
+});
+
 // ── Contacts (6) ────────────────────────────────────────────────────────────
 
 export const contactCheckSchema = z.object({
@@ -238,6 +245,10 @@ export const groupLeaveSchema = z.object({
   jid: z.string(),
 });
 
+export const groupDisbandSchema = z.object({
+  jid: z.string(),
+});
+
 export const groupInviteSchema = z.object({
   action: z.string(),
   jid: z.string().optional(),
@@ -258,52 +269,32 @@ export const groupPictureSchema = z.object({
   source: z.string(),
 });
 
-// ── Channels (5) ────────────────────────────────────────────────────────────
-
-export const channelCreateSchema = z.object({
-  name: z.string(),
-  description: z.string().optional(),
-  picture: z.string().optional(),
-});
-
-export const channelInfoSchema = z.object({
-  jid: z.string(),
-});
-
-export const channelManageSchema = z.object({
-  jid: z.string(),
-  action: z.string(),
-});
-
-export const channelUpdateSchema = z.object({
-  jid: z.string(),
-  name: z.string().optional(),
-  description: z.string().optional(),
-  picture: z.string().optional(),
-});
-
-export const channelDeleteSchema = z.object({
-  jid: z.string(),
-});
-
 // ── Profile (4) ─────────────────────────────────────────────────────────────
 
 export const profileNameSchema = z.object({
-  name: z.string(),
+  action: z.enum(["get", "edit"]),
+  name: z.string().optional(),
 });
 
 export const profileAboutSchema = z.object({
-  text: z.string(),
+  action: z.enum(["get", "edit"]),
+  text: z.string().optional(),
 });
 
 export const profilePictureSchema = z.object({
-  source: z.string(),
+  action: z.enum(["get", "edit", "remove"]),
+  source: z.string().optional(),
 });
 
 export const profilePrivacySchema = z.object({
-  action: z.string(),
+  action: z.enum(["get", "set"]),
   setting: z.string().optional(),
   value: z.string().optional(),
+});
+
+export const contactPresenceCheckSchema = z.object({
+  jid: z.string(),
+  timeout_ms: z.number().optional(),
 });
 
 // ── Analytics (5) ───────────────────────────────────────────────────────────
@@ -447,6 +438,66 @@ export const storyViewSchema = z.object({
   message_id: z.string(),
 });
 
+// ── Communities (13) ─────────────────────────────────────────────────────────
+
+export const communityListSchema = z.object({});
+
+export const communityInfoSchema = z.object({
+  jid: z.string(),
+});
+
+export const communityGroupsSchema = z.object({
+  jid: z.string(),
+});
+
+export const communityPendingSchema = z.object({
+  jid: z.string(),
+});
+
+export const communityCreateSchema = z.object({
+  subject: z.string(),
+  description: z.string().optional(),
+});
+
+export const communityLeaveSchema = z.object({
+  jid: z.string(),
+});
+
+export const communitySubjectSchema = z.object({
+  jid: z.string(),
+  subject: z.string(),
+});
+
+export const communityDescriptionSchema = z.object({
+  jid: z.string(),
+  description: z.string(),
+});
+
+export const communityParticipantsSchema = z.object({
+  jid: z.string(),
+  action: z.enum(["remove"]),
+  participants: z.array(z.string()),
+});
+
+export const communityLinkSchema = z.object({
+  group_jid: z.string(),
+  community_jid: z.string(),
+});
+
+export const communityUnlinkSchema = z.object({
+  group_jid: z.string(),
+  community_jid: z.string(),
+});
+
+export const communityInviteSchema = z.object({
+  jid: z.string(),
+  action: z.enum(["get", "revoke"]),
+});
+
+export const communityJoinSchema = z.object({
+  code: z.string(),
+});
+
 // ── Schema registry (action name → schema) — used by audit tests ───────────
 
 export const SCHEMAS: Record<string, z.ZodObject<Record<string, z.ZodTypeAny>>> = {
@@ -472,6 +523,7 @@ export const SCHEMAS: Record<string, z.ZodObject<Record<string, z.ZodTypeAny>>> 
   "chat-manage": chatManageSchema,
   "chat-star": chatStarSchema,
   "chat-disappearing": chatDisappearingSchema,
+  "message-status": messageStatusSchema,
   // Contacts
   "contact-check": contactCheckSchema,
   "contact-info": contactInfoSchema,
@@ -479,6 +531,7 @@ export const SCHEMAS: Record<string, z.ZodObject<Record<string, z.ZodTypeAny>>> 
   "contact-block": contactBlockSchema,
   "contact-business": contactBusinessSchema,
   "contact-list": contactListSchema,
+  "contact-presence-check": contactPresenceCheckSchema,
   // Groups
   "group-create": groupCreateSchema,
   "group-info": groupInfoSchema,
@@ -487,15 +540,10 @@ export const SCHEMAS: Record<string, z.ZodObject<Record<string, z.ZodTypeAny>>> 
   "group-description": groupDescriptionSchema,
   "group-participants": groupParticipantsSchema,
   "group-leave": groupLeaveSchema,
+  "group-disband": groupDisbandSchema,
   "group-invite": groupInviteSchema,
   "group-settings": groupSettingsSchema,
   "group-picture": groupPictureSchema,
-  // Channels
-  "channel-create": channelCreateSchema,
-  "channel-info": channelInfoSchema,
-  "channel-manage": channelManageSchema,
-  "channel-update": channelUpdateSchema,
-  "channel-delete": channelDeleteSchema,
   // Profile
   "profile-name": profileNameSchema,
   "profile-about": profileAboutSchema,
@@ -528,4 +576,18 @@ export const SCHEMAS: Record<string, z.ZodObject<Record<string, z.ZodTypeAny>>> 
   "story-list": storyListSchema,
   "story-download": storyDownloadSchema,
   "story-view": storyViewSchema,
+  // Communities
+  "community-list": communityListSchema,
+  "community-info": communityInfoSchema,
+  "community-groups": communityGroupsSchema,
+  "community-pending": communityPendingSchema,
+  "community-create": communityCreateSchema,
+  "community-leave": communityLeaveSchema,
+  "community-subject": communitySubjectSchema,
+  "community-description": communityDescriptionSchema,
+  "community-participants": communityParticipantsSchema,
+  "community-link": communityLinkSchema,
+  "community-unlink": communityUnlinkSchema,
+  "community-invite": communityInviteSchema,
+  "community-join": communityJoinSchema,
 };

@@ -116,7 +116,7 @@ Examples:
     docstring: `Get a comprehensive guide on how to use whats-proxy actions.
 
 Parameters:
-    - category (optional): Category: overview | messaging | chats | contacts | groups | profile | channels | stories | analytics | utilities.
+    - category (optional): Category: overview | messaging | chats | contacts | groups | profile | stories | analytics | utilities.
 
 Examples:
     - Get full guide:

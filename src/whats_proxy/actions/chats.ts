@@ -8,7 +8,7 @@
 
 import type { ActionDef } from "./types.ts";
 import { requireApproval } from "../decorators.ts";
-import { chatListSchema, chatReadSchema, chatManageSchema, chatStarSchema, chatDisappearingSchema } from "./schemas.ts";
+import { chatListSchema, chatReadSchema, chatManageSchema, chatStarSchema, chatDisappearingSchema, messageStatusSchema } from "./schemas.ts";
 import { phoneToJid, isGroupJid, okResult, errResult, formatChat, formatMessage } from "../helpers.ts";
 import { fetchAdditionalHistory, type HistorySyncResult } from "./history.ts";
 
@@ -124,10 +124,28 @@ Examples:
         messages = store.getMessages(chatJid, lim, before_id as string | undefined, filterOpts);
       }
 
+      const formatted = messages.map(formatMessage).filter(Boolean);
+      const receiptsMap = store.getChatReceipts(chatJid);
+      const enriched = formatted.map((m: any) => {
+        const receipts = receiptsMap.get(m.id) || [];
+        if (m.from_me) {
+          return {
+            ...m,
+            read_by: receipts
+              .filter((r: any) => r.receipt_type === "read")
+              .map((r: any) => r.reader_jid),
+            delivered_to: receipts
+              .filter((r: any) => r.receipt_type === "delivered")
+              .map((r: any) => r.reader_jid),
+          };
+        }
+        return { ...m, read_by: [], delivered_to: [] };
+      });
+
       return okResult({
         jid: chatJid,
-        count: messages.length,
-        messages: messages.map(formatMessage).filter(Boolean),
+        count: enriched.length,
+        messages: enriched,
         history_sync: historySync,
       });
     },
@@ -331,5 +349,62 @@ Examples:
     - Disable disappearing messages:
         \`whats-proxy do chat-disappearing '{"jid":"33612345678","duration":0}'\`
         → {"status":"set","jid":"33612345678@s.whatsapp.net","disappearing":"off"}`,
+  },
+  {
+    meta: {
+      action: "message-status",
+      category: "chats",
+      description: "Check read receipts for a specific message or your recent sent messages in a chat.",
+      arguments: [
+        { name: "action", description: "'get' for one message's receipts, 'sent' for recent messages in a chat.", required: true },
+        { name: "message_id", description: "Message JID (required for 'get').", required: false },
+        { name: "chat_jid", description: "Chat JID (required for 'sent').", required: false },
+        { name: "limit", description: "Max messages for 'sent' (default 50).", required: false },
+      ],
+      example: { action: "get", message_id: "3EB0..." },
+      returns: "{ receipts } | { messages }",
+    },
+    handler: async ({ action, message_id, chat_jid, limit }, { store }) => {
+      if (action === "get") {
+        if (!message_id) return errResult("'message_id' is required for 'get'.");
+        const receipts = store.getReceipts(String(message_id));
+        return okResult({ message_id, receipts });
+      }
+      if (action === "sent") {
+        if (!chat_jid) return errResult("'chat_jid' is required for 'sent'.");
+        const lim = Math.min(Number(limit) || 50, 200);
+        const allMessages = store.getMessages(String(chat_jid), lim);
+        const messages = allMessages.filter((m: any) => m.key?.fromMe === true);
+        const formatted = messages.map(formatMessage).filter(Boolean);
+        const receiptsMap = store.getChatReceipts(String(chat_jid));
+        const result = formatted.map((m: any) => ({
+          ...m,
+          receipts: (receiptsMap.get(m.id) || []).map((r: any) => ({
+            reader: r.reader_jid,
+            type: r.receipt_type,
+            at: r.timestamp,
+          })),
+          read_count: (receiptsMap.get(m.id) || []).filter((r: any) => r.receipt_type === "read").length,
+        }));
+        return okResult({ chat_jid, total: result.length, messages: result });
+      }
+      return errResult(`Unknown action: ${action}. Use 'get' or 'sent'.`);
+    },
+    schema: messageStatusSchema,
+    docstring: `Check read receipts for messages.
+
+Parameters:
+    - action (required): 'get' for one message's receipts, 'sent' for your recent messages with receipts.
+    - message_id (get only): The message ID to check.
+    - chat_jid (sent only): Chat JID to scan.
+    - limit (sent only): Max messages (default 50).
+
+Examples:
+    - Check who read a message:
+        \`whats-proxy do message-status '{"action":"get","message_id":"3EB0AF..."}'\`
+        → {"message_id":"3EB0AF...","receipts":[{"reader":"237...@s.whatsapp.net","type":"read","at":1788260100}]}
+    - Check your sent messages with read status:
+        \`whats-proxy do message-status '{"action":"sent","chat_jid":"237675836168@s.whatsapp.net"}'\`
+        → {"chat_jid":"237675836168@s.whatsapp.net","total":5,"messages":[{"id":"3EB0...","text":"Hello","read_count":1,"receipts":[...]}]}`,
   },
 ] satisfies ActionDef[];

@@ -798,6 +798,39 @@ export class SQLiteStore {
     return results;
   }
 
+  // ── Receipt operations ───────────────────────────────────────────────────
+
+  /** Store a message receipt (read/delivered/played). */
+  addReceipt(msgJid: string, chatJid: string, readerJid: string, receiptType: string, timestamp: number) {
+    const stmt = this.db.prepare(
+      "INSERT OR REPLACE INTO message_receipts (msg_jid, chat_jid, reader_jid, receipt_type, timestamp) VALUES (?, ?, ?, ?, ?)",
+    );
+    stmt.run(msgJid, chatJid, readerJid, receiptType, timestamp);
+  }
+
+  /** Get all receipts for a specific message. */
+  getReceipts(msgJid: string) {
+    return this.db.prepare(
+      "SELECT * FROM message_receipts WHERE msg_jid = ? ORDER BY timestamp ASC",
+    ).all(msgJid);
+  }
+
+  /** Get receipts for all messages in a chat (for a time range). Returns Map<msgJid, receipts[]>. */
+  getChatReceipts(chatJid: string, since?: number) {
+    const query = since
+      ? "SELECT * FROM message_receipts WHERE chat_jid = ? AND timestamp >= ? ORDER BY msg_jid, timestamp"
+      : "SELECT * FROM message_receipts WHERE chat_jid = ? ORDER BY msg_jid, timestamp";
+    const rows = since
+      ? this.db.prepare(query).all(chatJid, since)
+      : this.db.prepare(query).all(chatJid);
+    const map = new Map<string, any[]>();
+    for (const row of rows as any[]) {
+      if (!map.has(row.msg_jid)) map.set(row.msg_jid, []);
+      map.get(row.msg_jid)!.push(row);
+    }
+    return map;
+  }
+
   // ── Group metadata cache ─────────────────────────────────────────────────
 
   setGroupMeta(jid: string, meta: AnyGroupMeta) {
@@ -875,6 +908,14 @@ export class SQLiteStore {
     }
 
     return null;
+  }
+
+  /** Resolve a raw JID (LID, phone, or full JID) to a display string.
+   *  Returns "number (name)" when a name is found, or the raw JID as-is. */
+  resolveJid(raw: string): string {
+    if (!raw) return "";
+    const name = this.resolveContactName(raw);
+    return name ? `${raw} (${name})` : raw;
   }
 
   // ── History sync ─────────────────────────────────────────────────────────

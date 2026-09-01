@@ -8,7 +8,7 @@
  */
 
 import type { ActionDef } from "./types.ts";
-import { contactCheckSchema, contactInfoSchema, contactPictureSchema, contactBlockSchema, contactBusinessSchema, contactListSchema } from "./schemas.ts";
+import { contactCheckSchema, contactInfoSchema, contactPictureSchema, contactBlockSchema, contactBusinessSchema, contactListSchema, contactPresenceCheckSchema } from "./schemas.ts";
 import { phoneToJid, jidToPhone, isGroupJid, okResult, errResult } from "../helpers.ts";
 
 export default [
@@ -321,5 +321,69 @@ Examples:
     - Filter by name:
         \`whats-proxy do contact-list '{"name":"alice"}'\`
         → {"total":2,"offset":0,"count":2,"contacts":[{"jid":"33612345678@s.whatsapp.net","phone":"33612345678","name":"Alice"},{"jid":"33699999999@s.whatsapp.net","phone":"33699999999","name":"Alice B."}]}`,
+  },
+  {
+    meta: {
+      action: "contact-presence-check",
+      category: "contacts",
+      description: "Check if a contact is currently online. Subscribes to presence for a short period and returns the status.",
+      arguments: [
+        { name: "jid", description: "Contact JID or phone number.", required: true },
+        { name: "timeout_ms", description: "How long to listen for presence updates (default 3000ms, max 10000ms).", required: false },
+      ],
+      example: { jid: "237675836168" },
+      returns: "{ jid, status, last_seen }",
+    },
+    handler: async ({ jid, timeout_ms }, { sock }) => {
+      const targetJid = String(jid).includes("@") ? String(jid) : `${String(jid)}@s.whatsapp.net`;
+      const timeout = Math.min(Number(timeout_ms) || 3000, 10000);
+
+      return new Promise((resolve) => {
+        let resolved = false;
+        const finalResolve = (result: any) => {
+          if (!resolved) {
+            resolved = true;
+            sock.ev.off("presence.update", handler);
+            clearTimeout(timer);
+            resolve(result);
+          }
+        };
+
+        const handler = (update: any) => {
+          if (update.id === targetJid || update.jid === targetJid) {
+            const presences = update.presences || {};
+            const p = presences[targetJid] || Object.values(presences)[0];
+            if (p) {
+              finalResolve(okResult({
+                jid: targetJid,
+                status: p.lastKnownPresence || "unknown",
+                last_seen: p.lastSeen || null,
+              }));
+            }
+          }
+        };
+
+        sock.ev.on("presence.update", handler);
+        sock.presenceSubscribe(targetJid);
+
+        const timer = setTimeout(() => {
+          finalResolve(okResult({ jid: targetJid, status: "unknown", last_seen: null, note: "no presence update received within timeout" }));
+        }, timeout);
+      });
+    },
+    schema: contactPresenceCheckSchema,
+    docstring: `Check if a contact is currently online.
+
+Parameters:
+    - jid (required): Contact JID or phone number.
+    - timeout_ms (optional): How long to listen (default 3000ms, max 10000ms).
+
+Examples:
+    - Check if online:
+        \`whats-proxy do contact-presence-check '{"jid":"237675836168"}'\`
+        → {"jid":"237675836168@s.whatsapp.net","status":"available","last_seen":null}
+    - Check with longer timeout:
+        \`whats-proxy do contact-presence-check '{"jid":"237675836168","timeout_ms":5000}'\`
+        → {"jid":"237675836168@s.whatsapp.net","status":"unavailable","last_seen":1788259000}`,
   },
 ] satisfies ActionDef[];

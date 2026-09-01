@@ -2,8 +2,7 @@
  * whats-proxy — Profile & Privacy actions (4).
  *
  * profile-name, profile-about, profile-picture, profile-privacy.
- *
- * Faithful port of whats-mcp `profile.js`.
+ * All use unified { action: "get"|"edit" } pattern.
  */
 
 import type { ActionDef } from "./types.ts";
@@ -16,114 +15,150 @@ export default [
     meta: {
       action: "profile-name",
       category: "profile",
-      description: "Change your WhatsApp display name.",
+      description: "Get or change your WhatsApp display name.",
       arguments: [
-        { name: "name", description: "New display name (max 25 characters).", required: true },
+        { name: "action", description: "'get' to read current name, 'edit' to change it.", required: true },
+        { name: "name", description: "New display name (max 25 characters). Required for 'edit'.", required: false },
       ],
-      example: { name: "Ivann" },
-      returns: "{ status, name }",
+      example: { action: "get" },
+      returns: "{ name } | { status, name }",
     },
-    handler: requireApproval("default")(async ({ name }, { sock }) => {
-      const value = String(name || "");
-      if (!value || value.length > 25) {
-        return errResult("Name must be between 1 and 25 characters.");
+    handler: async ({ action, name }, { sock }) => {
+      if (action === "get") {
+        const currentName = (sock as any).user?.name || null;
+        return okResult({ name: currentName });
       }
-      await sock.updateProfileName(value);
-      return okResult({ status: "updated", name: value });
-    }),
+      if (action === "edit") {
+        const value = String(name || "");
+        if (!value || value.length > 25) {
+          return errResult("Name must be between 1 and 25 characters.");
+        }
+        await sock.updateProfileName(value);
+        return okResult({ status: "updated", name: value });
+      }
+      return errResult(`Unknown action: ${action}. Use 'get' or 'edit'.`);
+    },
     schema: profileNameSchema,
-    docstring: `Change your WhatsApp display name.
+    docstring: `Get or change your WhatsApp display name.
 
 Parameters:
-    - name (required): New display name (max 25 characters).
+    - action (required): 'get' to read current name, 'edit' to change it.
+    - name (optional, edit only): New display name (max 25 characters).
 
 Examples:
-    - Update display name:
-        \`whats-proxy do profile-name '{"name":"Ivann"}'\`
-        → {"status":"updated","name":"Ivann"}
-    - Set a shorter name:
-        \`whats-proxy do profile-name '{"name":"KπX"}'\`
-        → {"status":"updated","name":"KπX"}
-    - Name too long (error):
-        \`whats-proxy do profile-name '{"name":"This name is way too long for WhatsApp"}'\`
-        → {"meta":{"status":"error","comment":"Name must be between 1 and 25 characters.","edited":false},"data":{"error":"Name must be between 1 and 25 characters."}}`,
+    - Read current name:
+        \`whats-proxy do profile-name '{"action":"get"}'\`
+        → {"name":"KπX"}
+    - Change name:
+        \`whats-proxy do profile-name '{"action":"edit","name":"Ivann"}'\`
+        → {"status":"updated","name":"Ivann"}`,
   },
   {
     meta: {
       action: "profile-about",
       category: "profile",
-      description: "Change your WhatsApp 'About' status text.",
+      description: "Get or change your WhatsApp 'About' status text.",
       arguments: [
-        { name: "text", description: "New about text (max 139 characters). Empty string to clear.", required: true },
+        { name: "action", description: "'get' to read current about, 'edit' to change it.", required: true },
+        { name: "text", description: "New about text (max 139 characters). Required for 'edit'. Empty string to clear.", required: false },
       ],
-      example: { text: "Building things." },
-      returns: "{ status, about }",
+      example: { action: "get" },
+      returns: "{ about, setAt } | { status, about }",
     },
-    handler: requireApproval("default")(async ({ text }, { sock }) => {
-      await sock.updateProfileStatus(String(text || ""), "", 0);
-      return okResult({ status: "updated", about: text });
+    handler: requireApproval("default")(async ({ action, text }, { sock }) => {
+      if (action === "get") {
+        const jid = (sock as any).user?.id;
+        const result = await (sock as any).fetchStatus(jid);
+        // fetchStatus returns a USyncQuery list array, not a single object
+        const entry = Array.isArray(result) ? result[0] : result;
+        return okResult({ about: entry?.about || entry?.status || "", setAt: entry?.setAt || null });
+      }
+      if (action === "edit") {
+        await sock.updateProfileStatus(String(text ?? ""), "", 0);
+        return okResult({ status: "updated", about: text });
+      }
+      return errResult(`Unknown action: ${action}. Use 'get' or 'edit'.`);
     }),
     schema: profileAboutSchema,
-    docstring: `Change your WhatsApp 'About' status text.
+    docstring: `Get or change your WhatsApp 'About' status text. ⚠️ EDIT is broken on linked/companion devices — updateProfileStatus GraphQL query does not take effect (Baileys fork bug). GET works correctly.
 
 Parameters:
-    - text (required): New about text (max 139 characters). Empty string to clear.
+    - action (required): 'get' to read current about, 'edit' to change it.
+    - text (optional, edit only): New about text (max 139 characters). Empty string to clear.
 
 Examples:
+    - Read current about:
+        \`whats-proxy do profile-about '{"action":"get"}'\`
+        → {"about":"Building things.","setAt":1788200000}
     - Set about text:
-        \`whats-proxy do profile-about '{"text":"Building things."}'\`
-        → {"status":"updated","about":"Building things."}
-    - Set a longer status:
-        \`whats-proxy do profile-about '{"text":"System architect | École Polytechnique X24 | Open to opportunities"}'\`
-        → {"status":"updated","about":"System architect | École Polytechnique X24 | Open to opportunities"}
-    - Clear about text:
-        \`whats-proxy do profile-about '{"text":""}'\`
+        \`whats-proxy do profile-about '{"action":"edit","text":"System architect | Polytechnique X24"}'\`
+        → {"status":"updated","about":"System architect | Polytechnique X24"}
+    - Clear about:
+        \`whats-proxy do profile-about '{"action":"edit","text":""}'\`
         → {"status":"updated","about":""}`,
   },
   {
     meta: {
       action: "profile-picture",
       category: "profile",
-      description: "Change your WhatsApp profile picture.",
+      description: "Get, change, or remove your WhatsApp profile picture.",
       arguments: [
-        { name: "source", description: "Image source: URL, base64, or local file path. Use 'remove' to delete the picture.", required: true },
+        { name: "action", description: "'get' to read picture URL, 'edit' to change, 'remove' to delete.", required: true },
+        { name: "source", description: "Image source: URL, base64, or local file path. Required for 'edit'.", required: false },
       ],
-      example: { source: "/path/to/pic.jpg" },
-      returns: "{ status }",
+      example: { action: "get" },
+      returns: "{ url } | { status }",
     },
-    handler: requireApproval("default")(async ({ source }, { sock }) => {
-      if (source === "remove") {
-        await sock.removeProfilePicture((sock as any).user?.id);
+    handler: requireApproval("default")(async ({ action, source }, { sock }) => {
+      const jid = (sock as any).user?.id;
+      if (action === "get") {
+        try {
+          const url = await sock.profilePictureUrl(jid, "image");
+          return okResult({ url });
+        } catch {
+          return okResult({ url: null });
+        }
+      }
+      if (action === "remove") {
+        await sock.removeProfilePicture(jid);
         return okResult({ status: "removed" });
       }
-      const media = resolveMedia(String(source));
-      let imgBuf: Buffer;
-      if (Buffer.isBuffer(media)) {
-        imgBuf = media;
-      } else if (media.url) {
-        const resp = await fetch(media.url);
-        imgBuf = Buffer.from(await resp.arrayBuffer());
-      } else {
-        imgBuf = media as unknown as Buffer;
+      if (action === "edit") {
+        if (!source) return errResult("'source' is required for 'edit' action.");
+        const media = resolveMedia(String(source));
+        let imgBuf: Buffer;
+        if (Buffer.isBuffer(media)) {
+          imgBuf = media;
+        } else if (media.url) {
+          const resp = await fetch(media.url);
+          imgBuf = Buffer.from(await resp.arrayBuffer());
+        } else {
+          imgBuf = media as unknown as Buffer;
+        }
+        await sock.updateProfilePicture(jid, imgBuf);
+        return okResult({ status: "updated" });
       }
-      await sock.updateProfilePicture((sock as any).user?.id, imgBuf);
-      return okResult({ status: "updated" });
+      return errResult(`Unknown action: ${action}. Use 'get', 'edit', or 'remove'.`);
     }),
     schema: profilePictureSchema,
-    docstring: `Change your WhatsApp profile picture.
+    docstring: `Get, change, or remove your WhatsApp profile picture.
 
 Parameters:
-    - source (required): Image source: URL, base64, or local file path. Use 'remove' to delete.
+    - action (required): 'get' to read picture URL, 'edit' to change, 'remove' to delete.
+    - source (optional, edit only): Image source: URL, base64, or local file path.
 
 Examples:
-    - Set profile picture from local file:
-        \`whats-proxy do profile-picture '{"source":"/home/user/Pictures/avatar.jpg"}'\`
+    - Read current picture URL:
+        \`whats-proxy do profile-picture '{"action":"get"}'\`
+        → {"url":"https://pps.whatsapp.net/..."}
+    - Set from local file:
+        \`whats-proxy do profile-picture '{"action":"edit","source":"/path/to/pic.jpg"}'\`
         → {"status":"updated"}
     - Set from URL:
-        \`whats-proxy do profile-picture '{"source":"https://example.com/photo.png"}'\`
+        \`whats-proxy do profile-picture '{"action":"edit","source":"https://example.com/photo.png"}'\`
         → {"status":"updated"}
-    - Remove profile picture:
-        \`whats-proxy do profile-picture '{"source":"remove"}'\`
+    - Remove picture:
+        \`whats-proxy do profile-picture '{"action":"remove"}'\`
         → {"status":"removed"}`,
   },
   {
@@ -133,7 +168,7 @@ Examples:
       description:
         "Get or update WhatsApp privacy settings. Use action='get' to retrieve current settings. Use action='set' with a setting name and value to update.",
       arguments: [
-        { name: "action", description: "Action: 'get' to retrieve all privacy settings, 'set' to update one.", required: true },
+        { name: "action", description: "'get' to retrieve all privacy settings, 'set' to update one.", required: true },
         { name: "setting", description: "Privacy setting: last_seen | online | profile_picture | about | read_receipts | groups_add | default_disappearing.", required: false },
         { name: "value", description: "New value: all | contacts | contact_blacklist | none | match_last_seen.", required: false },
       ],
@@ -179,18 +214,15 @@ Examples:
 
 Parameters:
     - action (required): 'get' to retrieve all privacy settings, 'set' to update one.
-    - setting (optional): Privacy setting: last_seen | online | profile_picture | about | read_receipts | groups_add | default_disappearing.
-    - value (optional): New value: all | contacts | contact_blacklist | none | match_last_seen.
+    - setting (optional, set only): last_seen | online | profile_picture | about | read_receipts | groups_add | default_disappearing.
+    - value (optional, set only): all | contacts | contact_blacklist | none | match_last_seen.
 
 Examples:
     - Get all privacy settings:
         \`whats-proxy do profile-privacy '{"action":"get"}'\`
-        → {"privacy":{"last_seen":"contacts","online":"match_last_seen","profile_picture":"contacts","about":"contacts","read_receipts":"all","groups_add":"contacts"}}
+        → {"privacy":{"last_seen":"contacts","online":"match_last_seen",...}}
     - Set last_seen to contacts only:
         \`whats-proxy do profile-privacy '{"action":"set","setting":"last_seen","value":"contacts"}'\`
-        → {"status":"updated","setting":"last_seen","value":"contacts"}
-    - Disable read receipts:
-        \`whats-proxy do profile-privacy '{"action":"set","setting":"read_receipts","value":"none"}'\`
-        → {"status":"updated","setting":"read_receipts","value":"none"}`,
+        → {"status":"updated","setting":"last_seen","value":"contacts"}`,
   },
 ] satisfies ActionDef[];

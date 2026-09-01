@@ -50,7 +50,7 @@ describe("ACTION_POLICIES", () => {
   });
 
   test("all message sends and irreversible deletes require approval", () => {
-    for (const action of ["send-text", "send-image", "send-video", "send-audio", "send-document", "delete-message", "group-leave", "channel-delete", "media-cleanup"]) {
+    for (const action of ["send-text", "send-image", "send-video", "send-audio", "send-document", "delete-message", "group-leave", "media-cleanup"]) {
       expect(policyFor(action, REGISTRY[action])).toBeDefined();
     }
   });
@@ -66,7 +66,7 @@ describe("ACTION_POLICIES", () => {
   });
 
   test("destructive policy declarations preflight and lock their real targets", () => {
-    for (const action of ["delete-message", "group-leave", "channel-delete"]) {
+    for (const action of ["delete-message", "group-leave"]) {
       const policy = policyFor(action, REGISTRY[action])!;
       expect(policy.preflight).toBeDefined();
       expect(policy.identityFields?.length).toBeGreaterThan(0);

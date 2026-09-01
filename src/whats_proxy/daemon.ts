@@ -223,6 +223,31 @@ async function createSocket(authPath: string, cfg: AppConfig) {
         }
       }
     });
+
+    // Store message read receipts
+    sock.ev.on("message-receipt.update", (updates) => {
+      for (const { key, receipt } of updates) {
+        try {
+          if (receipt?.userJid && key?.id && store) {
+            const receiptType = receipt.playedTimestamp
+              ? "played"
+              : receipt.readTimestamp
+                ? "read"
+                : "delivered";
+            const ts = (receipt.readTimestamp || receipt.playedTimestamp || receipt.receiptTimestamp || Date.now()) as number;
+            store.addReceipt(
+              key.id,
+              key.remoteJid || "",
+              receipt.userJid,
+              receiptType,
+              ts,
+            );
+          }
+        } catch {
+          // Non-critical: receipt storage failure should not crash daemon
+        }
+      }
+    });
   } finally {
     reconnecting = false;
   }

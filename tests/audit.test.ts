@@ -21,9 +21,9 @@ import { getCompactHelp, getFullHelp } from "../src/whats_proxy/doc.ts";
 // ── P2: Registration audit ──────────────────────────────────────────────────
 
 describe("Registration audit", () => {
-  test("all 65 actions registered with correct count", () => {
-    expect(ACTION_COUNT).toBe(65);
-    expect(Object.keys(REGISTRY).length).toBe(65);
+  test("all 76 actions registered with correct count", () => {
+    expect(ACTION_COUNT).toBe(76);
+    expect(Object.keys(REGISTRY).length).toBe(76);
   });
 
   test("all action names are kebab-case", () => {
@@ -77,13 +77,11 @@ describe("Registry ↔ policies coherence", () => {
     // Keep sorted; add new read-only actions here when registered.
     const readOnly = new Set([
       // chats
-      "chat-list", "chat-read",
+      "chat-list", "chat-read", "message-status",
       // contacts
-      "contact-check", "contact-info", "contact-picture", "contact-business", "contact-list",
+      "contact-check", "contact-info", "contact-picture", "contact-business", "contact-list", "contact-presence-check",
       // groups
       "group-info", "group-list",
-      // channels
-      "channel-info",
       // analytics (all pure reads)
       "analytics-overview", "analytics-top-chats", "analytics-chat-insights",
       "analytics-timeline", "analytics-search",
@@ -93,6 +91,8 @@ describe("Registry ↔ policies coherence", () => {
       "connection-status", "guide",
       // stories (pure reads)
       "story-list", "story-view", "story-download",
+      // communities (pure reads)
+      "community-list", "community-info", "community-groups", "community-pending",
     ]);
     for (const name of Object.keys(REGISTRY)) {
       if (!readOnly.has(name)) {

@@ -107,25 +107,25 @@ export default [
       action: "whatsup",
       category: "overview",
       description:
-        "DAILY WHATSAPP OVERVIEW — call when the user asks 'what's up', 'quoi de neuf', 'résume ma journée WhatsApp', 'qu'est-ce que j'ai manqué', 'donne-moi un résumé', or any similar request about today's WhatsApp activity. Returns a complete structured overview from midnight today to now: (1) watchlist chats first with all today's messages; (2) other active chats; (3) needs-reply chats where the last message is incoming.",
+        "FULL 7-DAY WHATSAPP OVERVIEW — call when the user asks 'what's up', 'quoi de neuf', 'résume ma journée WhatsApp', 'qu'est-ce que j'ai manqué', 'donne-moi un résumé', or any similar request about WhatsApp activity. Returns ALL messages from the last 7 days, split into two time bands (recent_24h and older_7d). Group chats show only incoming messages (fromMe === false). Individual chats show all messages, split into 'needs_reply' (last incoming message unanswered) and 'others' sub-groups. No message limits — complete data returned.",
       arguments: [
-        { name: "since", description: "Start Unix timestamp. Default: midnight today.", required: false },
-        { name: "until", description: "End Unix timestamp. Default: now.", required: false },
+        { name: "since", description: "Override start Unix timestamp. Default: now - 7 days.", required: false },
+        { name: "until", description: "Override end Unix timestamp. Default: now.", required: false },
         { name: "watchlists", description: "Only show these watchlists (default: all).", required: false },
-        { name: "limit_per_chat", description: "Max messages per chat (default: 50, max: 200).", required: false },
+        { name: "limit_per_chat", description: "Ignored — no limits applied.", required: false },
       ],
       example: {},
-      returns: "{ date, period, summary, watchlist_chats, other_chats, needs_reply }",
+      returns: "{ date, period, groups: { recent_24h, older_7d }, individual: { recent_24h: { needs_reply, others }, older_7d: { needs_reply, others } }, summary }",
     },
-    handler: async ({ since, until, watchlists: wlFilter, limit_per_chat }, { store, config }) => {
+    handler: async ({ since, until, watchlists: wlFilter, limit_per_chat: _limitIgnored }, { store, config }) => {
       const now = Math.floor(Date.now() / 1000);
+      const oneDayAgo = now - 86400;
+      const sevenDaysAgo = now - 7 * 86400;
 
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const effectiveSince = since !== undefined ? Number(since) : Math.floor(todayStart.getTime() / 1000);
+      const effectiveSince = since !== undefined ? Number(since) : sevenDaysAgo;
       const effectiveUntil = until !== undefined ? Number(until) : now;
-      const lim = Math.min(Number(limit_per_chat) || 50, 200);
 
+      // Watchlist resolution
       const storeWLs = store.listWatchlists();
       const configWLs = config?.watchlists || {};
       const allWLs = { ...configWLs, ...storeWLs };
@@ -145,122 +145,217 @@ export default [
       }
       const watchlistJidSet = new Set(jidToWatchlists.keys());
 
+      // All JIDs with messages
+      const allJids = new Set<string>(store.messages.keys());
+      for (const jid of watchlistJidSet) allJids.add(jid);
+
+      // Helper: format a message and add timestamp_human
+      const fmt = (msg: Record<string, unknown>) => {
+        const f = formatMessage(msg);
+        if (!f) return null;
+        return {
+          id: f.id,
+          timestamp: f.timestamp,
+          timestamp_human: f.timestamp
+            ? new Date(f.timestamp * 1000).toLocaleString("fr-FR", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false,
+              })
+            : null,
+          from_me: f.from_me,
+          sender: f.sender,
+          sender_name: f.push_name || null,
+          text: f.text,
+          type: f.type,
+        };
+      };
+
+      // Type for formatted messages
+      type FmtMsg = NonNullable<ReturnType<typeof fmt>>;
+
+      // Sort messages oldest-first
+      const ascTime = (a: FmtMsg, b: FmtMsg) =>
+        (a.timestamp || 0) - (b.timestamp || 0);
+
+      // Result containers
+      const groupRecent: { jid: string; name: string; messages: any[] }[] = [];
+      const groupOlder: { jid: string; name: string; messages: any[] }[] = [];
+
+      const indRecent: { needs_reply: any[]; others: any[] } = { needs_reply: [], others: [] };
+      const indOlder: { needs_reply: any[]; others: any[] } = { needs_reply: [], others: [] };
+
       const filterOpts = {
         since: effectiveSince,
         until: effectiveUntil,
         excludeTypes: ["protocol", "reaction"],
       };
 
-      const watchlistChats: any[] = [];
-      const otherChats: any[] = [];
-      const needsReplyChats: any[] = [];
-
-      const allJids = new Set<string>(store.messages.keys());
-      for (const jid of watchlistJidSet) allJids.add(jid);
+      let totalMessages = 0;
+      let totalChats = 0;
 
       for (const jid of allJids) {
         if (jid === "status@broadcast") continue;
 
-        const messages = store.getMessages(jid, lim, undefined, filterOpts);
-        const formatted = messages.map(formatMessage).filter(Boolean);
-        if (formatted.length === 0) continue;
-
+        const isGroup = isGroupJid(jid);
         const chat = store.getChat(jid);
         const contact = store.getContact(jid);
-        const chatName =
-          chat?.name || chat?.subject || contact?.name || contact?.notify || jid;
+        const chatName = chat?.name || chat?.subject || contact?.name || contact?.notify || jid;
 
-        const recent = store.getMessages(jid, 3, undefined, { excludeTypes: ["protocol", "reaction"] });
-        const recentFormatted = recent.map(formatMessage).filter(Boolean);
-        const lastMsg = recentFormatted[0]; // newest first
-        const needsReply = !!lastMsg && !lastMsg.from_me;
+        // Fetch ALL messages (no limit)
+        const rawMsgs = store.getMessages(jid, 99999, undefined, filterOpts);
+        if (rawMsgs.length === 0) continue;
 
-        const chatData: Record<string, unknown> = {
-          jid,
-          name: chatName,
-          is_group: isGroupJid(jid),
-          unread: chat?.unreadCount || 0,
-          message_count: formatted.length,
-          needs_reply: needsReply,
-          last_message_time: formatted[0]?.timestamp || null,
-          messages: formatted,
-        };
+        totalChats++;
 
-        if (watchlistJidSet.has(jid)) {
-          chatData.watchlists = jidToWatchlists.get(jid);
-          watchlistChats.push(chatData);
+        if (isGroup) {
+          // Groups: only incoming messages (fromMe === false)
+          const incoming = rawMsgs.filter((m) => m.key?.fromMe === false);
+          const recent24 = incoming
+            .filter((m) => (m.messageTimestamp || 0) >= oneDayAgo)
+            .map(fmt)
+            .filter(Boolean) as FmtMsg[];
+          const older7d = incoming
+            .filter((m) => (m.messageTimestamp || 0) < oneDayAgo)
+            .map(fmt)
+            .filter(Boolean) as FmtMsg[];
+          recent24.sort(ascTime);
+          older7d.sort(ascTime);
+
+          totalMessages += recent24.length + older7d.length;
+
+          if (recent24.length > 0) {
+            groupRecent.push({ jid, name: chatName, messages: recent24 });
+          }
+          if (older7d.length > 0) {
+            groupOlder.push({ jid, name: chatName, messages: older7d });
+          }
         } else {
-          otherChats.push(chatData);
-        }
+          // Individual: all messages (sent + received)
+          const formatted = rawMsgs.map(fmt).filter(Boolean) as FmtMsg[];
 
-        if (needsReply) {
-          needsReplyChats.push({
+          // Determine needs_reply: last message in chat (newest) where fromMe === false
+          // Messages are fetched DESC, so rawMsgs[0] is newest
+          const lastIncoming = formatted.find((m) => m.from_me === false);
+          const lastOverall = formatted[0]; // newest first (DESC order from store)
+          const needsReply = lastOverall && !lastOverall.from_me;
+
+          // Classify into bands
+          const recentMsgs = formatted.filter(
+            (m) => (m.timestamp || 0) >= oneDayAgo,
+          );
+          const olderMsgs = formatted.filter(
+            (m) => (m.timestamp || 0) < oneDayAgo,
+          );
+
+          totalMessages += formatted.length;
+
+          const buildChatEntry = (msgs: any[]) => ({
             jid,
             name: chatName,
-            is_group: isGroupJid(jid),
-            in_watchlist: watchlistJidSet.has(jid),
-            last_message: lastMsg,
+            messages: msgs.sort(ascTime),
           });
+
+          const buildNeedsReplyEntry = (msgs: any[]) => ({
+            jid,
+            name: chatName,
+            last_message: lastIncoming || null,
+            messages: msgs.sort(ascTime),
+          });
+
+          // recent_24h
+          if (needsReply && recentMsgs.length > 0) {
+            indRecent.needs_reply.push(buildNeedsReplyEntry(recentMsgs));
+          } else if (recentMsgs.length > 0) {
+            indRecent.others.push(buildChatEntry(recentMsgs));
+          }
+
+          // older_7d
+          if (needsReply && olderMsgs.length > 0) {
+            indOlder.needs_reply.push(buildNeedsReplyEntry(olderMsgs));
+          } else if (olderMsgs.length > 0) {
+            indOlder.others.push(buildChatEntry(olderMsgs));
+          }
         }
       }
 
-      const byTime = (a: any, b: any) => (b.last_message_time || 0) - (a.last_message_time || 0);
-      watchlistChats.sort(byTime);
-      otherChats.sort(byTime);
-      needsReplyChats.sort((a: any, b: any) => {
-        if (a.in_watchlist !== b.in_watchlist) return b.in_watchlist ? 1 : -1;
-        return (b.last_message?.timestamp || 0) - (a.last_message?.timestamp || 0);
-      });
+      // Sort group lists by most recent message time (desc)
+      const sortByLastMsgDesc = (arr: { messages: any[] }[]) =>
+        arr.sort(
+          (a, b) =>
+            (b.messages[b.messages.length - 1]?.timestamp || 0) -
+            (a.messages[a.messages.length - 1]?.timestamp || 0),
+        );
+      sortByLastMsgDesc(groupRecent);
+      sortByLastMsgDesc(groupOlder);
 
-      const totalMessages =
-        watchlistChats.reduce((s: number, c: any) => s + c.message_count, 0) +
-        otherChats.reduce((s: number, c: any) => s + c.message_count, 0);
+      // Sort individual sub-groups by most recent message time (desc)
+      const sortIndiv = (arr: { last_message?: any; messages: any[] }[]) =>
+        arr.sort(
+          (a, b) =>
+            (b.messages[b.messages.length - 1]?.timestamp || 0) -
+            (a.messages[a.messages.length - 1]?.timestamp || 0),
+        );
+      sortIndiv(indRecent.needs_reply);
+      sortIndiv(indRecent.others);
+      sortIndiv(indOlder.needs_reply);
+      sortIndiv(indOlder.others);
 
       return okResult({
         date: new Date().toLocaleDateString("fr-FR"),
         period: {
           since: effectiveSince,
           until: effectiveUntil,
-          from: new Date(Number(effectiveSince) * 1000).toLocaleTimeString("fr-FR", {
+          from: new Date(effectiveSince * 1000).toLocaleTimeString("fr-FR", {
             hour: "2-digit",
             minute: "2-digit",
           }),
-          to: new Date(Number(effectiveUntil) * 1000).toLocaleTimeString("fr-FR", {
+          to: new Date(effectiveUntil * 1000).toLocaleTimeString("fr-FR", {
             hour: "2-digit",
             minute: "2-digit",
           }),
+        },
+        groups: {
+          recent_24h: groupRecent,
+          older_7d: groupOlder,
+        },
+        individual: {
+          recent_24h: indRecent,
+          older_7d: indOlder,
         },
         summary: {
-          total_active_chats: watchlistChats.length + otherChats.length,
-          watchlist_chats: watchlistChats.length,
-          other_chats: otherChats.length,
+          total_chats: totalChats,
           total_messages: totalMessages,
-          needs_reply_count: needsReplyChats.length,
+          groups_recent: groupRecent.length,
+          groups_older: groupOlder.length,
+          individual_needs_reply_24h: indRecent.needs_reply.length,
+          individual_needs_reply_7d: indOlder.needs_reply.length,
+          individual_others_24h: indRecent.others.length,
+          individual_others_7d: indOlder.others.length,
         },
-        watchlist_chats: watchlistChats,
-        other_chats: otherChats,
-        needs_reply: needsReplyChats,
       });
     },
     schema: whatsupSchema,
-    docstring: `DAILY WHATSAPP OVERVIEW — returns a complete structured overview from midnight today to now.
+    docstring: `FULL 7-DAY WHATSAPP OVERVIEW — returns ALL messages from the last 7 days, split into two time bands (recent_24h, older_7d). No message limits.
 
 Parameters:
-    - since (optional): Start Unix timestamp. Default: midnight today.
-    - until (optional): End Unix timestamp. Default: now.
+    - since (optional): Override start Unix timestamp. Default: now - 7 days.
+    - until (optional): Override end Unix timestamp. Default: now.
     - watchlists (optional): Only show these watchlists (default: all).
-    - limit_per_chat (optional): Max messages per chat (default: 50, max: 200).
+    - limit_per_chat (optional): Ignored — no limits applied.
+
+Structure:
+    groups.recent_24h / groups.older_7d: group chats with incoming messages (fromMe === false), chronological (oldest first).
+    individual.recent_24h / individual.older_7d: split into needs_reply (last message incoming, unanswered) and others.
 
 Examples:
-    - Get today's overview:
+    - Get full 7-day overview:
         \`whats-proxy do whatsup '{}'\`
-        → {"date":"30/08/2026","period":{"since":1756550400,"until":1756614000},"summary":{"total_active_chats":12,"watchlist_chats":3,"other_chats":9,"total_messages":156,"needs_reply_count":4},"watchlist_chats":[{"jid":"120363000000000@g.us","name":"X24 Project","message_count":45,"needs_reply":true}],"other_chats":[],"needs_reply":[{"jid":"33612345678","name":"Alice","last_message":{"text":"Are you available?","from_me":false}}]}
-    - Overview for a specific watchlist:
-        \`whats-proxy do whatsup '{"watchlists":["work"]}'\`
-        → {"date":"30/08/2026","summary":{"total_active_chats":5,"watchlist_chats":2,"other_chats":3,"total_messages":89,"needs_reply_count":1}}
-    - Overview with custom time range:
-        \`whats-proxy do whatsup '{"since":1756580000,"until":1756614000}'\`
-        → {"date":"30/08/2026","period":{"since":1756580000,"until":1756614000},"summary":{"total_active_chats":8,"watchlist_chats":2,"other_chats":6,"total_messages":67,"needs_reply_count":2}}`,
+    - Overview with watchlist filter:
+        \`whats-proxy do whatsup '{"watchlists":["work"]}'\``,
   },
   {
     meta: {

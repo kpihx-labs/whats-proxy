@@ -12,7 +12,6 @@ import messaging from "./messaging.ts";
 import chats from "./chats.ts";
 import contacts from "./contacts.ts";
 import groups from "./groups.ts";
-import channels from "./channels.ts";
 import profile from "./profile.ts";
 import analytics from "./analytics.ts";
 import overview from "./overview.ts";
@@ -21,13 +20,13 @@ import tags from "./tags.ts";
 import watchlists from "./watchlists.ts";
 import utils from "./utils.ts";
 import stories from "./stories.ts";
+import communities from "./communities.ts";
 
 const ALL: ActionDef[] = [
   ...messaging, // 15
   ...chats,     // 5
   ...contacts,  // 6
   ...groups,    // 10
-  ...channels,  // 5
   ...profile,   // 4
   ...analytics, // 5
   ...overview,  // 2
@@ -36,6 +35,7 @@ const ALL: ActionDef[] = [
   ...watchlists,// 1
   ...utils,     // 7
   ...stories,   // 3
+  ...communities, // 13
 ];
 
 export const REGISTRY: ActionRegistry = {};

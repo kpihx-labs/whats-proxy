@@ -56,14 +56,21 @@ export async function rpcCall(
     client.on("connect", () => {
       client.write(JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) + "\n");
     });
+    let buffer = "";
     client.on("data", (chunk) => {
-      clearTimeout(timer);
-      client.destroy();
-      const text = chunk.toString("utf-8").trim();
-      try {
-        resolve(JSON.parse(text) as RpcResponse);
-      } catch {
-        reject(new WhatsProxyError(`Invalid RPC response: ${text}`, "RPC_BAD_RESPONSE"));
+      buffer += chunk.toString("utf-8");
+      // The daemon sends newline-delimited JSON and keeps the connection open,
+      // so resolve as soon as a complete line arrives (never wait for "end").
+      const nl = buffer.indexOf("\n");
+      if (nl >= 0) {
+        clearTimeout(timer);
+        const text = buffer.slice(0, nl).trim();
+        client.destroy();
+        try {
+          resolve(JSON.parse(text) as RpcResponse);
+        } catch {
+          reject(new WhatsProxyError(`Invalid RPC response: ${text.slice(0, 200)}`, "RPC_BAD_RESPONSE"));
+        }
       }
     });
     client.on("error", (err) => {

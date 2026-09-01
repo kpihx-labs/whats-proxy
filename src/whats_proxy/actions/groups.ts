@@ -9,7 +9,7 @@
 
 import type { ActionDef } from "./types.ts";
 import { requireApproval, requirePreflight } from "../decorators.ts";
-import { groupCreateSchema, groupInfoSchema, groupListSchema, groupSubjectSchema, groupDescriptionSchema, groupParticipantsSchema, groupLeaveSchema, groupInviteSchema, groupSettingsSchema, groupPictureSchema } from "./schemas.ts";
+import { groupCreateSchema, groupInfoSchema, groupListSchema, groupSubjectSchema, groupDescriptionSchema, groupParticipantsSchema, groupLeaveSchema, groupDisbandSchema, groupInviteSchema, groupSettingsSchema, groupPictureSchema } from "./schemas.ts";
 import { phoneToJid, groupJid, isGroupJid, jidToPhone, resolveMedia, okResult, errResult, formatMessage } from "../helpers.ts";
 import { fetchAdditionalHistory, type HistorySyncResult } from "./history.ts";
 
@@ -20,16 +20,20 @@ function _ensureGroupJid(jid: string): string {
   return groupJid(jid);
 }
 
-function _fmtParticipant(p: any) {
+function _fmtParticipant(p: any, resolveName?: (jid: string) => string | null) {
+  const raw = p.id;
+  const name = resolveName?.(raw) || null;
   return {
-    jid: p.id,
-    phone: jidToPhone(p.id),
+    jid: raw,
+    name,
+    phone: jidToPhone(raw),
     admin: p.admin || null,
   };
 }
 
 function _fmtGroupMeta(meta: any, options: any = {}) {
-  const allParticipants = (meta.participants || []).map(_fmtParticipant);
+  const resolveName = options.resolveName;
+  const allParticipants = (meta.participants || []).map((p: any) => _fmtParticipant(p, resolveName));
   const includeParticipants = options.includeParticipants !== false;
   const participantLimit = includeParticipants
     ? Math.max(0, options.participantLimit ?? 200)
@@ -190,6 +194,7 @@ Examples:
         historySync,
         includeParticipants: include_participants,
         participantLimit: participant_limit,
+        resolveName: (jid: string) => store.resolveContactName(jid),
       }));
     },
     schema: groupInfoSchema,
@@ -631,5 +636,62 @@ Examples:
     - Update with base64 image:
         \`whats-proxy do group-picture '{"jid":"120363000000000@g.us","source":"data:image/png;base64,iVBOR..."}'\`
         → {"status":"updated","jid":"120363000000000@g.us"}`,
+  },
+  {
+    meta: {
+      action: "group-disband",
+      category: "groups",
+      description:
+        "Dissolve a WhatsApp group you own (superadmin). Removes all participants then leaves, effectively deleting the group for everyone. Irreversible.",
+      arguments: [
+        { name: "jid", description: "Group JID to disband.", required: true },
+      ],
+      example: { jid: "120363000000000@g.us" },
+      returns: "{ status, jid, removed }",
+    },
+    handler: requireApproval("default")(async ({ jid }, { sock }) => {
+      const groupJid = phoneToJid(String(jid));
+      try {
+        const metadata = await sock.groupMetadata(groupJid);
+        const participants = metadata.participants || [];
+        const isSuperAdmin = participants.some(
+          (p: any) => p.admin === "superadmin",
+        );
+        if (!isSuperAdmin) {
+          return errResult("Only the superadmin can disband a group.");
+        }
+        const myId = (sock as any).user?.id || "";
+        const toRemove = participants
+          .map((p: any) => p.id)
+          .filter((id: string) => id !== myId);
+        if (toRemove.length > 0) {
+          const result = await sock.groupParticipantsUpdate(groupJid, toRemove, "remove");
+          // Wait for WhatsApp to process the removal before leaving.
+          // Without this delay, groupLeave fires before the server has
+          // removed the participants, leaving them stranded in the group.
+          await new Promise((r) => setTimeout(r, 2000));
+        }
+        await sock.groupLeave(groupJid);
+        return okResult({ status: "disbanded", jid: groupJid, removed: toRemove.length });
+      } catch (err) {
+        return errResult(`Failed to disband group: ${(err as Error).message}`);
+      }
+    }),
+    schema: groupDisbandSchema,
+    docstring: `Dissolve a WhatsApp group you own (superadmin).
+
+Removes all participants except yourself, then leaves the group.
+This effectively deletes the group for everyone. Irreversible.
+
+Parameters:
+    - jid (required): Group JID to disband.
+
+Examples:
+    - Disband a group:
+        \`whats-proxy do group-disband '{"jid":"120363000000000@g.us"}'\`
+        → {"status":"disbanded","jid":"120363000000000@g.us","removed":3}
+    - Try to disband a group you don't own (error):
+        \`whats-proxy do group-disband '{"jid":"120363000000000@g.us"}'\`
+        → {"meta":{"status":"error","comment":"Only the superadmin can disband a group.","edited":false},"data":{"error":"Only the superadmin can disband a group."}}`,
   },
 ] satisfies ActionDef[];
