@@ -1,23 +1,29 @@
 /**
- * whats-proxy — Story actions (6).
+ * whats-proxy — Story actions (3).
  *
- * story-list, story-post, story-download, story-view, story-reply, story-delete.
+ * story-list, story-download, story-view.
+ *
+ * story-post, story-reply, story-delete removed (v0.6.1): WhatsApp does not
+ * propagate status updates posted from linked/companion devices (Baileys).
+ * sendMessage to status@broadcast returns success locally but WhatsApp servers
+ * silently drop the post. story-reply is just a regular DM (not a story reply).
+ * story-delete fails because the revoke is not propagated to the server.
+ * See Baileys issues #2084, #2118, #1582, #682 for confirmation.
  *
  * "Story" is WhatsApp's ephemeral 24-hour broadcast (the UI label), distinct
  * from the persistent "About" status text (handled by `profile-about`).
  * Stories arrive in the local store under remoteJid `status@broadcast` with
- * `key.participant` = the author. Posting targets the same broadcast JID.
+ * `key.participant` = the author.
  */
 
 import type { ActionDef } from "./types.ts";
-import { requireApproval } from "../decorators.ts";
 import { phoneToJid, resolveMedia, okResult, errResult, formatMessage, STATUS_BROADCAST } from "../helpers.ts";
 import { downloadMediaMessage } from "@whiskeysockets/baileys";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join, extname } from "node:path";
+import { join } from "node:path";
 import { homedir } from "node:os";
 import {
-  storyListSchema, storyPostSchema, storyDownloadSchema, storyViewSchema, storyReplySchema, storyDeleteSchema,
+  storyListSchema, storyDownloadSchema, storyViewSchema,
 } from "./schemas.ts";
 import type { AnyMsg } from "../store.ts";
 
@@ -77,73 +83,6 @@ Examples:
   },
   {
     meta: {
-      action: "story-post",
-      category: "stories",
-      description:
-        "Post a story (24-hour status update). type: text | image | video | audio. For text, pass 'text'; for media, pass 'source' (URL/base64/path). Optional 'status_jid_list' restricts which JIDs can view the story (default: your status privacy).",
-      arguments: [
-        { name: "type", description: "Story type: text | image | video | audio. Default text.", required: false },
-        { name: "text", description: "Text content (required for type=text).", required: false },
-        { name: "source", description: "Media source: URL, base64, or local path (required for image/video/audio).", required: false },
-        { name: "caption", description: "Caption for media stories.", required: false },
-        { name: "status_jid_list", description: "Optional array of JIDs allowed to view the story.", required: false },
-      ],
-      example: { type: "text", text: "Hello world!" },
-      returns: "{ status, message_id, type }",
-    },
-    handler: requireApproval("default")(async ({ type, text, source, caption, status_jid_list }, { sock }) => {
-      const t = String(type || "text");
-      const opts: Record<string, unknown> = {};
-      if (Array.isArray(status_jid_list) && status_jid_list.length > 0) {
-        opts.statusJidList = status_jid_list.map(String);
-      }
-      let content: Record<string, unknown>;
-      if (t === "text") {
-        if (!text) return errResult("text is required for type=text story.");
-        content = { text: String(text) };
-      } else if (t === "image") {
-        if (!source) return errResult("source is required for image story.");
-        content = { image: resolveMedia(String(source)) as never, ...(caption ? { caption: String(caption) } : {}) };
-      } else if (t === "video") {
-        if (!source) return errResult("source is required for video story.");
-        content = { video: resolveMedia(String(source)) as never, ...(caption ? { caption: String(caption) } : {}) };
-      } else if (t === "audio") {
-        if (!source) return errResult("source is required for audio story.");
-        content = { audio: resolveMedia(String(source)) as never };
-      } else {
-        return errResult(`Unknown story type: ${t}. Use text, image, video, or audio.`);
-      }
-      const result = await sock.sendMessage(STATUS_BROADCAST, content as never, opts as never);
-      return okResult({
-        status: "posted",
-        message_id: result?.key?.id || null,
-        type: t,
-        ...(Array.isArray(status_jid_list) ? { audience: status_jid_list } : {}),
-      });
-    }),
-    schema: storyPostSchema,
-    docstring: `Post a story (24-hour status update) to your status.
-
-Parameters:
-    - type (optional): text | image | video | audio (default text).
-    - text (optional): Text content (required for type=text).
-    - source (optional): Media source URL/base64/path (required for media types).
-    - caption (optional): Caption for media stories.
-    - status_jid_list (optional): Array of JIDs allowed to view the story.
-
-Examples:
-    - Post a text story:
-        \`whats-proxy do story-post '{"type":"text","text":"Hello world!"}'\`
-        → {"status":"posted","message_id":"ABC123","type":"text"}
-    - Post an image story:
-        \`whats-proxy do story-post '{"type":"image","source":"/tmp/pic.jpg","caption":"Sunset"}'\`
-        → {"status":"posted","message_id":"DEF456","type":"image"}
-    - Post a text story visible only to two contacts:
-        \`whats-proxy do story-post '{"type":"text","text":"Private","status_jid_list":["33612345678","33600000000"]}'\`
-        → {"status":"posted","message_id":"GHI789","type":"text","audience":["33612345678","33600000000"]}`,
-  },
-  {
-    meta: {
       action: "story-download",
       category: "stories",
       description:
@@ -177,7 +116,6 @@ Examples:
       }
       const cacheDir = join(homedir(), ".cache", "whats_media");
       if (!existsSync(cacheDir)) mkdirSync(cacheDir, { recursive: true });
-      // Derive extension from mimetype, not mediaType (avoids .image, .video, .audio).
       const mimeExtMap: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "video/mp4": "mp4", "audio/ogg": "ogg", "audio/mpeg": "mp3" };
       const defaultExt = mediaMsg.mimetype ? (mimeExtMap[String(mediaMsg.mimetype)] || String(mediaMsg.mimetype).split("/")[1]?.split(";")[0] || "bin") : (mediaType || "bin");
       let fileName = mediaMsg.fileName || `${message_id}.${defaultExt}`;
@@ -242,82 +180,6 @@ Examples:
         → {"id":"C78258FE...","author":"156263862272061@lid","author_name":"Bob","type":"text","text":"Hello everyone","timestamp":1756614100}
     - View a story not in store (error):
         \`whats-proxy do story-view '{"message_id":"NONEXISTENT"}'\`
-        → {"meta":{"status":"error","comment":"Story NONEXISTENT not found in store.","edited":false},"data":{"error":"Story NONEXISTENT not found in store."}}`,
-  },
-  {
-    meta: {
-      action: "story-reply",
-      category: "stories",
-      description:
-        "Reply to a story: sends a private message to the story author. The story must be in the local store.",
-      arguments: [
-        { name: "message_id", description: "Story message ID to reply to.", required: true },
-        { name: "text", description: "Reply text.", required: true },
-      ],
-      example: { message_id: "A56036DC...", text: "Nice!" },
-      returns: "{ status, to, message_id }",
-    },
-    handler: requireApproval("default")(async ({ message_id, text }, { sock, store }) => {
-      const msg = store.getMessage(String(message_id));
-      if (!msg) return errResult(`Story ${message_id} not found in store.`);
-      const meId = (sock as any).user?.id as string | undefined;
-      const author = msg?.key?.participant || (msg?.key?.fromMe && meId ? meId : msg?.key?.remoteJid);
-      if (!author || author === STATUS_BROADCAST) return errResult("Story author not found.");
-      const result = await sock.sendMessage(author, { text: String(text) } as never);
-      return okResult({ status: "sent", to: author, message_id: result?.key?.id || null });
-    }),
-    schema: storyReplySchema,
-    docstring: `Reply to a story: sends a private message to the story author.
-
-Parameters:
-    - message_id (required): Story message ID to reply to.
-    - text (required): Reply text.
-
-Examples:
-    - Reply to a story:
-        \`whats-proxy do story-reply '{"message_id":"A56036DC...","text":"Nice!"}'\`
-        → {"status":"sent","to":"238908008874169@lid","message_id":"JKL012"}
-    - Reply with a longer message:
-        \`whats-proxy do story-reply '{"message_id":"C78258FE...","text":"*Great shot* — where was this taken?"}'\`
-        → {"status":"sent","to":"156263862272061@lid","message_id":"MNO345"}
-    - Reply to a story not in store (error):
-        \`whats-proxy do story-reply '{"message_id":"NONEXISTENT","text":"Hi"}'\`
-        → {"meta":{"status":"error","comment":"Story NONEXISTENT not found in store.","edited":false},"data":{"error":"Story NONEXISTENT not found in store."}}`,
-  },
-  {
-    meta: {
-      action: "story-delete",
-      category: "stories",
-      description:
-        "Delete your own story from your status. The story must be in the local store and must be yours (fromMe=true). Sends a revoke protocol message to status@broadcast.",
-      arguments: [
-        { name: "message_id", description: "Story message ID to delete.", required: true },
-      ],
-      example: { message_id: "A56036DC..." },
-      returns: "{ status, message_id }",
-    },
-    handler: requireApproval("default")(async ({ message_id }, { sock, store }) => {
-      const msg = store.getMessage(String(message_id));
-      if (!msg) return errResult(`Story ${message_id} not found in store.`);
-      if (!msg?.key?.fromMe) return errResult("You can only delete your own stories.");
-      const result = await sock.sendMessage(STATUS_BROADCAST, { delete: msg.key } as never);
-      return okResult({ status: "deleted", message_id, revoke: result?.key?.id || null });
-    }),
-    schema: storyDeleteSchema,
-    docstring: `Delete your own story from your status.
-
-Parameters:
-    - message_id (required): Story message ID to delete.
-
-Examples:
-    - Delete your own story:
-        \`whats-proxy do story-delete '{"message_id":"A56036DC..."}'\`
-        → {"status":"deleted","message_id":"A56036DC...","revoke":"REV001"}
-    - Try to delete someone else's story (error):
-        \`whats-proxy do story-delete '{"message_id":"C78258FE..."}'\`
-        → {"meta":{"status":"error","comment":"You can only delete your own stories.","edited":false},"data":{"error":"You can only delete your own stories."}}
-    - Story not in store (error):
-        \`whats-proxy do story-delete '{"message_id":"NONEXISTENT"}'\`
         → {"meta":{"status":"error","comment":"Story NONEXISTENT not found in store.","edited":false},"data":{"error":"Story NONEXISTENT not found in store."}}`,
   },
 ] satisfies ActionDef[];

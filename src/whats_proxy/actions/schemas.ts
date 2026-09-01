@@ -439,28 +439,11 @@ export const storyListSchema = z.object({
   limit: z.number().or(z.string()).optional(),
 });
 
-export const storyPostSchema = z.object({
-  type: z.string().optional(),
-  text: z.string().optional(),
-  source: z.string().optional(),
-  caption: z.string().optional(),
-  status_jid_list: z.array(z.string()).optional(),
-});
-
 export const storyDownloadSchema = z.object({
   message_id: z.string(),
 });
 
 export const storyViewSchema = z.object({
-  message_id: z.string(),
-});
-
-export const storyReplySchema = z.object({
-  message_id: z.string(),
-  text: z.string(),
-});
-
-export const storyDeleteSchema = z.object({
   message_id: z.string(),
 });
 
@@ -543,9 +526,6 @@ export const SCHEMAS: Record<string, z.ZodObject<Record<string, z.ZodTypeAny>>> 
   "media-cleanup": mediaCleanupSchema,
   // Stories
   "story-list": storyListSchema,
-  "story-post": storyPostSchema,
   "story-download": storyDownloadSchema,
   "story-view": storyViewSchema,
-  "story-reply": storyReplySchema,
-  "story-delete": storyDeleteSchema,
 };

@@ -35,7 +35,7 @@ const ALL: ActionDef[] = [
   ...tags,      // 1
   ...watchlists,// 1
   ...utils,     // 7
-  ...stories,   // 6
+  ...stories,   // 3
 ];
 
 export const REGISTRY: ActionRegistry = {};
