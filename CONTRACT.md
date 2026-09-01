@@ -236,7 +236,7 @@ domain FIRST.** All `whats-mcp` `verb_noun` names are flipped.
 |--------|-------------|:----:|:----:|-------|
 | `connection-status` | `connection_status` | Daemon | ❌ | Baileys connection state + latency |
 | `read-messages` | `read_messages` | WS | ⚠️ | **conditional** approval; bulk read |
-| `media-download` | `download_media` | WS | ⚠️ | **conditional** approval; bulk download to ~/Downloads/ |
+| `media-download` | `download_media` | WS | ❌ | bulk download to ~/Downloads/ |
 | `presence` | `set_presence` | WS | ⚠️ | **conditional** approval; typing/recording/broadcast |
 
 ### Action count
@@ -284,7 +284,7 @@ writes (`contact-tags`) where a read-back confirms the local state mutation land
 | HITL Level | Count | Actions |
 |------------|------:|---------|
 | **approval: always** | 23 | send-text, send-image, send-video, send-audio, send-document, send-sticker, send-location, send-contact, send-reaction, send-poll, edit-message, delete-message, forward-message, chat-manage (dangerous), chat-star, chat-disappearing, group-create, group-subject, group-description, group-participants, group-leave, group-settings, group-picture |
-| **approval: conditional** | 6 | contact-block (dangerous), group-invite (revoke), profile-privacy (set), contact-tags (mutates collection), presence, read-messages, media-download |
+| **approval: conditional** | 5 | contact-block (dangerous), group-invite (revoke), profile-privacy (set), contact-tags (mutates collection), presence, read-messages |
 
 ### Preflight + lockIdentity targets
 
@@ -307,7 +307,7 @@ writes (`contact-tags`) where a read-back confirms the local state mutation land
    exists. Required verification appears only under `data.verification`.
 
 **If no browser is available:** the URL is printed with an `ssh -L` hint. Timeout 600 s → automatic
-`rejected`. HITL-required actions: 27 always-approval + 6 conditional = 33 total (of 61).
+`rejected`. HITL-required actions: 27 always-approval + 5 conditional = 32 total (of 61).
 
 ---
 
@@ -681,7 +681,7 @@ WhatsApp device. Authentication failures are fail-closed; never invent a browser
 | **D5** | No verification decorator | WhatsApp fails loud (unlike TickTick silent-drop) | add unnecessary verification overhead |
 | **D6** | Pairing lifecycle | dedicated section documenting 515 reconnect gotcha | pairing bugs are the #1 support issue |
 | **D7** | Env prefix | **`WHATS_*`** (harmonizes with `TICK_*` and `TG_*`) | any other prefix |
-| **D8** | HITL scope | 27 always + 6 conditional = 33 of 67 actions | narrower policy would miss send safety |
+| **D8** | HITL scope | 27 always + 5 conditional = 32 of 67 actions | narrower policy would miss send safety |
 
 ---
 

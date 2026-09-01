@@ -120,7 +120,7 @@ Examples:
       example: { message_ids: ["ABC123"] },
       returns: "{ results }",
     },
-    handler: requireApproval("default")(async ({ message_ids }, { sock, store }) => {
+    handler: async ({ message_ids }, { sock, store }) => {
       const ids = Array.isArray(message_ids)
         ? message_ids.map(String)
         : [String(message_ids)];
@@ -198,7 +198,7 @@ Examples:
       }
 
       return okResult({ results });
-    }),
+    },
     schema: mediaDownloadSchema,
     docstring: `Download media (image, video, audio, document, sticker) from one or more messages to ~/Downloads/.
 

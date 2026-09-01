@@ -85,7 +85,7 @@ describe("Registry ↔ policies coherence", () => {
       // overview / digest (all pure reads)
       "whatsup", "find-messages", "chat-read-batch",
       // utilities (pure reads)
-      "connection-status",
+      "connection-status", "media-download",
       // stories (pure reads)
       "story-list", "story-view", "story-download",
       // communities (pure reads)
