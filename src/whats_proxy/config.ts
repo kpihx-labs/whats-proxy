@@ -46,7 +46,7 @@ export interface AppConfig {
     max_chats: number;
     persist: boolean;
   };
-  watchlists: Record<string, string[]>;
+  watchlists: Record<string, string[]>; // legacy — unused, kept for DB migration compat
 }
 
 const DEFAULTS: AppConfig = {
