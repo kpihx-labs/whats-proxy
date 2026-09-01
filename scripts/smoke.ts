@@ -61,7 +61,7 @@ console.log("\n[1] catalog help");
   // only lowercase + hyphens (no spaces, no ANSI). After ANSI strip, these
   // are action names like "send-text" or "chat-read".
   const actionCount = (stripped.match(/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/gm) || []).length;
-  check(`catalog lists ~69 actions (found ${actionCount})`, actionCount >= 60, `count=${actionCount}`);
+  check(`catalog lists ~67 actions (found ${actionCount})`, actionCount >= 60, `count=${actionCount}`);
 }
 
 // ── 2. Per-action help ───────────────────────────────────────────────────────
@@ -172,18 +172,17 @@ console.log("\n[7] admin status");
   }
 }
 
-// ── 8. guide + connection-status (store-only, daemon up) ────────────────────
+// ── 8. connection-status (store-only, daemon up) ────────────────────────
 console.log("\n[8] store-only actions via CLI (daemon auto-spawn)");
 {
   const out: string[] = [];
   const orig = process.stdout.write.bind(process.stdout);
   process.stdout.write = ((s: string) => { out.push(String(s)); return true; }) as never;
-  const code = await main(["do", "guide"]);
+  const code = await main(["do", "connection-status"]);
   process.stdout.write = orig;
   const text = out.join("");
-  check("guide exit 0", code === 0);
-  check("guide lists tools", text.includes("total_tools"), text.match(/"total_tools": (\d+)/)?.[1]);
-  check("guide has categories", text.includes("categories"));
+  check("connection-status exit 0", code === 0);
+  check("connection-status has state", text.includes("state"));
 
   // Stop the auto-spawned daemon through `admin service stop`
   const out2: string[] = [];

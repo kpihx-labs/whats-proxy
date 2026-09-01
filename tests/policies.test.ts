@@ -50,7 +50,7 @@ describe("ACTION_POLICIES", () => {
   });
 
   test("all message sends and irreversible deletes require approval", () => {
-    for (const action of ["send-text", "send-image", "send-video", "send-audio", "send-document", "delete-message", "group-leave", "media-cleanup"]) {
+    for (const action of ["send-text", "send-image", "send-video", "send-audio", "send-document", "delete-message", "group-leave", "media-download"]) {
       expect(policyFor(action, REGISTRY[action])).toBeDefined();
     }
   });

@@ -335,10 +335,6 @@ export const contactTagsSchema = z.object({
 
 export const connectionStatusSchema = z.object({});
 
-export const guideSchema = z.object({
-  category: z.string().optional(),
-});
-
 export const presenceSchema = z.object({
   type: z.string(),
   jid: z.string().optional(),
@@ -351,10 +347,8 @@ export const readMessagesSchema = z.object({
 });
 
 export const mediaDownloadSchema = z.object({
-  message_id: z.string(),
+  message_ids: z.union([z.string(), z.array(z.string())]),
 });
-
-export const mediaCleanupSchema = z.object({});
 
 export const mediaUploadSchema = z.object({
   jid: z.string(),
@@ -501,11 +495,9 @@ export const SCHEMAS: Record<string, z.ZodObject<Record<string, z.ZodTypeAny>>> 
   "contact-tags": contactTagsSchema,
   // Utils
   "connection-status": connectionStatusSchema,
-  "guide": guideSchema,
   "presence": presenceSchema,
   "read-messages": readMessagesSchema,
   "media-download": mediaDownloadSchema,
-  "media-cleanup": mediaCleanupSchema,
   // Stories
   "story-list": storyListSchema,
   "story-download": storyDownloadSchema,
