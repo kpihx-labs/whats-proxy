@@ -95,12 +95,11 @@ function writeAndDisplay(
 
   if (outputFile) {
     writeJson(outputFile, result);
-    logger.info(`Written to: ${outputFile}`);
+    process.stdout.write(`Saved to: ${outputFile}\n`);
   } else {
     logger.info(`Autosave: ${autosavePath}`);
+    output_result(result, fmt);
   }
-
-  output_result(result, fmt);
 }
 
 // ── Account resolution ──────────────────────────────────────────────────────

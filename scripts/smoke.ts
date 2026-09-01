@@ -245,7 +245,7 @@ console.log("\n[9] CLI edge paths");
     check("-o file written", existsSync(outFile));
     const fileResult = JSON.parse((await import("node:fs")).readFileSync(outFile, "utf-8"));
     check("-o file has envelope", fileResult?.meta?.status === "ok");
-    check("-o stdout still JSON", (() => { try { JSON.parse(text); return true; } catch { return false; } })());
+    check("-o stdout has 'Saved to:'", text.includes("Saved to:"));
   }
 
   // 9e. argument parsing errors: -o and -f without a value → exit 2, clear stderr
