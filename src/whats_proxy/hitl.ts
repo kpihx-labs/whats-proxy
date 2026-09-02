@@ -60,6 +60,7 @@ function renderTemplate(
   payload: Record<string, unknown>,
   referencedMsg?: Record<string, unknown> | null,
   resolvedNames?: Record<string, string>,
+  accountPhone?: string,
 ): string {
   // Add referenced message data if available
   let refMsgDisplay = "";
@@ -87,6 +88,7 @@ function renderTemplate(
   html = html.replace(/\{\{REQUEST_ID\}\}/g, requestId);
   html = html.replace(/\{\{REFERENCED_MSG\}\}/g, refMsgDisplay);
   html = html.replace(/\{\{RESOLVED_NAMES\}\}/g, JSON.stringify(resolvedNames || {}));
+  html = html.replace(/\{\{ACCOUNT_PHONE\}\}/g, accountPhone || "unknown");
   return html;
 }
 
@@ -97,6 +99,7 @@ interface InFlightRequest {
   payload: Record<string, unknown>;
   resolve: (response: HITLResponse) => void;
   store?: any;
+  accountPhone?: string;
 }
 
 const activeRequests = new Map<string, InFlightRequest>();
@@ -220,7 +223,7 @@ function handleGet(request: IncomingMessage, response: ServerResponse): void {
       }
     }
 
-    const html = renderTemplate(templatePath, requestId, req.action, req.payload, referencedMsg, resolvedNames);
+    const html = renderTemplate(templatePath, requestId, req.action, req.payload, referencedMsg, resolvedNames, req.accountPhone);
     response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     response.end(html);
     return;
@@ -334,7 +337,7 @@ async function handlePost(request: IncomingMessage, response: ServerResponse): P
 export function requestApproval(
   action: string,
   payload: Record<string, unknown>,
-  opts?: { reviewMode?: string; store?: any },
+  opts?: { reviewMode?: string; store?: any; accountPhone?: string },
 ): Promise<HITLResponse> {
   const requestId = randomUUID();
 
@@ -355,7 +358,7 @@ export function requestApproval(
     });
 
     // Track this request
-    activeRequests.set(requestId, { action, payload, resolve, store: opts?.store });
+    activeRequests.set(requestId, { action, payload, resolve, store: opts?.store, accountPhone: opts?.accountPhone });
 
     // Timeout → fail-closed
     const timeout = setTimeout(() => {
@@ -376,6 +379,7 @@ export function requestApproval(
 
       process.stderr.write(
         `\n🚀 [HITL] ACTION REVIEW REQUIRED\n` +
+        `📱 Account: ${opts?.accountPhone || "unknown"}\n` +
         `🔗 ${url}\n` +
         `📝 Action: ${action}\n` +
         `If the browser doesn't open, connect from a machine with a GUI:\n` +

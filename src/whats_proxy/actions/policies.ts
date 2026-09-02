@@ -225,7 +225,8 @@ export function protectAction(definition: ActionDef, policy: ActionPolicy | unde
       let approvedArgs = args;
       if (needsApproval) {
         const isMessageAction = ["send-text", "send-image", "send-video", "send-audio", "send-document", "send-sticker", "send-location", "send-contact", "send-poll", "send-reaction", "edit-message", "forward-message", "send-batch"].includes(definition.meta.action);
-        const review = await requestApproval(definition.meta.action, args, { reviewMode: isMessageAction ? "message" : "default", store: context.store });
+        const accountPhone = String(context.sock?.user?.id?.split(":")[0] || "unknown");
+        const review = await requestApproval(definition.meta.action, args, { reviewMode: isMessageAction ? "message" : "default", store: context.store, accountPhone });
         if (review.status !== "approved" || !review.payload) {
           return { meta: { status: "rejected", comment: review.comment, edited: false }, data: null };
         }
