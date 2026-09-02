@@ -115,10 +115,10 @@ Examples:
     meta: {
       action: "media-download",
       category: "utilities",
-        description: "Download media (image, video, audio, document, sticker) from one or more messages. Default destination: ~/Downloads/Whats-Proxy/tel/<active-account-phone>/.",
+        description: "Download media (image, video, audio, document, sticker) from one or more messages. Default destination: ~/Downloads/Whats-Proxy/<active-account-phone>/.",
         arguments: [
           { name: "message_ids", description: "Message ID or array of message IDs containing media.", required: true },
-          { name: "output_dir", description: "Destination directory. Default: ~/Downloads/Whats-Proxy/tel/<active-account-phone>/.", required: false },
+          { name: "output_dir", description: "Destination directory. Default: ~/Downloads/Whats-Proxy/<active-account-phone>/.", required: false },
         ],
       example: { message_ids: ["ABC123"] },
       returns: "{ results }",
@@ -131,7 +131,7 @@ Examples:
       if (ids.length === 0) return errResult("'message_ids' must be a non-empty string or array.");
 
       const accountPhone = sock.user?.id?.split(":")[0]?.replace(/\D/g, "") || "unknown";
-      const requestedDir = output_dir ? String(output_dir) : join(homedir(), "Downloads", "Whats-Proxy", "tel", accountPhone);
+      const requestedDir = output_dir ? String(output_dir) : join(homedir(), "Downloads", "Whats-Proxy", accountPhone);
       const downloadsDir = requestedDir === "~"
         ? homedir()
         : requestedDir.startsWith("~/")
@@ -219,11 +219,11 @@ Examples:
       return okResult({ output_dir: downloadsDir, results });
     },
     schema: mediaDownloadSchema,
-    docstring: `Download media (image, video, audio, document, sticker) from one or more messages. By default, files are saved to ~/Downloads/Whats-Proxy/tel/<active-account-phone>/.
+    docstring: `Download media (image, video, audio, document, sticker) from one or more messages. By default, files are saved to ~/Downloads/Whats-Proxy/<active-account-phone>/.
 
 Parameters:
     - message_ids (required): Message ID (string) or array of message IDs.
-    - output_dir (optional): Destination directory. Accepts absolute paths and ~/ paths. Default: ~/Downloads/Whats-Proxy/tel/<active-account-phone>/.
+    - output_dir (optional): Destination directory. Accepts absolute paths and ~/ paths. Default: ~/Downloads/Whats-Proxy/<active-account-phone>/.
 
 Examples:
     - Download one image:
@@ -232,6 +232,6 @@ Examples:
         \`whats-proxy do media-download '{"message_ids":"IMG001","output_dir":"~/Pictures/WhatsApp"}'\`
     - Download multiple:
         \`whats-proxy do media-download '{"message_ids":["IMG001","DOC001","VID001"]}'\`
-    → {"output_dir":"/home/user/Downloads/Whats-Proxy/tel/33612345678","results":[{"message_id":"IMG001","media_type":"image","saved_to":"/home/user/Downloads/Whats-Proxy/tel/33612345678/IMG001.jpg",...},...]}`,
+    → {"output_dir":"/home/user/Downloads/Whats-Proxy/33612345678","results":[{"message_id":"IMG001","media_type":"image","saved_to":"/home/user/Downloads/Whats-Proxy/33612345678/IMG001.jpg",...},...]}`,
   },
 ] satisfies ActionDef[];

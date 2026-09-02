@@ -121,7 +121,7 @@ selected messages read; it does not enable receipt observation for another accou
 
 ## Media download destination
 
-`media-download` saves files by default under `$HOME/Downloads/Whats-Proxy/tel/<active-account-phone>/`, keeping
+`media-download` saves files by default under `$HOME/Downloads/Whats-Proxy/<active-account-phone>/`, keeping
 each account's received media separate. Pass `output_dir` to use another directory; absolute paths
 and `~/` paths are supported.
 

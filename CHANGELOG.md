@@ -2,10 +2,10 @@
 
 ## Unreleased
 
-## 0.7.1 — 2026-09-03
+## 0.7.2 — 2026-09-03
 
 - **Media download path relocated:** default save directory changed from
-  `$HOME/Downloads/<active-account-phone>/` to `$HOME/Downloads/Whats-Proxy/tel/<active-account-phone>/`
+  `$HOME/Downloads/<active-account-phone>/` to `$HOME/Downloads/Whats-Proxy/<active-account-phone>/`
   for better organization under a dedicated app namespace.
 
 ## 0.7.0 — 2026-09-02

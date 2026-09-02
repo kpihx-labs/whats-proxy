@@ -1,6 +1,6 @@
 {
   "name": "whats-proxy",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Non-MCP WhatsApp CLI proxy — Bun toolchain, Node.js/Baileys runtime, and tick-proxy safety standard.",
   "type": "module",
   "bin": {

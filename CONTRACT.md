@@ -239,7 +239,7 @@ domain FIRST.** All `whats-mcp` `verb_noun` names are flipped.
 |--------|-------------|:----:|:----:|-------|
 | `connection-status` | `connection_status` | Daemon | ❌ | Baileys connection state + latency |
 | `read-messages` | `read_messages` | WS | ⚠️ | **conditional** approval; explicitly marks selected messages read, without enabling remote receipt visibility |
-| `media-download` | `download_media` | WS | ❌ | bulk download; default `~/Downloads/Whats-Proxy/tel/<active-account-phone>/`, optional `output_dir` |
+| `media-download` | `download_media` | WS | ❌ | bulk download; default `~/Downloads/Whats-Proxy/<active-account-phone>/`, optional `output_dir` |
 | `presence` | `set_presence` | WS | ⚠️ | **conditional** approval; typing/recording/broadcast |
 
 ### Action count
