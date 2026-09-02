@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Media download path relocated:** default save directory changed from
+  `$HOME/Downloads/<active-account-phone>/` to `$HOME/Downloads/Whats-Proxy/tel/<active-account-phone>/`
+  for better organization under a dedicated app namespace.
+
 ## 0.7.0 — 2026-09-02
 
 - **Raw Baileys + Store API:** `do raw` now has exactly two always-HITL atomic protocols:
