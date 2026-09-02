@@ -4,6 +4,8 @@
 
 - [ ] Run `whats-proxy admin setup` and the live-account smoke only when an operator is present to
   approve the physical WhatsApp pairing flow. This is intentionally excluded from automated checks.
+- [ ] Live validation of `community-link` and `community-leave` (not tested yet as of 2026-09-02).
+- [ ] Update `k-whats` skill to reflect 68-action catalog and new actions (raw, media-upload, etc.).
 
 ## Done
 
@@ -18,3 +20,7 @@
   review, preflight, validation, and table branches where applicable (2026-08-12).
 - [x] Removed `config.json` and state-directory file logging: `.env` is the one optional override
   surface; stderr is the sole diagnostics transport (2026-08-12).
+- [x] Raw Baileys + Store API escape hatch (`do raw`) with atomic protocols (2026-09-02).
+- [x] Secure pairing lifecycle (0700 auth dirs, --start-service) (2026-09-02).
+- [x] Community create + join live-tested successfully (2026-09-02).
+- [x] Documentation audit — all counts fixed to 68 (2026-09-02).

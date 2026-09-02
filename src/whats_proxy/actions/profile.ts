@@ -169,7 +169,7 @@ Examples:
         "Get or update WhatsApp privacy settings. Use action='get' to retrieve current settings. Use action='set' with a setting name and value to update.",
       arguments: [
         { name: "action", description: "'get' to retrieve all privacy settings, 'set' to update one.", required: true },
-        { name: "setting", description: "Privacy setting: last_seen | online | profile_picture | about | read_receipts | groups_add | default_disappearing.", required: false },
+        { name: "setting", description: "Privacy setting: last_seen | online | profile_picture | about | read_receipts (all exposes one-to-one read receipts; none hides them) | groups_add | default_disappearing.", required: false },
         { name: "value", description: "New value: all | contacts | contact_blacklist | none | match_last_seen.", required: false },
       ],
       example: { action: "get" },
@@ -212,9 +212,11 @@ Examples:
     schema: profilePrivacySchema,
     docstring: `Get or update WhatsApp privacy settings.
 
+read_receipts controls one-to-one read receipt visibility: all sends and receives them; none hides them. Group chat receipts are not controlled by this setting.
+
 Parameters:
     - action (required): 'get' to retrieve all privacy settings, 'set' to update one.
-    - setting (optional, set only): last_seen | online | profile_picture | about | read_receipts | groups_add | default_disappearing.
+    - setting (optional, set only): last_seen | online | profile_picture | about | read_receipts (all exposes one-to-one read receipts; none hides them) | groups_add | default_disappearing.
     - value (optional, set only): all | contacts | contact_blacklist | none | match_last_seen.
 
 Examples:

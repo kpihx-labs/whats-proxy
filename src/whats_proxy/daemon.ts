@@ -20,6 +20,7 @@ import {
   DisconnectReason,
   Browsers,
   ALL_WA_PATCH_NAMES,
+  proto,
   type WASocket,
 } from "@whiskeysockets/baileys";
 import pino from "pino";
@@ -66,6 +67,37 @@ export function getConnectionInfo(): ConnectionInfo {
     store_stats: store?.stats() || null,
     reconnect_attempts: reconnectAttempts,
   };
+}
+
+type ReceiptStore = Pick<Store, "addReceipt">;
+
+/** Persist direct-chat delivery/read states emitted through Baileys messages.update. */
+export function persistDirectMessageStatuses(
+  updates: Array<{ key?: { id?: string | null; remoteJid?: string | null; fromMe?: boolean | null }; update?: { status?: number | null; messageTimestamp?: unknown } }>,
+  receiptStore: ReceiptStore,
+) {
+  for (const { key, update } of updates) {
+    const messageId = key?.id;
+    const chatJid = key?.remoteJid;
+    if (!messageId || !chatJid || !key?.fromMe || chatJid.endsWith("@g.us") || chatJid === "status@broadcast") continue;
+
+    const receiptType = update?.status === proto.WebMessageInfo.Status.PLAYED
+      ? "played"
+      : update?.status === proto.WebMessageInfo.Status.READ
+        ? "read"
+        : update?.status === proto.WebMessageInfo.Status.DELIVERY_ACK
+          ? "delivered"
+          : null;
+    if (!receiptType) continue;
+
+    receiptStore.addReceipt(
+      messageId,
+      chatJid,
+      chatJid,
+      receiptType,
+      Number(update?.messageTimestamp) || Date.now(),
+    );
+  }
 }
 
 /** Build the runtime context handed to action handlers. */
@@ -247,6 +279,11 @@ async function createSocket(authPath: string, cfg: AppConfig) {
           // Non-critical: receipt storage failure should not crash daemon
         }
       }
+    });
+
+    // Baileys emits direct-chat delivery/read status through messages.update.
+    sock.ev.on("messages.update", (updates) => {
+      if (store) persistDirectMessageStatuses(updates, store);
     });
   } finally {
     reconnecting = false;

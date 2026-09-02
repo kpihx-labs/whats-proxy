@@ -80,8 +80,21 @@ export async function serviceStop(opts: ServiceStopOptions): Promise<Output> {
     }
   }
 
-  // Verify it's actually stopped
+  // systemd may be inactive while an auto-spawned daemon still owns the
+  // account socket. Always request that socket owner to stop as well.
   await new Promise((r) => setTimeout(r, 300));
+  if (await pingDaemon(paths)) {
+    try {
+      await rpcCall(paths.sockFile, "shutdown", {}, 5_000);
+      stoppedVia = stoppedVia === "systemctl" ? "systemctl+rpc" : "rpc";
+      await new Promise((r) => setTimeout(r, 300));
+    } catch {
+      return errResult(`Failed to stop active daemon for ${phone} through its RPC socket.`, {
+        phone,
+        service,
+      });
+    }
+  }
   const stillRunning = await pingDaemon(paths);
 
   return okResult({

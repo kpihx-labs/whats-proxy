@@ -1,6 +1,6 @@
 # whats-proxy
 
-Non-MCP CLI proxy for WhatsApp — the full `whats-mcp` tool catalog (67 actions) exposed as a flat JSON-RPC CLI with a local background daemon. Its sole proxy-standard reference is the sibling [`tick_proxy`](../tick_proxy/); Bun + Baileys are retained only for WhatsApp's persistent local Store.
+Non-MCP CLI proxy for WhatsApp — the full `whats-mcp` tool catalog plus an unrestricted raw Baileys escape hatch (68 actions) exposed as a flat JSON-RPC CLI with a local background daemon. Its sole proxy-standard reference is the sibling [`tick_proxy`](../tick_proxy/); Bun + Baileys are retained only for WhatsApp's persistent local Store.
 
 Built with **Bun** + **Baileys** (`@whiskeysockets/baileys`): `meta`+`data` envelope, `do`/`admin` namespaces, `--format json|table`, `--output-file`, autosave, declarative mandatory HITL, destructive preflight identity locks, and local read-back proofs. Bun owns package/test operations; the installed TypeScript CLI is launched through Node.js + bundled `tsx` because Baileys needs Node-compatible WebSocket upgrade events.
 
@@ -85,27 +85,63 @@ whats-proxy (CLI, Bun)                daemon (detached background process)
 - **Dispatch**: action handlers receive `{ args, store, config, sock, registry }` and return the full envelope.
 - **Isolation for tests**: `WHATS_PROXY_STATE_DIR` / `WHATS_PROXY_CONFIG_DIR` point the whole stack at a temp dir.
 
-## Actions (69)
+## Actions (68)
 
-| Category | Actions |
-|---|---|
-| messaging (13) | send-text, send-media, send-document, send-image, send-video, send-audio, send-sticker, send-buttons, send-location, send-contact, send-link-preview, send-reaction, forward-message |
-| chats (5) | chat-list, chat-history, chat-info, mark-read, archive-chat |
-| contacts (6) | contact-list, contact-info, contact-by-phone, block-list, block-contact, unblock-contact |
-| groups (10) | group-list, group-info, group-create, group-add-participants, group-remove-participants, group-promote, group-demote, group-update, group-leave, group-invite-code |
-| labels (3) | label-list, label-create, label-associate |
-| profile (4) | profile-info, profile-update, profile-picture, profile-link-preview |
-| overview (2) | whatsup, find-messages |
-| tags (1) | contact-tag-list |
-| utils (4) | connection-status, presence, read-messages, media-download |
-| communities (13) | community-list, community-info, community-groups, community-pending, community-create ⚠️, community-leave ⚠️, community-subject, community-description, community-participants, community-link ⚠️, community-unlink, community-invite, community-join ⚠️ |
+| Category | Count | Actions |
+|---|---:|---|
+| Messaging | 15 | send-text, send-image, send-video, send-audio, send-document, send-sticker, send-location, send-contact, send-reaction, send-poll, edit-message, delete-message, forward-message, send-batch, media-upload |
+| Chats | 6 | chat-list, chat-read, chat-manage, chat-star, chat-disappearing, message-status |
+| Contacts | 8 | contact-list, contact-info, contact-check, contact-block, contact-business, contact-picture, contact-presence-check, contact-tags |
+| Groups | 11 | group-list, group-info, group-create, group-subject, group-description, group-participants, group-invite, group-leave, group-settings, group-picture, group-disband |
+| Communities | 13 | community-list, community-info, community-groups, community-pending, community-create, community-leave, community-subject, community-description, community-participants, community-link, community-unlink, community-invite, community-join |
+| Stories | 3 | story-list, story-download, story-view |
+| Profile | 4 | profile-about, profile-name, profile-picture, profile-privacy |
+| Overview | 3 | whatsup, find-messages, chat-read-batch |
+| Utilities | 4 | connection-status, read-messages, media-download, presence |
+| Raw API | 1 | raw |
+| **TOTAL** | **68** | |
 
-Run `whats-proxy do --help` for the live catalog; `whats-proxy do <action> -h` for per-action help. Every one of the 67 `do` pages renders at least three concrete executable forms from its action-owned payload: inline JSON, a payload file, and captured JSON output. Actions with required fields, local HITL, destructive preflight, or zero-argument table display show their additional branch explicitly. `WaClient.raw()` remains an internal lifecycle API rather than a public `do` escape hatch, so it cannot bypass validation or safety policies.
+Run `whats-proxy do --help` for the live catalog; `whats-proxy do <action> -h` for per-action help. Every one of the 68 `do` pages renders at least three concrete executable forms from its action-owned payload: inline JSON, a payload file, and captured JSON output. Actions with required fields, local HITL, destructive preflight, or zero-argument table display show their additional branch explicitly. `WaClient.raw()` remains an internal lifecycle API rather than a public `do` escape hatch, so it cannot bypass validation or safety policies.
 
 The complex families also own distinct semantic scenarios: direct/group/reply text; local/remote/reply
 media; broadcast recipient mixes and delays; group participant roles and invite lifecycle. `make check`
 validates the universal three-example contract and these distinct
 complex branches entirely offline. Pairing and a real WhatsApp account are intentionally excluded.
+
+## Receipt visibility
+
+`chat-read` exposes `delivered_to` and `read_by` for outgoing messages, while `message-status`
+exposes persisted delivery/read receipts and `read_count`. In one-to-one chats, a read state is
+available only when the recipient has WhatsApp **Read receipts** enabled (`profile-privacy`:
+`read_receipts=all`). With `read_receipts=none`, WhatsApp does not send or reveal one-to-one read
+receipts. Group read receipts are not controlled by this setting. `read-messages` explicitly marks
+selected messages read; it does not enable receipt observation for another account.
+
+## Media download destination
+
+`media-download` saves files by default under `$HOME/Downloads/<active-account-phone>/`, keeping
+each account's received media separate. Pass `output_dir` to use another directory; absolute paths
+and `~/` paths are supported.
+
+## Pairing lifecycle
+
+`admin auth login` stores credentials in a private per-account state directory (`0700`) and exits
+after pairing. Add `--start-service` to immediately enable and start that account's persistent
+daemon; without it, the first `do` command can still auto-spawn a daemon on demand.
+
+## Raw Baileys + Store API
+
+`do raw` is an always-HITL atomic gateway with exactly two protocols: `baileys` and `store`.
+`baileys/socket` invokes any callable live `WASocket` method, including `query`; `baileys/module`
+invokes any callable Baileys export. `store/method` invokes any Store method; `store/sql` executes
+one arbitrary SQLite statement. There is no `do`, filesystem, runtime, or flow protocol: agents
+compose unlimited successive raw calls and use their normal shell for files and result transformation.
+Use `{"$base64":"..."}` for binary inputs; binary or stream results are returned as base64.
+
+```bash
+whats-proxy do raw '{"protocol":"baileys","target":"socket","method":"sendMessage","args":["33612345678@s.whatsapp.net",{"text":"Raw API call"}]}'
+whats-proxy do raw '{"protocol":"store","target":"sql","sql":"SELECT id, timestamp FROM messages LIMIT ?","params":[20]}'
+```
 
 ## Development
 
@@ -131,14 +167,14 @@ src/whats_proxy/
 ├── store.ts        # in-memory WhatsApp store (chats/contacts/messages/…)
 ├── helpers.ts      # formatting, JID utils, ok/err envelope builders
 ├── config.ts       # documented defaults + one .env override surface (WHATS_PROXY_*)
-├── logger.ts       # pino to stderr + log file (stdout stays pure JSON)
+├── logger.ts       # stderr-only logger (stdout stays pure JSON)
 ├── display.ts      # print_json / print_table / output_result
 ├── doc.ts          # compact help, per-action help
 ├── version.ts      # reads version from package.json (single source)
 ├── exceptions.ts   # WhatsProxyError hierarchy
 ├── types.ts        # ActionDef, ActionContext, Output envelope
 ├── hitl.ts         # local editable review page; port 0, 600-second fail-closed timeout
-├── actions/        # 14 category modules + registry.ts + policies.ts (67 actions)
+├── actions/        # 15 category modules + registry.ts + policies.ts (68 actions)
 └── admin/          # setup (QR/pairing code) + status (independent probe)
 ```
 

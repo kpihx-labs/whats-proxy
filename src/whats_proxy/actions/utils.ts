@@ -6,7 +6,7 @@
 
 import { homedir } from "node:os";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join, extname } from "node:path";
+import { join, extname, resolve } from "node:path";
 import { downloadMediaMessage } from "@whiskeysockets/baileys";
 import type { ActionDef, ActionContext } from "./types.ts";
 import { requireApproval } from "../decorators.ts";
@@ -75,7 +75,7 @@ Examples:
     meta: {
       action: "read-messages",
       category: "utilities",
-      description: "Mark specific messages as read (send read receipts).",
+        description: "Mark specific messages as read (send a read acknowledgment). This does not enable observation of another account's direct-chat read receipts.",
       arguments: [
         { name: "jid", description: "Chat JID.", required: true },
         { name: "message_ids", description: "Array of message IDs to mark as read.", required: true },
@@ -96,7 +96,9 @@ Examples:
       return okResult({ status: "read", jid: chatJid, count: ids.length });
     }),
     schema: readMessagesSchema,
-    docstring: `Mark specific messages as read (send read receipts).
+    docstring: `Mark specific messages as read (send a read acknowledgment).
+
+This action explicitly marks the selected messages read. To observe another account's direct-chat read receipts through chat-read or message-status, that recipient must have WhatsApp read receipts enabled (profile-privacy read_receipts=all).
 
 Parameters:
     - jid (required): Chat JID.
@@ -113,21 +115,28 @@ Examples:
     meta: {
       action: "media-download",
       category: "utilities",
-      description: "Download media (image, video, audio, document, sticker) from one or more messages to ~/Downloads/.",
-      arguments: [
-        { name: "message_ids", description: "Message ID or array of message IDs containing media.", required: true },
-      ],
+        description: "Download media (image, video, audio, document, sticker) from one or more messages. Default destination: ~/Downloads/<active-account-phone>/.",
+        arguments: [
+          { name: "message_ids", description: "Message ID or array of message IDs containing media.", required: true },
+          { name: "output_dir", description: "Destination directory. Default: ~/Downloads/<active-account-phone>/.", required: false },
+        ],
       example: { message_ids: ["ABC123"] },
       returns: "{ results }",
     },
-    handler: async ({ message_ids }, { sock, store }) => {
+    handler: async ({ message_ids, output_dir }, { sock, store }) => {
       const ids = Array.isArray(message_ids)
         ? message_ids.map(String)
         : [String(message_ids)];
 
       if (ids.length === 0) return errResult("'message_ids' must be a non-empty string or array.");
 
-      const downloadsDir = join(homedir(), "Downloads");
+      const accountPhone = sock.user?.id?.split(":")[0]?.replace(/\D/g, "") || "unknown";
+      const requestedDir = output_dir ? String(output_dir) : join(homedir(), "Downloads", accountPhone);
+      const downloadsDir = requestedDir === "~"
+        ? homedir()
+        : requestedDir.startsWith("~/")
+          ? join(homedir(), requestedDir.slice(2))
+          : resolve(requestedDir);
       if (!existsSync(downloadsDir)) mkdirSync(downloadsDir, { recursive: true });
 
       const results: any[] = [];
@@ -176,12 +185,22 @@ Examples:
           continue;
         }
 
-        let fileName = mediaMsg.fileName || mediaMsg.title || `${messageId}.${mediaType}`;
+        let fileName = mediaMsg.fileName || mediaMsg.title || messageId;
         fileName = String(fileName).replace(/[^a-zA-Z0-9.\-_]/g, "_");
         let ext = extname(fileName);
         if (!ext && mediaMsg.mimetype) {
           const mimeExt = String(mediaMsg.mimetype).split("/")[1]?.split(";")[0];
           if (mimeExt) fileName += `.${mimeExt}`;
+        }
+        if (!ext && !mediaMsg.mimetype) {
+          const fallbackExtensions: Record<string, string> = {
+            image: "jpg",
+            video: "mp4",
+            audio: "ogg",
+            document: "bin",
+            sticker: "webp",
+          };
+          fileName += `.${fallbackExtensions[mediaType ?? ""] || "bin"}`;
         }
 
         const filePath = join(downloadsDir, fileName);
@@ -197,19 +216,22 @@ Examples:
         });
       }
 
-      return okResult({ results });
+      return okResult({ output_dir: downloadsDir, results });
     },
     schema: mediaDownloadSchema,
-    docstring: `Download media (image, video, audio, document, sticker) from one or more messages to ~/Downloads/.
+    docstring: `Download media (image, video, audio, document, sticker) from one or more messages. By default, files are saved to ~/Downloads/<active-account-phone>/.
 
 Parameters:
     - message_ids (required): Message ID (string) or array of message IDs.
+    - output_dir (optional): Destination directory. Accepts absolute paths and ~/ paths. Default: ~/Downloads/<active-account-phone>/.
 
 Examples:
     - Download one image:
         \`whats-proxy do media-download '{"message_ids":"IMG001"}'\`
+    - Download to a chosen directory:
+        \`whats-proxy do media-download '{"message_ids":"IMG001","output_dir":"~/Pictures/WhatsApp"}'\`
     - Download multiple:
         \`whats-proxy do media-download '{"message_ids":["IMG001","DOC001","VID001"]}'\`
-    → {"results":[{"message_id":"IMG001","media_type":"image","saved_to":"/home/kpihx/Downloads/IMG001.jpg",...},...]}`,
+    → {"output_dir":"/home/user/Downloads/33612345678","results":[{"message_id":"IMG001","media_type":"image","saved_to":"/home/user/Downloads/33612345678/IMG001.jpg",...},...]}`,
   },
 ] satisfies ActionDef[];

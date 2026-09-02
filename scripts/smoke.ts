@@ -3,7 +3,7 @@
  * whats-proxy — smoke test.
  *
  * Real end-to-end verification without touching a live WhatsApp account:
- *   1. `do --help` catalog (67 actions)
+ *   1. `do --help` catalog (68 actions)
  *   2. per-action help
  *   3. daemon spawn + ping
  *   4. RPC dispatch against a stub store (chat-list, connection-status, guide)
@@ -61,7 +61,7 @@ console.log("\n[1] catalog help");
   // only lowercase + hyphens (no spaces, no ANSI). After ANSI strip, these
   // are action names like "send-text" or "chat-read".
   const actionCount = (stripped.match(/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/gm) || []).length;
-  check(`catalog lists ~67 actions (found ${actionCount})`, actionCount >= 60, `count=${actionCount}`);
+  check(`catalog lists 68 actions (found ${actionCount})`, actionCount === 68, `count=${actionCount}`);
 }
 
 // ── 2. Per-action help ───────────────────────────────────────────────────────

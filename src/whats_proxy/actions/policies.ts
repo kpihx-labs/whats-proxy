@@ -104,6 +104,7 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   "profile-picture": { approval: (args) => String(args.action) === "edit" || String(args.action) === "remove" },
   "profile-privacy": { approval: actionIs("set") },
   "contact-tags": { approval: mutatesLocalCollection, verify: verifyContactTags },
+  raw: { approval: always },
 };
 
 // ---------------------------------------------------------------------------

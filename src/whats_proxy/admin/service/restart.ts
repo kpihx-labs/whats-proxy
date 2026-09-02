@@ -9,6 +9,8 @@
  */
 
 import { execSync } from "node:child_process";
+import { loadConfig, accountStatePaths } from "../../config.ts";
+import { pingDaemon, rpcCall } from "../../client.ts";
 import { okResult, errResult } from "../../helpers.ts";
 import type { Output } from "../../types.ts";
 
@@ -33,11 +35,32 @@ interface ServiceRestartOptions {
 export async function serviceRestart(opts: ServiceRestartOptions): Promise<Output> {
   const { phone } = opts;
   const service = `whats-proxy@${phone}.service`;
+  const paths = accountStatePaths(phone, loadConfig());
 
   try {
+    // A `do` command can own the account socket outside systemd. Stop that
+    // daemon first; otherwise systemd reports a successful restart although
+    // its replacement exits immediately because the O_EXCL lock is held.
+    if (await pingDaemon(paths)) {
+      await rpcCall(paths.sockFile, "shutdown", {}, 5_000);
+      await new Promise((r) => setTimeout(r, 300));
+      if (await pingDaemon(paths)) {
+        return errResult(`Failed to restart ${service}: the existing daemon still owns the account socket.`, {
+          phone,
+          service,
+        });
+      }
+    }
+
     execSync(`systemctl --user restart ${service}`, {
       encoding: "utf-8",
       timeout: 15_000,
+    });
+
+    await new Promise((r) => setTimeout(r, 500));
+    execSync(`systemctl --user is-active --quiet ${service}`, {
+      encoding: "utf-8",
+      timeout: 5_000,
     });
 
     return okResult({

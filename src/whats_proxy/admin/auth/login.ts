@@ -1,7 +1,7 @@
 /**
  * whats-proxy — admin auth login (Baileys pairing, multi-account).
  *
- * `whats-proxy admin auth login` — interactive QR pairing.
+ * `whats-proxy admin auth login [--start-service]` — interactive QR pairing.
  * `whats-proxy admin auth login --code --phone N` — pairing code (HITL: the code
  * is entered on the phone under Linked Devices → Link with Phone Number).
  *
@@ -24,7 +24,7 @@ import {
 } from "@whiskeysockets/baileys";
 import pino from "pino";
 import qrcode from "qrcode";
-import { mkdirSync, rmSync, existsSync, readdirSync } from "node:fs";
+import { chmodSync, mkdirSync, rmSync, existsSync, readdirSync } from "node:fs";
 import { createInterface } from "node:readline";
 
 import {
@@ -37,15 +37,23 @@ import {
 import { logger } from "../../logger.ts";
 import { okResult, errResult } from "../../helpers.ts";
 import type { Output } from "../../types.ts";
+import { serviceStart } from "../service/start.ts";
 
 interface LoginOptions {
   code?: boolean;
   phone?: string;
+  startService?: boolean;
 }
 
 /** Normalize a phone number: strip everything but digits. */
 function normalizePhone(raw: string | undefined): string {
   return String(raw || "").replace(/\D/g, "");
+}
+
+/** Create or repair an account auth directory without exposing session material. */
+function ensurePrivateAuthDirectory(path: string): void {
+  mkdirSync(path, { recursive: true, mode: 0o700 });
+  chmodSync(path, 0o700);
 }
 
 /** Prompt the user on the terminal (HITL). */
@@ -66,9 +74,10 @@ function prompt(question: string): Promise<string> {
  * in `accounts.json` and set as default if it's the first.
  *
  * Args:
- *   opts: LoginOptions — `{ code?: boolean; phone?: string }`.
+ *   opts: LoginOptions — `{ code?: boolean; phone?: string; startService?: boolean }`.
  *     - `code`: use numeric pairing code instead of QR.
  *     - `phone`: target phone number (digits only, with country code).
+ *     - `startService`: start the persistent account daemon after pairing.
  *
  * Returns:
  *   A JSON envelope with pairing status, user info, and auth directory.
@@ -76,7 +85,7 @@ function prompt(question: string): Promise<string> {
  * Examples:
  *   await authLogin({})
  *   // => { meta: { status: "ok", ... }, data: { status: "paired", auth_directory: ".../1234567890/state/" } }
- *   await authLogin({ code: true, phone: "33612345678" })
+ *   await authLogin({ code: true, phone: "33612345678", startService: true })
  *   // => { meta: { status: "ok", ... }, data: { status: "paired", phone: "33612345678", pairing_code: "12345678" } }
  */
 /** Backward-compatible alias for CLI re-export. */
@@ -99,9 +108,9 @@ export async function authLogin(opts: LoginOptions): Promise<Output> {
   }
 
   // Ensure per-account directories exist.
-  const paths = phone ? accountStatePaths(phone, cfg) : null;
-  if (paths) {
-    mkdirSync(paths.auth, { recursive: true });
+    const paths = phone ? accountStatePaths(phone, cfg) : null;
+    if (paths) {
+      ensurePrivateAuthDirectory(paths.auth);
   }
 
   try {
@@ -112,7 +121,7 @@ export async function authLogin(opts: LoginOptions): Promise<Output> {
     // For QR pairing (no phone yet), we need a temporary auth dir.
     // The phone is discovered after successful pairing via creds.json.
     const authDir = paths?.auth || `/tmp/whats-proxy-temp-auth-${Date.now()}`;
-    mkdirSync(authDir, { recursive: true });
+    ensurePrivateAuthDirectory(authDir);
 
     // Fresh pairing: wipe stale creds that may conflict with the current
     // Baileys version (rc.9 → rc.14 migration causes 428 if old creds are
@@ -121,7 +130,7 @@ export async function authLogin(opts: LoginOptions): Promise<Output> {
     if (authFiles.length > 0) {
       logger.info(`Wiping ${authFiles.length} stale auth file(s) for fresh pairing.`);
       rmSync(authDir, { recursive: true, force: true });
-      mkdirSync(authDir, { recursive: true });
+        ensurePrivateAuthDirectory(authDir);
     }
 
     let codeRequested = false;
@@ -216,7 +225,7 @@ export async function authLogin(opts: LoginOptions): Promise<Output> {
             // proper per-account location.
             const targetPaths = accountStatePaths(discoveredPhone, cfg);
             if (authDir !== targetPaths.auth) {
-              mkdirSync(targetPaths.auth, { recursive: true });
+              ensurePrivateAuthDirectory(targetPaths.auth);
               // Copy auth files to the target dir (move not possible during active socket).
               const { copyFileSync, readdirSync: rd } = await import("node:fs");
               for (const f of rd(authDir)) {
@@ -231,8 +240,11 @@ export async function authLogin(opts: LoginOptions): Promise<Output> {
             }
 
             // Give creds a moment to flush to disk, then wrap up.
-            setTimeout(() => {
+            setTimeout(async () => {
               sock.end(undefined);
+              const serviceResult = opts.startService
+                ? await serviceStart({ phone: discoveredPhone })
+                : null;
               finish(
                 okResult({
                   status: "paired",
@@ -242,6 +254,8 @@ export async function authLogin(opts: LoginOptions): Promise<Output> {
                     ? { id: user.id, name: user.name || user.verifiedName, phone: user.id?.split(":")[0] }
                     : null,
                   auth_directory: targetPaths.auth,
+                  service_started: serviceResult?.meta.status === "ok",
+                  service_start_error: serviceResult?.meta.status === "error" ? serviceResult.meta.comment : null,
                 }),
               );
             }, 2000);

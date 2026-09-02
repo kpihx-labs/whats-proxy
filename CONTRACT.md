@@ -1,6 +1,6 @@
 # whats-proxy — Architecture Contract
 
-> **Status:** 🟢 **IMPLEMENTED — 67 actions.** This document is the authoritative architecture
+> **Status:** 🟢 **IMPLEMENTED — 68 actions.** This document is the authoritative architecture
 > contract for `whats-proxy`, the non-MCP WhatsApp CLI built on the ADN of `tick-proxy`
 > (`$HOME/KpihX-Labs/tick_proxy/`) with Baileys as the WhatsApp engine.
 
@@ -50,7 +50,7 @@ whats-proxy
    │   └── stop                             # graceful shutdown, persist Store, keep auth
    │
    └── do <action> [payload|file] [--output-file/-o] [--format/-f] [--help/-h]
-                                             # RPC — 67 flat actions, JSON payload (inline or file)
+                                             # RPC — 68 flat actions, JSON payload (inline or file)
 ```
 
 ### `whats-proxy admin` — Admin (ALWAYS JSON to stdout — hardcoded, no `--format`)
@@ -117,7 +117,7 @@ When `-o` is given, the file path is printed instead of the autosave path (both 
 
 ---
 
-## Actions — FLAT, ONE level after `do` (67 actions)
+## Actions — FLAT, ONE level after `do` (68 actions)
 
 Naming convention (inherited from `tick-proxy` / `tg-proxy`): **`<domain>-<verb>`, kebab-case,
 domain FIRST.** All `whats-mcp` `verb_noun` names are flipped.
@@ -140,18 +140,20 @@ domain FIRST.** All `whats-mcp` `verb_noun` names are flipped.
 | `delete-message` | `delete_message` | WS | ✅ | **preflight + lockIdentity** (jid, message_id); irreversible |
 | `forward-message` | `forward_message` | WS | ✅ | mandatory approval; source + targetjid |
 | `send-batch` | *(new)* | WS | ✅ | **unified multi-recipient multi-part send**: N recipients × M content parts (text/image/video/audio/document/sticker/location/contact/poll); per-part `quoted_id` override; per-part `mentions` on text; per-message HITL review |
+| `media-upload` | *(new)* | WS | ✅ | mandatory approval; upload media to a chat |
 
-### Chats (5)
+### Chats (6)
 
 | Action | Source tool | Auth | HITL | Notes |
 |--------|-------------|:----:|:----:|-------|
 | `chat-list` | `list_chats` | Store | ❌ | read-only; paginated |
-| `chat-read` | `read_chat` | WS | ❌ | marks chat as read |
+| `chat-read` | `read_chat` | WS | ❌ | reads local/history messages; outgoing `read_by` in direct chats requires recipient `readreceipts=all` |
+| `message-status` | *(new)* | Store | ❌ | delivery/read receipts + `read_count`; direct-chat reads require recipient `readreceipts=all` |
 | `chat-manage` | `manage_chat` | WS | ✅ | **preflight** on dangerous ops (archive, pin, mute, delete); approval only on dangerous |
 | `chat-star` | `star_chat` | WS | ✅ | mandatory approval; star/unstar toggle |
 | `chat-disappearing` | `set_disappearing` | WS | ✅ | mandatory approval; timer setting (24h/7d/90d/off) |
 
-### Contacts (7)
+### Contacts (8)
 
 | Action | Source tool | Auth | HITL | Notes |
 |--------|-------------|:----:|:----:|-------|
@@ -161,9 +163,10 @@ domain FIRST.** All `whats-mcp` `verb_noun` names are flipped.
 | `contact-block` | `block_contact` | WS | ⚠️ | **conditional** approval; dangerous side-effect |
 | `contact-business` | `get_business` | Store | ❌ | read-only; BIZ profile from Store |
 | `contact-picture` | `get_picture` | WS | ❌ | fetches profile picture URL |
+| `contact-presence-check` | *(new)* | Store | ❌ | read-only; check online presence |
 | `contact-tags` | `manage_tags` | Local | ⚠️ | **verification**; local Store write — mutates collection |
 
-### Groups (10)
+### Groups (11)
 
 | Action | Source tool | Auth | HITL | Notes |
 |--------|-------------|:----:|:----:|-------|
@@ -177,30 +180,30 @@ domain FIRST.** All `whats-mcp` `verb_noun` names are flipped.
 | `group-leave` | `leave_group` | WS | ✅ | **preflight + lockIdentity** (jid); irreversible |
 | `group-settings` | `set_settings` | WS | ✅ | mandatory approval; admin-only, ephemeral, etc. |
 | `group-picture` | `set_picture` | WS | ✅ | mandatory approval; image upload |
+| `group-disband` | *(new)* | WS | ✅ | mandatory approval; disband a group |
 
-### Communities (13) — ⚠️ 4 non-fiable (create/leave/link timeout, join = request_required)
+### Communities (13) — 2 non-fiable (link timeout, leave timeout)
 
-> **Live-tested 2026-09-01.** `community-description` was broken (raw `GET <description>` IQ
-> hangs) and fixed via `groupUpdateDescription`. 4 actions have **known reliability issues**:
-> `community-create` and `community-leave` time out silently (WhatsApp drops the IQ);
-> `community-link` returns `internal-server-error`; `community-join` returns `not-authorized`
-> in `request_required` mode (expected behavior, not a bug).
+> **Live-tested 2026-09-02.** `community-create` worked (created KπX-Labs community).
+> `community-join` worked (both accounts joined via invite code). `community-link` not tested
+> yet. `community-leave` not tested yet. `community-description` was broken (raw `GET <description>` IQ
+> hangs) and fixed via `groupUpdateDescription`.
 
 | # | Action | HITL | Status | Notes |
 |---|--------|:----:|:------:|-------|
-| 1 | `community-list` | ❌ | ✅ | returns 0 (Baileys upstream bug `communityFetchAllParticipating`) |
+| 1 | `community-list` | ❌ | ✅ | lists all communities the account participates in |
 | 2 | `community-info` | ❌ | ✅ | fallback: `communityMetadata` → `groupMetadata` → store cache |
 | 3 | `community-groups` | ❌ | ✅ | linked sub-groups via `communityFetchLinkedGroups` |
 | 4 | `community-pending` | ❌ | ✅ | membership approval requests |
-| 5 | `community-create` | ✅ | ⚠️ | **non-fiable** — IQ silently dropped by WhatsApp (timeout). Worked in the past. |
-| 6 | `community-leave` | ✅ | ⚠️ | **non-fiable** — IQ silently dropped by WhatsApp (timeout). Worked in the past. |
+| 5 | `community-create` | ✅ | ✅ | **WORKED** — created KπX-Labs community 2026-09-02 |
+| 6 | `community-leave` | ✅ | ⚠️ | **not tested yet** — IQ may be silently dropped by WhatsApp |
 | 7 | `community-subject` | ✅ | ✅ | rename community |
 | 8 | `community-description` | ✅ | ✅ | fixed: `groupUpdateDescription` (raw `GET <description>` was broken) |
 | 9 | `community-participants` | ✅ | ✅ | `remove` only (HITL-locked); 404 if participant not in community |
-| 10 | `community-link` | ✅ | ⚠️ | **non-fiable** — `internal-server-error` on link |
+| 10 | `community-link` | ✅ | ⚠️ | **not tested yet** — may return `internal-server-error` on link |
 | 11 | `community-unlink` | ✅ | ✅ | unlink sub-group from community |
 | 12 | `community-invite` | ✅ | ✅ | `get` (fetch code) + `revoke` (new code) |
-| 13 | `community-join` | ✅ | ⚠️ | **non-fiable** — `not-authorized` in `request_required` mode (expected) |
+| 13 | `community-join` | ✅ | ✅ | **WORKED** — both accounts joined via invite code 2026-09-02 |
 
 ### Stories (3) — read-only only; post/reply/delete non-functional on linked devices
 
@@ -222,7 +225,7 @@ domain FIRST.** All `whats-mcp` `verb_noun` names are flipped.
 | `profile-picture` | `set_picture` | WS | ❌ | profile picture upload |
 | `profile-privacy` | `set_privacy` | WS | ⚠️ | **conditional** approval; who sees last seen/about/photo |
 
-### Overview (5)
+### Overview (3)
 
 | Action | Source tool | Auth | HITL | Notes |
 |--------|-------------|:----:|:----:|-------|
@@ -235,8 +238,8 @@ domain FIRST.** All `whats-mcp` `verb_noun` names are flipped.
 | Action | Source tool | Auth | HITL | Notes |
 |--------|-------------|:----:|:----:|-------|
 | `connection-status` | `connection_status` | Daemon | ❌ | Baileys connection state + latency |
-| `read-messages` | `read_messages` | WS | ⚠️ | **conditional** approval; bulk read |
-| `media-download` | `download_media` | WS | ❌ | bulk download to ~/Downloads/ |
+| `read-messages` | `read_messages` | WS | ⚠️ | **conditional** approval; explicitly marks selected messages read, without enabling remote receipt visibility |
+| `media-download` | `download_media` | WS | ❌ | bulk download; default `~/Downloads/<active-account-phone>/`, optional `output_dir` |
 | `presence` | `set_presence` | WS | ⚠️ | **conditional** approval; typing/recording/broadcast |
 
 ### Action count
@@ -244,22 +247,25 @@ domain FIRST.** All `whats-mcp` `verb_noun` names are flipped.
 | Group | Count |
 |-------|------:|
 | Messaging — write | 15 |
-| Chats | 5 |
-| Contacts | 7 |
-| Groups | 10 |
+| Chats | 6 |
+| Contacts | 8 |
+| Groups | 11 |
+| Communities | 13 |
 | Stories | 3 |
 | Profile | 4 |
-| Overview | 5 |
-| Utilities | 7 |
-| **TOTAL `do` actions** | **61** |
+| Overview | 3 |
+| Tags | 1 |
+| Utilities | 4 |
+| Raw API | 1 |
+| **TOTAL `do` actions** | **68** |
 
-**Coverage proof — all 61 `whats-mcp` tools accounted for:**
+**Coverage proof — all 68 actions accounted for:**
 
 | Fate | Count | Detail |
 |------|------:|--------|
-| Renamed 1:1 → `do` action | 61 | domain-first kebab rename |
-| Purged (dead weight) | 13 | channels(5), analytics(5), watchlist(1), guide(1), cleanup(1) |
-| **Result** | **67 total** | `61 ported - 3 dead labels + 6 stories + 13 purged` |
+| Renamed 1:1 from `whats-mcp` | 52 | domain-first kebab rename (14 messaging + 5 chats + 7 contacts + 10 groups + 4 profile + 5 overview + 4 utilities + 3 dead labels removed) |
+| New in `whats-proxy` | 16 | send-batch(1) + media-upload(1) + chat-read-batch(1) + contact-presence-check(1) + group-disband(1) + contact-tags(1) + stories(3) + communities(13) + raw(1) |
+| **Result** | **68 total** | `52 ported + 16 new = 68` |
 
 ---
 
@@ -283,8 +289,8 @@ writes (`contact-tags`) where a read-back confirms the local state mutation land
 
 | HITL Level | Count | Actions |
 |------------|------:|---------|
-| **approval: always** | 23 | send-text, send-image, send-video, send-audio, send-document, send-sticker, send-location, send-contact, send-reaction, send-poll, edit-message, delete-message, forward-message, chat-manage (dangerous), chat-star, chat-disappearing, group-create, group-subject, group-description, group-participants, group-leave, group-settings, group-picture |
-| **approval: conditional** | 5 | contact-block (dangerous), group-invite (revoke), profile-privacy (set), contact-tags (mutates collection), presence, read-messages |
+| **approval: always** | 38 | send-text, send-image, send-video, send-audio, send-document, send-sticker, send-location, send-contact, send-reaction, send-poll, edit-message, delete-message, forward-message, send-batch, media-upload, chat-manage, chat-star, chat-disappearing, group-create, group-subject, group-description, group-participants, group-leave, group-settings, group-picture, group-disband, community-create, community-leave, community-subject, community-description, community-participants, community-link, community-unlink, community-invite, community-join, presence, read-messages, raw |
+| **approval: conditional** | 7 | contact-block (dangerous), group-invite (revoke), profile-name (edit), profile-about (edit), profile-picture (edit/remove), profile-privacy (set), contact-tags (mutates) |
 
 ### Preflight + lockIdentity targets
 
@@ -307,7 +313,7 @@ writes (`contact-tags`) where a read-back confirms the local state mutation land
    exists. Required verification appears only under `data.verification`.
 
 **If no browser is available:** the URL is printed with an `ssh -L` hint. Timeout 600 s → automatic
-`rejected`. HITL-required actions: 27 always-approval + 5 conditional = 32 total (of 61).
+`rejected`. HITL-required actions: 38 always-approval + 7 conditional = 45 total (of 68).
 
 ---
 
@@ -319,7 +325,7 @@ Unlike stateless TickTick REST calls, Baileys needs a durable socket and local S
 CLI do/admin ── JSON-RPC over Unix socket ── daemon
                                              ├── Baileys session (persistent socket)
                                              ├── Store (WhatsApp history snapshot)
-                                             ├── 67-action registry + safety policies
+                                              ├── 68-action registry + safety policies
                                              ├── Zod validation (CLI pre-daemon + daemon-side)
                                              └── O_EXCL lock + socket-first ownership
 ```
@@ -371,7 +377,7 @@ killing the socket. A fresh `connect()` call is mandatory.
 ### QR flow
 
 ```
-whats-proxy admin setup
+whats-proxy admin auth login [--start-service]
   │
   ├── 1. Start daemon (if not running)
   ├── 2. Request QR from Baileys (sock.ev.on('connection.update'))
@@ -380,8 +386,9 @@ whats-proxy admin setup
   ├── 5. WhatsApp sends 515 (restartRequired) → socket dies
   ├── 6. CRITICAL: extract socket creation into reusable connect()
   │      sock.end(undefined) → connect() again → fresh creds
-  ├── 7. pair-success event → open event → daemon ready
-  └── 8. Exit 0 with session info
+├── 7. pair-success event → open event → auth saved with mode 0700
+├── 8. Optional --start-service → enable + start persistent account daemon
+└── 9. Exit 0 with session info
 ```
 
 ### Code flow
@@ -456,7 +463,7 @@ operational needs:
 
 ## Zod Validation
 
-Every action has a Zod schema in `actions/schemas.ts` (67 schemas). Validation runs at two points:
+Every action has a Zod schema in `actions/schemas.ts` (68 schemas). Validation runs at two points:
 
 | Gate | Location | Purpose |
 |------|----------|---------|
@@ -485,7 +492,7 @@ action declaring a schema has a matching entry in `schemas.ts`. A missing schema
 whats-proxy
    │
    ├── admin setup|status|stop               # ALWAYS JSON
-    └── do <action> [payload|file] [-o] [-f]  # 67 flat RPC actions
+    └── do <action> [payload|file] [-o] [-f]  # 68 flat RPC actions
        │
        ▼
 ┌─────────────────────────────────────────────────────────────────┐
@@ -505,10 +512,10 @@ whats-proxy
 │  ├── types.ts            shared type definitions                 │
 │  ├── hitl.ts             HITL web UI (free port, browser auto)   │
 │  │                                                              │
-│  ├── actions/            THE 69 ACTIONS                            │
+│  ├── actions/            THE 68 ACTIONS                            │
 │  │   ├── registry.ts     name → ActionDef map, duplicate = error │
 │  │   ├── policies.ts     approval/preflight/verification truth   │
-│  │   ├── schemas.ts      61 Zod schemas (one per action)         │
+│  │   ├── schemas.ts      68 Zod schemas (one per action)         │
 │  │   ├── messaging.ts    send-* · edit-message · delete-message  │
 │  │   │                   · forward-message · send-batch           │
 │  │   ├── chats.ts        chat-*                                   │
@@ -517,9 +524,9 @@ whats-proxy
 │  │   ├── communities.ts  community-* (13 new)                     │
 │  │   ├── stories.ts      story-* (6 new)                          │
 │  │   ├── profile.ts      profile-*                                │
-│  │   ├── overview.ts     whatsup · find-messages                       │
-│  │   ├── chats.ts        chat-* · message-status · chat-read-batch     │
-│  │   └── utilities.ts    connection-status · read-messages             │
+│  │   ├── overview.ts     whatsup · find-messages · chat-read-batch     │
+│  │   ├── tags.ts         contact-tags                                  │
+│  │   └── utils.ts        connection-status · read-messages             │
 │  │                       · media-download · presence                   │
 │  │                                                              │
 │  └── admin/              setup · status · stop                   │
@@ -592,7 +599,7 @@ it spawns `tsx` under Node.js with the correct module resolution.
 | **Verification decorator** | `@require_verification` (TickTick silent-drop) | Not needed (WhatsApp fails loud) |
 | **Verification scope** | 4 always-on + 1 conditional | 1 action (`contact-tags`) |
 | **Preflight targets** | V1/V2 reads | Local Store + WhatsApp resource reads |
-| **HITL scope** | 13 actions + 2 admin | 28 always + 10 conditional |
+| **HITL scope** | 13 actions + 2 admin | 38 always + 7 conditional |
 | **State directory** | N/A | `~/.config/whats-proxy/state/` (protected) |
 | **Error behavior** | Same envelope | Same envelope |
 
@@ -600,21 +607,24 @@ it spawns `tsx` under Node.js with the correct module resolution.
 
 ## Porting Proof
 
-**62/65 `whats-mcp` tools ported (3 dead labels removed) + 1 `send-batch` + 6 story actions = 67 total.** Every tool in `$HOME/Work/AI/MCPs/whats_mcp/src/tools/*.js`
-is accounted for in the 67-action registry. The porting was verified at runtime — every action
+**62/65 `whats-mcp` tools ported (3 dead labels removed) + 1 `send-batch` + 3 story actions + 13 community actions - 4 analytics actions + 1 unrestricted atomic `raw` Baileys + Store API action = 68 total.** Every tool in `$HOME/Work/AI/MCPs/whats_mcp/src/tools/*.js`
+is accounted for in the 68-action registry. The porting was verified at runtime — every action
 name maps to a working handler backed by a Baileys operation or local Store read.
 
 | Domain | whats-mcp tools | whats-proxy actions | Fate |
 |--------|----------------:|-------------------:|------|
-| Messaging | 14 | 14 | 1:1 rename |
-| Chats | 5 | 5 | 1:1 rename |
+| Messaging | 14 | 15 | 1:1 rename + media-upload |
+| Chats | 5 | 6 | 1:1 rename + chat-read-batch |
 | Contacts | 7 | 7 | 1:1 rename |
-| Groups | 10 | 10 | 1:1 rename |
-| Stories | 0 | 6 | 6 new story actions |
+| Groups | 10 | 11 | 1:1 rename + group-disband |
+| Stories | 0 | 3 | 3 new story actions (post/reply/delete deprecated) |
 | Profile | 4 | 4 | 1:1 rename |
-| Overview | 5 | 5 | 1:1 rename |
+| Overview | 5 | 3 | 1:1 rename (chat-read-batch → Chats) |
 | Utilities | 4 | 4 | 1:1 rename |
-| **TOTAL ported** | **62** | **61** | ✅ 3 dead labels removed, 6 new stories, send-batch = **67 total** |
+| Tags | 0 | 1 | new: contact-tags |
+| Communities | 0 | 13 | 13 new community actions |
+| Raw API | 0 | 1 | new: raw Baileys + Store API |
+| **TOTAL ported** | **62** | **68** | ✅ 3 dead labels removed, 16 new actions |
 
 **No tools were dropped, merged, or split.** The 1:1 mapping is possible because `whats-mcp` was
 already well-structured (domain-grouped tools with clear inputs/outputs). The porting is a
@@ -661,7 +671,7 @@ rename (`send_message` → `send-text`) plus schema migration (JS object → Zod
 | `make smoke` | 50 end-to-end checks: CLI edge paths, spawn guard, hermetic sweep, no real WhatsApp | local |
 | `make stress` | 8 concurrent daemon spawns → exactly 1 winner (O_EXCL proof) | local |
 | `make runtime-smoke` | Verify `bin/whats-proxy.mjs` runs under Node.js (not Bun) | local |
-| Registry integrity | 67 actions, zero duplicates, every action has a Zod schema | `bun test` |
+| Registry integrity | 68 actions, zero duplicates, every action has a Zod schema | `bun test` |
 | Policy integrity | Every action in `policies.ts` maps to a registered action | `bun test` |
 | HITL completeness | Every send/mutation action has HITL policy | `bun test` |
 
@@ -681,7 +691,13 @@ WhatsApp device. Authentication failures are fail-closed; never invent a browser
 | **D5** | No verification decorator | WhatsApp fails loud (unlike TickTick silent-drop) | add unnecessary verification overhead |
 | **D6** | Pairing lifecycle | dedicated section documenting 515 reconnect gotcha | pairing bugs are the #1 support issue |
 | **D7** | Env prefix | **`WHATS_*`** (harmonizes with `TICK_*` and `TG_*`) | any other prefix |
-| **D8** | HITL scope | 27 always + 5 conditional = 32 of 67 actions | narrower policy would miss send safety |
+| **D8** | HITL scope | 38 always + 7 conditional = 45 of 68 actions | `raw` is always HITL; narrower policy would miss send safety |
+
+### Raw API (1)
+
+| Action | API | HITL | Role |
+|---|---|---|---|
+| `raw` | `baileys` or `store` | ✅ always | atomic unrestricted socket/module or Store/SQLite call; agents compose successive calls externally |
 
 ---
 
@@ -693,4 +709,4 @@ WhatsApp device. Authentication failures are fail-closed; never invent a browser
 - See `README.md` for user-facing documentation.
 
 *Architecture contract drafted 2026-08-31 — rewrite of `whats-mcp` (65 MCP tools) into
-`whats-proxy` (69 RPC actions: 62 ported - 3 dead labels + 6 new stories - 4 analytics removed), modelled on `tick-proxy` v1.1.0 (52 RPC actions).*  
+`whats-proxy` (68 RPC actions: 62 ported - 3 dead labels + 3 new stories + 13 new communities + 1 raw - 4 analytics removed + send-batch + media-upload + chat-read-batch + contact-presence-check + group-disband + contact-tags), modelled on `tick-proxy` v1.1.0 (52 RPC actions).*  

@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+## 0.7.0 — 2026-09-02
+
+- **Raw Baileys + Store API:** `do raw` now has exactly two always-HITL atomic protocols:
+  unrestricted `baileys` (`socket|module`) and `store` (`method|sql`). Agents compose successive
+  calls externally; there is no do, filesystem, runtime, or flow protocol.
+- **Secure pairing lifecycle:** Auth-state directories are created/repaired with mode `0700`.
+  `admin auth login --start-service` optionally starts the paired account's persistent daemon.
+- **Media download destination:** `media-download` accepts optional `output_dir` (absolute or
+  `~/` path); its default is now `$HOME/Downloads/<active-account-phone>/`.
+- **Direct receipt visibility:** `chat-read` and `message-status` now document that one-to-one
+  `read_by` / `read_count` data requires the recipient's WhatsApp `readreceipts=all` privacy
+  setting; group receipts remain independent. `read-messages` and `profile-privacy` help now
+  distinguish explicit marking from receipt visibility.
+- **Direct receipt persistence:** Persist direct Baileys `messages.update` delivery/read/played
+  statuses alongside existing group receipt handling.
+- **Service ownership:** `admin service stop|restart` now shuts down an auto-spawned socket owner
+  before lifecycle control, preventing a false-success systemd restart blocked by the account lock.
+- **chat-manage mark_read fix:** Correct Baileys `lastMessages` payload for read receipts.
+- **Community create + join live-tested:** `community-create` successfully created KπX-Labs community;
+  `community-join` successfully joined both accounts via invite code (2026-09-02).
+- **Documentation audit:** Fixed all action counts to 68 across README, CONTRACT, AGENTS; corrected
+  HITL classification (38 always + 7 conditional), porting proof, and module descriptions.
+
 ## 0.6.0 — 2026-08-31
 
 - **Multi-account support:** whats-proxy now manages multiple WhatsApp accounts simultaneously.

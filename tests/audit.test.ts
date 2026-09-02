@@ -21,9 +21,9 @@ import { getCompactHelp, getFullHelp } from "../src/whats_proxy/doc.ts";
 // ── P2: Registration audit ──────────────────────────────────────────────────
 
 describe("Registration audit", () => {
-  test("all 67 actions registered with correct count", () => {
-    expect(ACTION_COUNT).toBe(67);
-    expect(Object.keys(REGISTRY).length).toBe(67);
+  test("all 68 actions registered with correct count", () => {
+    expect(ACTION_COUNT).toBe(68);
+    expect(Object.keys(REGISTRY).length).toBe(68);
   });
 
   test("all action names are kebab-case", () => {

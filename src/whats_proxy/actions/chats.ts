@@ -70,7 +70,7 @@ Examples:
       action: "chat-read",
       category: "chats",
       description:
-        "Get recent messages from a specific chat. Messages come from the local store and can trigger an on-demand history fetch for older messages. Use before_id for pagination toward older messages.",
+        "Get recent messages from a specific chat. Outgoing messages include delivered_to/read_by when receipts are available; direct-chat read_by requires the recipient's read receipts privacy to be enabled. Messages come from the local store and can trigger an on-demand history fetch for older messages. Use before_id for pagination toward older messages.",
       arguments: [
         { name: "jid", description: "Chat JID or phone number.", required: true },
         { name: "limit", description: "Max number of messages to return (default 50, max 200).", required: false },
@@ -150,7 +150,9 @@ Examples:
       });
     },
     schema: chatReadSchema,
-    docstring: `Get recent messages from a specific chat. Messages come from the local store and can trigger an on-demand history fetch for older messages.
+    docstring: `Get recent messages from a specific chat. Outgoing messages include delivered_to/read_by when receipts are available; direct-chat read_by requires the recipient's WhatsApp read receipts privacy to be enabled.
+
+Receipt visibility: in one-to-one chats, read_by is populated only when the recipient has read receipts enabled (profile-privacy read_receipts=all). Group read receipts are not controlled by that privacy setting.
 
 Parameters:
     - jid (required): Chat JID or phone number.
@@ -193,11 +195,20 @@ Examples:
       const chatJid = phoneToJid(String(jid));
       const now = Date.now();
 
-      let lastMessages: { id: string; remoteJid: string; fromMe: boolean }[] | undefined;
+      let lastMessages: Array<{ key: { id: string; remoteJid: string; fromMe: boolean; participant?: string }; messageTimestamp: number }> | undefined;
       if (action === "mark_read" || action === "mark_unread") {
         const msgs = store.getMessages(chatJid, 1);
         if (msgs.length > 0) {
-          lastMessages = [{ id: msgs[0]!.key.id, remoteJid: chatJid, fromMe: msgs[0]!.key.fromMe }];
+          const latest = msgs[0]!;
+          lastMessages = [{
+            key: {
+              id: latest.key.id,
+              remoteJid: latest.key.remoteJid || chatJid,
+              fromMe: latest.key.fromMe,
+              ...(latest.key.participant ? { participant: latest.key.participant } : {}),
+            },
+            messageTimestamp: Number(latest.messageTimestamp),
+          }];
         }
       }
 
@@ -354,7 +365,7 @@ Examples:
     meta: {
       action: "message-status",
       category: "chats",
-      description: "Check read receipts for a specific message or your recent sent messages in a chat.",
+        description: "Check delivery/read receipts for a specific message or recent sent messages. Direct-chat read counts require the recipient's read receipts privacy to be enabled.",
       arguments: [
         { name: "action", description: "'get' for one message's receipts, 'sent' for recent messages in a chat.", required: true },
         { name: "message_id", description: "Message JID (required for 'get').", required: false },
@@ -391,7 +402,9 @@ Examples:
       return errResult(`Unknown action: ${action}. Use 'get' or 'sent'.`);
     },
     schema: messageStatusSchema,
-    docstring: `Check read receipts for messages.
+    docstring: `Check delivery/read receipts for messages.
+
+Receipt visibility: in one-to-one chats, read receipts and read_count are populated only when the recipient has WhatsApp read receipts enabled (profile-privacy read_receipts=all). Group read receipts are not controlled by that privacy setting.
 
 Parameters:
     - action (required): 'get' for one message's receipts, 'sent' for your recent messages with receipts.

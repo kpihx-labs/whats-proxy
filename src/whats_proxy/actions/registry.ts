@@ -18,6 +18,7 @@ import tags from "./tags.ts";
 import utils from "./utils.ts";
 import stories from "./stories.ts";
 import communities from "./communities.ts";
+import raw from "./raw.ts";
 
 const ALL: ActionDef[] = [
   ...messaging, // 15
@@ -30,6 +31,7 @@ const ALL: ActionDef[] = [
   ...utils,     // 7
   ...stories,   // 3
   ...communities, // 13
+  ...raw, // 1
 ];
 
 export const REGISTRY: ActionRegistry = {};

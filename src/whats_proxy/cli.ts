@@ -352,9 +352,9 @@ async function cmdAdmin(argv: string[]): Promise<number> {
         if (rest.includes("--help") || rest.includes("-h")) {
           process.stdout.write(
             "Usage:\n" +
-            "  whats-proxy admin auth login              QR code pairing (scan with phone)\n" +
+            "  whats-proxy admin auth login [--start-service] QR code pairing (scan with phone)\n" +
             "  whats-proxy admin auth login --code       Numeric pairing code (8 digits)\n" +
-            "  whats-proxy admin auth login --code --phone N  Pairing code for a specific number\n",
+            "  whats-proxy admin auth login --code --phone N [--start-service]  Pair and start a specific account\n",
           );
           return 0;
         }
@@ -362,6 +362,7 @@ async function cmdAdmin(argv: string[]): Promise<number> {
         const result = await authLogin({
           code: rest.includes("--code"),
           phone: extractPhone(rest),
+          startService: rest.includes("--start-service"),
         });
         print_json(result);
         return result.meta.status === "error" ? 1 : 0;

@@ -348,6 +348,7 @@ export const readMessagesSchema = z.object({
 
 export const mediaDownloadSchema = z.object({
   message_ids: z.union([z.string(), z.array(z.string())]),
+  output_dir: z.string().min(1).optional(),
 });
 
 export const mediaUploadSchema = z.object({
@@ -435,6 +436,18 @@ export const communityJoinSchema = z.object({
   code: z.string(),
 });
 
+// ── Raw API ──────────────────────────────────────────────────────────────────
+
+export const rawSchema = z.object({
+  protocol: z.enum(["baileys", "store"]),
+  target: z.enum(["socket", "module", "method", "sql"]).optional(),
+  method: z.string().min(1).optional(),
+  args: z.array(z.unknown()).optional(),
+  invoke: z.enum(["call", "construct"]).optional(),
+  sql: z.string().min(1).optional(),
+  params: z.array(z.unknown()).optional(),
+});
+
 // ── Schema registry (action name → schema) — used by audit tests ───────────
 
 export const SCHEMAS: Record<string, z.ZodObject<Record<string, z.ZodTypeAny>>> = {
@@ -516,4 +529,6 @@ export const SCHEMAS: Record<string, z.ZodObject<Record<string, z.ZodTypeAny>>> 
   "community-unlink": communityUnlinkSchema,
   "community-invite": communityInviteSchema,
   "community-join": communityJoinSchema,
+  // Raw API
+  raw: rawSchema,
 };

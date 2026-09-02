@@ -281,6 +281,15 @@ export class SQLiteStore {
     this.db.exec("PRAGMA cache_size = -64000");
   }
 
+  /** Execute one unrestricted SQLite statement for the raw Store protocol. */
+  rawSql(sql: string, params: unknown[] = []): unknown {
+    const statement = this.db.prepare(sql);
+    const isRead = /^\s*(SELECT|PRAGMA|WITH|EXPLAIN)\b/i.test(sql);
+    const result = isRead ? statement.all(...params) : statement.run(...params);
+    if (!isRead) this.onChange?.();
+    return result;
+  }
+
   private _prepareStatements() {
     const db = this.db;
     return {

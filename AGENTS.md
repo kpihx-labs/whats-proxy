@@ -2,17 +2,17 @@
 
 ## Project
 
-Non-MCP CLI proxy for WhatsApp. Full `whats-mcp` catalog (67 actions) as flat JSON-RPC actions
+Non-MCP CLI proxy for WhatsApp. Full `whats-mcp` catalog plus raw Baileys + Store API (68 actions) as flat JSON-RPC actions
 over per-account background daemons. `../tick_proxy/` is the sole proxy standard; Bun/Baileys
 preserve only the persistent WhatsApp session and Store. **Read `CONTRACT.md` before touching code.**
 
-> **Status:** 🟢 **IMPLEMENTED — 67 actions, multi-account, pairing working live.** `CONTRACT.md`
+> **Status:** 🟢 **IMPLEMENTED — 68 actions, multi-account, pairing working live.** `CONTRACT.md`
 > is the architecture contract. Version 0.6.0.
 
 ## Overview
 
 ```bash
-whats-proxy do <action> [payload|file] [-a phone] [-o path] [-f json|table]   # 67 actions
+whats-proxy do <action> [payload|file] [-a phone] [-o path] [-f json|table]   # 68 actions
 whats-proxy admin auth login|status|logout|use                                # auth lifecycle
 whats-proxy admin daemon status|stop|restart|logs|refresh                     # daemon lifecycle
 ```
@@ -31,7 +31,7 @@ whats-proxy admin daemon status|stop|restart|logs|refresh                     # 
 - **Isolated state for tests:** `WHATS_PROXY_STATE_DIR` + `WHATS_PROXY_NO_BROWSER` suppress
   real WhatsApp and browser interaction during `make check`.
 - **Actions must be registered** in `actions/registry.ts` (duplicate detection on boot; registry
-   test asserts 69; audit test asserts 67 schemas).
+   test asserts 68; audit test asserts 68 schemas).
 - **Safety is declarative:** `actions/policies.ts` is the only source for approval, preflight
   locks, and verification. Never call `requestApproval()` inside a domain action.
 - **Zod validation:** Every action has a Zod schema in `actions/schemas.ts`. Validation runs
@@ -61,7 +61,7 @@ make git-push     # push to github + gitlab (both remotes)
 src/whats_proxy/
 ├── index.ts cli.ts client.ts daemon.ts store.ts helpers.ts
 ├── config.ts logger.ts display.ts doc.ts version.ts exceptions.ts types.ts hitl.ts
-├── actions/   # 12 category modules + schemas.ts + registry.ts + policies.ts
+├── actions/   # 11 category modules + schemas.ts + registry.ts + policies.ts
 └── admin/
     ├── auth/      # login.ts + status.ts + logout.ts + use.ts
     └── daemon/    # status.ts + stop.ts + restart.ts + logs.ts + refresh.ts
@@ -117,7 +117,7 @@ admin auth login [--code] [--phone N] → wipe stale auth → QR/code displayed
 
 ## Porting status
 
-62/65 `whats-mcp` tools ported (3 dead labels removed) + 1 `send-batch` + 3 story actions + 13 community actions - 4 analytics actions = **67 actions** total.
+62/65 `whats-mcp` tools ported (3 dead labels removed) + 1 `send-batch` + 1 `media-upload` + 1 `chat-read-batch` + 1 `contact-presence-check` + 1 `group-disband` + 1 `contact-tags` + 3 story actions + 13 community actions - 4 analytics actions + 1 unrestricted atomic `raw` Baileys + Store API action = **68 actions** total.
 
 ## Backward compatibility
 
