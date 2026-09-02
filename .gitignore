@@ -5,6 +5,7 @@ bun.lockb
 # Build artifacts
 dist/
 *.tsbuildinfo
+*.tgz
 
 # State — NEVER commit
 ~/.config/whats-proxy/
