@@ -53,7 +53,7 @@ build: ## Build the npm package tarball
 	@$(BUN) pm pack
 
 publish: build ## Publish the npm package
-	@$(BUN) publish
+	@npm config set //registry.npmjs.org/:_authToken "$$NPM_TOKEN" && npm publish --access public; npm config delete //registry.npmjs.org/:_authToken
 
 # ─── Git ───
 

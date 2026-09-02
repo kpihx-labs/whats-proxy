@@ -9,7 +9,7 @@ Built with **Bun** + **Baileys** (`@whiskeysockets/baileys`): `meta`+`data` enve
 `whats-mcp` is an MCP server — useful inside MCP hosts, useless in a shell. `whats-proxy` turns the same catalog into a **solo CLI**:
 
 ```bash
-whats-proxy do send-text '{"to": "33612345678", "text": "Hello from the shell"}'
+whats-proxy do send-text '{"jid":"33612345678@s.whatsapp.net","text":"Hello from the shell"}'
 whats-proxy do chat-list
 whats-proxy do whatsup '{}' -a 33605957785
 ```
@@ -27,33 +27,34 @@ Requires [Bun](https://bun.sh) >= 1.1.
 ## First run — pairing
 
 ```bash
-whats-proxy admin setup            # shows QR code in terminal
-whats-proxy admin setup --code     # phone-pairing mode (enter code on phone)
-whats-proxy admin status           # check daemon + auth state
-whats-proxy admin stop             # stop the daemon (persists store, keeps session)
+whats-proxy admin auth login          # QR code pairing
+whats-proxy admin auth login --code   # phone-pairing mode (enter code on phone)
+whats-proxy admin auth login --start-service  # pair + start daemon immediately
+whats-proxy admin daemon status       # check daemon + auth state
+whats-proxy admin daemon stop         # stop the daemon (persists store, keeps session)
 ```
 
-The daemon auto-spawns on first `do` command. Session credentials live in `~/.config/whats-proxy/state/` — **never delete this folder** or you must re-pair. A spawn guard prevents daemon races: if another daemon already serves the socket, a newcomer exits quietly instead of hijacking the session.
+The daemon auto-spawns on first `do` command. Session credentials live in `~/.local/share/whats-proxy/<phone>/state/` — **never delete this folder** or you must re-pair. A spawn guard prevents daemon races: if another daemon already serves the socket, a newcomer exits quietly instead of hijacking the session.
 
 For a full validation pass on a real account: `bun run scripts/live.ts --to <phone> [--code]` — pairs (QR or code), sends a test message, stops the daemon. (Excluded from `make check`; it needs a physical phone.)
 
 ## Usage
 
 ```
-whats-proxy do <action> [payload|file] [-o file] [-f json|table] [-h]
-whats-proxy admin setup [--code] [--phone N]
-whats-proxy admin status
-whats-proxy admin stop
+whats-proxy do <action> [payload|file] [-a phone] [-o file] [-f json|table] [-h]
+whats-proxy admin auth login [--code] [--phone N] [--start-service]
+whats-proxy admin auth status|logout|use
+whats-proxy admin daemon status|stop|restart|logs|refresh
 whats-proxy --version
 ```
 
-- **`do`** — dispatch an action. `payload` is a JSON string or a path to a JSON file. Non-object payloads are wrapped as `{ "value": ... }`.
+- **`do`** — dispatch an action. `payload` is a JSON string or a path to a JSON file. Non-object payloads are wrapped as `{ "value": ... }`. Use `-a <phone>` to target a specific account.
 - **`do <action> -h -f json`** — machine-readable per-action help (schema from the registry meta), for scripting/autocomplete.
-- **`admin`** — daemon/auth management. Always JSON output; refuses `-f`/`-o` (exit 2).
-- **`admin stop`** — cleanly stops the daemon: store snapshot persisted, session credentials kept (`state/auth/` untouched). Next `do` auto-spawns it again.
+- **`admin`** — auth lifecycle and daemon management. Always JSON output; refuses `-f`/`-o` (exit 2).
+- **`admin daemon stop`** — cleanly stops the daemon: store snapshot persisted, session credentials kept. Next `do` auto-spawns it again.
 - Every response is an envelope: `{ "meta": { "status": "ok"|"error", "comment": "", "edited": false }, "data": {...} }`.
 - Errors exit `1` with the envelope on stderr. Autosave writes each call to `/tmp/whats-proxy-autosave/`.
-- **Idle exit** — set `WHATS_PROXY_MAX_IDLE_MINUTES` in `$HOME/.config/whats-proxy/.env` to make the daemon exit after that long without RPC activity (`ping` does NOT count — it's a liveness probe, not user activity). `0` (default) = stay forever (session-holder).
+- **Idle exit** — configurable via `WHATS_PROXY_MAX_IDLE_MINUTES` (default 30). `ping` does NOT count as activity.
 - **Mandatory review** — consequential `do` actions open a local editable review page and fail closed after 600 seconds. Destructive actions preflight local targets and lock their identifiers; no bypass exists.
 
 ### Table format
@@ -73,16 +74,17 @@ whats-proxy do chat-list -f table
 whats-proxy (CLI, Bun)                daemon (detached background process)
 ┌──────────────────────┐    spawn     ┌───────────────────────────────────┐
 │ do <action>          │ ───────────► │ Baileys socket (WhatsApp session)  │
-│   payload/file       │              │ + in-memory Store                 │
-│ admin setup/status/stop │         │ JSON-RPC 2.0 over Unix socket      │
-│ --version            │ ◄─────────── │   ping | connection-info |         │
-└──────────────────────┘  newline     │   dispatch | shutdown              │
-                          JSON-RPC    └───────────────────────────────────┘
+│   payload/file       │              │ + in-memory Store + SQLite         │
+│   -a <phone>         │              │ JSON-RPC 2.0 over Unix socket      │
+│ admin auth/daemon    │ ◄─────────── │   ping | connection-info |         │
+│ --version            │  newline     │   dispatch | shutdown              │
+└──────────────────────┘  JSON-RPC    └───────────────────────────────────┘
 ```
 
-- **State**: `$HOME/.config/whats-proxy/` — `.env`, `state/` (Baileys credentials), `store.db` (SQLite), `whats-proxy.{pid,lock,sock}`. Diagnostics are stderr-only; there is no log file.
+- **State**: `~/.local/share/whats-proxy/<phone>/` — `state/` (Baileys credentials), `store.db` (SQLite WAL), `daemon.{sock,lock,pid}`. Config: `~/.config/whats-proxy/accounts.json`. Diagnostics are stderr-only; there is no log file.
 - **Daemon**: owns the Baileys session, SQLite store auto-persists (WAL mode), restores on startup, reconnects with exponential backoff (1.5x, capped 30 s).
 - **Dispatch**: action handlers receive `{ args, store, config, sock, registry }` and return the full envelope.
+- **Multi-account**: `-a <phone>` routes to the correct daemon. Default from `accounts.json`. Each account has its own daemon, store, and socket.
 - **Isolation for tests**: `WHATS_PROXY_STATE_DIR` / `WHATS_PROXY_CONFIG_DIR` point the whole stack at a temp dir.
 
 ## Actions (68)
@@ -101,7 +103,7 @@ whats-proxy (CLI, Bun)                daemon (detached background process)
 | Raw API | 1 | raw |
 | **TOTAL** | **68** | |
 
-Run `whats-proxy do --help` for the live catalog; `whats-proxy do <action> -h` for per-action help. Every one of the 68 `do` pages renders at least three concrete executable forms from its action-owned payload: inline JSON, a payload file, and captured JSON output. Actions with required fields, local HITL, destructive preflight, or zero-argument table display show their additional branch explicitly. `WaClient.raw()` remains an internal lifecycle API rather than a public `do` escape hatch, so it cannot bypass validation or safety policies.
+Run `whats-proxy do --help` for the live catalog; `whats-proxy do <action> -h` for per-action help. Every one of the 68 `do` pages renders at least three concrete executable forms from its action-owned payload: inline JSON, a payload file, and captured JSON output. Actions with required fields, local HITL, destructive preflight, or zero-argument table display show their additional branch explicitly. `do raw` provides unrestricted access to the Baileys socket API and the local SQLite store.
 
 The complex families also own distinct semantic scenarios: direct/group/reply text; local/remote/reply
 media; broadcast recipient mixes and delays; group participant roles and invite lifecycle. `make check`
@@ -153,6 +155,12 @@ make smoke       # end-to-end: spawn daemon, RPC, CLI catalog
 make stress      # race test: N simultaneous daemon spawns → exactly 1 survives
 ```
 
+### Publish (requires with-env)
+
+```bash
+with-env make publish   # sources NPM_TOKEN from .agents/.env, configures npm auth, publishes
+```
+
 Like `tick-proxy`, this project deliberately ships no separately maintained shell-completion layer.
 The registry-derived `whats-proxy do --help` and per-action `--help` remain the single discovery surface.
 
@@ -175,7 +183,7 @@ src/whats_proxy/
 ├── types.ts        # ActionDef, ActionContext, Output envelope
 ├── hitl.ts         # local editable review page; port 0, 600-second fail-closed timeout
 ├── actions/        # 15 category modules + registry.ts + policies.ts (68 actions)
-└── admin/          # setup (QR/pairing code) + status (independent probe)
+└── admin/          # auth/ (login, status, logout, use) + daemon/ (status, stop, restart, logs, refresh)
 ```
 
 ## Contract
