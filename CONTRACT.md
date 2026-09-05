@@ -659,7 +659,7 @@ rename (`send_message` → `send-text`) plus schema migration (JS object → Zod
 | `install` / `uninstall` | `bun link` global lifecycle |
 | `git-push` / `push` | push to `github` **and** `gitlab` |
 
-**Remotes:** `github: git@github.com:KpihX/whats-proxy.git` · `gitlab: git@gitlab.com:kpihx/whats-proxy.git`
+**Remotes:** `github: git@github.com:kpihx-labs/whats-proxy.git` · `gitlab: git@gitlab.com:kpihx-labs/proxies/whats-proxy.git`
 
 ---
 
