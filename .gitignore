@@ -25,3 +25,6 @@ store.json
 
 # OS
 .DS_Store
+
+# Editor backups
+*~
