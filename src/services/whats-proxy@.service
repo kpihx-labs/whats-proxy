@@ -1,7 +1,6 @@
 [Unit]
 Description=WhatsApp proxy daemon for account %i
-After=graphical-session.target network-online.target
-Wants=graphical-session.target
+After=dbus.socket network-online.target
 
 [Service]
 Type=exec

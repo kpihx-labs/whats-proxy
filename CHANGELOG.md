@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.7.3 - 2026-09-10
+
+- **Headless service unit fix:** `src/services/whats-proxy@.service` no longer declares
+  `Wants=graphical-session.target`; `After=` is now `dbus.socket network-online.target`.
+  With `loginctl enable-linger`, that dependency pulled `graphical-session.target` active at
+  every boot, and `gnome-session-init-worker` then aborted GDM logins with
+  `A graphical session is already running!` (login loop, `ISS-20260910-001`). The daemon is
+  headless: it only needs the session bus and the network, never a graphical session.
+
 ## 0.7.2 — 2026-09-03
 
 - **Media download path relocated:** default save directory changed from

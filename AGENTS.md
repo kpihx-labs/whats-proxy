@@ -40,6 +40,11 @@ whats-proxy admin daemon status|stop|restart|logs|refresh                     # 
   create a NEW socket (the `connect()` reconnection pattern in `admin/auth/login.ts`).
 - **Baileys fork:** `ayusc/Baileys` — merges upstream PRs #2608, #2749, #2765. Remove when
   upstream merges these.
+- **Service unit is headless (GRAVÉ):** `src/services/whats-proxy@.service` must never
+  reference `graphical-session.target` (only `dbus.socket` + `network-online.target`). With
+  `loginctl enable-linger` the daemons start at boot; a `Wants=graphical-session.target` pulls
+  that target active and breaks every GDM login (loop: `A graphical session is already running!`
+  from `gnome-session-init-worker`, `Session never registered`). History: `ISS-20260910-001`.
 - **Multi-account:** Each account = `<phone>/` under the base config dir. `-a`/`--account`
   on `do` routes to the correct daemon. Default from `accounts.json`.
 
