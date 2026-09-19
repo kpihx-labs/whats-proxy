@@ -2,14 +2,14 @@
 
 > **Status:** 🟢 **IMPLEMENTED — 68 actions.** This document is the authoritative architecture
 > contract for `whats-proxy`, the non-MCP WhatsApp CLI built on the ADN of `tick-proxy`
-> (`$HOME/KpihX-Labs/tick_proxy/`) with Baileys as the WhatsApp engine.
+> (`$HOME/Labs/KpihX-Labs/tick_proxy/`) with Baileys as the WhatsApp engine.
 
 ---
 
 ## Mission
 
 Complete rewrite of the MCP `whats-mcp` (`$HOME/Work/AI/MCPs/whats_mcp`) into a non-MCP CLI proxy that
-follows **exactly** the `tick-proxy` model (`$HOME/KpihX-Labs/tick_proxy/`), adapted for WhatsApp's
+follows **exactly** the `tick-proxy` model (`$HOME/Labs/KpihX-Labs/tick_proxy/`), adapted for WhatsApp's
 unique requirement: a **persistent daemon** owning a Baileys socket and local Store.
 
 - **Single binary, two namespaces** — `whats-proxy do <action>` (RPC) + `whats-proxy admin <action>` (always JSON)
@@ -22,7 +22,7 @@ unique requirement: a **persistent daemon** owning a Baileys socket and local St
 - **Daemon** — Baileys requires persistent socket + Store; `O_CREAT|O_EXCL` lockfile for single-owner arbitration
 - **NO Docker** — explicitly excluded (same as `tick-proxy`)
 
-**Location:** `$HOME/KpihX-Labs/whats_proxy/` — sibling of `tick_proxy/`.
+**Location:** `$HOME/Labs/KpihX-Labs/whats_proxy/` — sibling of `tick_proxy/`.
 
 ---
 

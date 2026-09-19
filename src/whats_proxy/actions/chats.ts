@@ -33,6 +33,10 @@ export default [
       if (f === "groups") chats = chats.filter((c) => isGroupJid(c.id));
       if (f === "contacts") chats = chats.filter((c) => !isGroupJid(c.id));
       if (f === "unread") chats = chats.filter((c) => Number(c.unreadCount || 0) > 0);
+      if (f === "favorites" || f === "favourites") {
+        const favJids = new Set(store.getChatFilter ? store.getChatFilter("favorites") : []);
+        chats = chats.filter((c) => favJids.has(c.id));
+      }
 
       const total = chats.length;
       const off = Number(offset || 0);

@@ -514,6 +514,25 @@ export class SQLiteStore {
     return rows.map((r) => r.tag);
   }
 
+  // ── Chat filters (e.g. favorites) ────────────────────────────────────────
+
+  setChatFilter(filterName: string, jids: string[]) {
+    const txn = this.db.transaction(() => {
+      this.db.prepare(`DELETE FROM chat_filters WHERE filter_name = ?`).run(filterName);
+      const ins = this.db.prepare(`INSERT OR REPLACE INTO chat_filters (jid, filter_name, position) VALUES (?, ?, ?)`);
+      for (let i = 0; i < jids.length; i++) {
+        ins.run(jids[i], filterName, i);
+      }
+    });
+    txn();
+    this._notifyChanged();
+  }
+
+  getChatFilter(filterName: string): string[] {
+    const rows = this.db.prepare(`SELECT jid FROM chat_filters WHERE filter_name = ? ORDER BY position ASC`).all(filterName) as { jid: string }[];
+    return rows.map((r) => r.jid);
+  }
+
 
   upsertMessages(messages: AnyMsg[]) {
     const txn = this.db.transaction((messages: AnyMsg[]) => {
@@ -584,6 +603,19 @@ export class SQLiteStore {
     });
     txn(keys);
     this._notifyChanged();
+  }
+
+  updateMessageStarred(remoteJid: string, msgId: string, starred: boolean) {
+    const row = this.db.prepare(`SELECT data FROM messages WHERE remoteJid = ? AND msgId = ?`).get(remoteJid, msgId) as { data: string } | undefined;
+    if (!row) return;
+    try {
+      const parsed = JSON.parse(row.data);
+      parsed.starred = starred;
+      this.db.prepare(`UPDATE messages SET data = ? WHERE remoteJid = ? AND msgId = ?`).run(JSON.stringify(parsed), remoteJid, msgId);
+      this._notifyChanged();
+    } catch {
+      /* non-critical JSON parse error */
+    }
   }
 
   getMessages(jid: string, limit = 50, before_id?: string, options: MessageFilters = {}): AnyMsg[] {
@@ -1059,6 +1091,13 @@ export class SQLiteStore {
     sock.ev.on("messages.delete", (info: { keys?: { remoteJid: string; id: string }[] }) => {
       if (info.keys) this.deleteMessages(info.keys);
     });
+    sock.ev.on("messages.update", (updates: Array<{ key?: { id?: string | null; remoteJid?: string | null }; update?: { starred?: boolean | null } }>) => {
+      for (const { key, update } of updates) {
+        if (key?.remoteJid && key?.id && typeof update?.starred === "boolean") {
+          this.updateMessageStarred(key.remoteJid, key.id, update.starred);
+        }
+      }
+    });
     sock.ev.on("groups.upsert", (groups: AnyGroupMeta[]) => {
       for (const g of groups) this.setGroupMeta(g.id, g);
     });
@@ -1074,6 +1113,20 @@ export class SQLiteStore {
         const existing = this.lidPnMap.get(lid);
         this.lidPnMap.set(lid, { pn, name: existing?.name });
         this._notifyChanged();
+      }
+    });
+
+    // Capture app-state sync mutations for custom features (e.g. favorites)
+    sock.ev.on("app-state-sync", (data: any) => {
+      try {
+        if (data?.syncAction?.value?.favoritesAction?.favorites) {
+          const ids = data.syncAction.value.favoritesAction.favorites.map((f: any) => f.id).filter(Boolean);
+          if (ids.length > 0) {
+            this.setChatFilter("favorites", ids);
+          }
+        }
+      } catch {
+        /* non-critical app-state-sync handling */
       }
     });
   }
@@ -1125,6 +1178,7 @@ export class SQLiteStore {
         msg.pushName ||
         formatted?.push_name ||
         existing.name,
+      archived: Boolean(existing.archived),
     };
 
     this.stmts.upsertChat.run(...this._chatColumns(merged));

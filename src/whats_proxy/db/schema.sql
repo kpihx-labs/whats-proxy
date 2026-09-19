@@ -57,6 +57,13 @@ CREATE TABLE IF NOT EXISTS contact_tags (
   PRIMARY KEY (jid, tag)
 );
 
+CREATE TABLE IF NOT EXISTS chat_filters (
+  jid TEXT NOT NULL,
+  filter_name TEXT NOT NULL,
+  position INTEGER DEFAULT 0,
+  PRIMARY KEY (jid, filter_name)
+);
+
 CREATE TABLE IF NOT EXISTS message_receipts (
   msg_jid TEXT NOT NULL,
   chat_jid TEXT NOT NULL,
