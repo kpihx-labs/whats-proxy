@@ -53,6 +53,8 @@ export default [
           sender_name: f.push_name || null,
           text: f.text,
           type: f.type,
+          edited: f.edited,
+          ...(f.edited ? { editedAt: f.editedAt, editId: f.editId } : {}),
         };
       };
 
@@ -161,11 +163,12 @@ Examples:
         { name: "since", description: "Optional: only include messages after this Unix timestamp.", required: false },
         { name: "until", description: "Optional: only include messages before this Unix timestamp.", required: false },
         { name: "limit", description: "Max total results (default: no limit).", required: false },
+        { name: "include_protocol", description: "If true, also search raw protocol rows. Default false: stubs hidden, edited text searchable.", required: false },
       ],
       example: { query: "(?i)stage|alternance|internship" },
       returns: "{ query, total_messages, total_chats, chats }",
     },
-    handler: async ({ query, since, until, limit }, { store }) => {
+    handler: async ({ query, since, until, limit, include_protocol }, { store }) => {
       if (!query || !String(query).trim()) {
         return errResult("Parameter 'query' is required.");
       }
@@ -180,6 +183,7 @@ Examples:
       const opts = {
         since: since !== undefined ? Number(since) : undefined,
         until: until !== undefined ? Number(until) : undefined,
+        includeProtocol: include_protocol === true || include_protocol === "true" || include_protocol === 1 ? true : undefined,
       };
 
       const capped = Number(limit) || 99999;
@@ -218,6 +222,8 @@ Examples:
               sender_name: formatted.push_name || null,
               text: formatted.text,
               type: formatted.type,
+              edited: formatted.edited,
+              ...(formatted.edited ? { editedAt: formatted.editedAt, editId: formatted.editId } : {}),
               matched: text.match(regex)?.[0] || null,
             });
             totalMessages++;
@@ -250,6 +256,8 @@ Parameters:
     - since (optional): Unix timestamp — only search after this time.
     - until (optional): Unix timestamp — only search before this time.
     - limit (optional): Max total results (default: no limit).
+    - include_protocol (optional): true also searches raw protocol rows. Default
+      false: stubs hidden, edited text searchable, hits carry edited:true.
 
 The agent is responsible for building the regex. Examples:
     - Search for stage/internship:

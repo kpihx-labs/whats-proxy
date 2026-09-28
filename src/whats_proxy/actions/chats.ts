@@ -86,11 +86,12 @@ Examples:
         { name: "until", description: "Unix timestamp: only include messages sent at or before this time.", required: false },
         { name: "include_types", description: "If set, only include messages of these types (e.g. text, image, video).", required: false },
         { name: "exclude_types", description: "Exclude messages of these types (e.g. reaction, protocol).", required: false },
+        { name: "include_protocol", description: "If true, also return raw protocol rows (edit stubs, revokes). Default false: stubs hidden, edits folded into the original with edited:true.", required: false },
       ],
       example: { jid: "33612345678", limit: 50 },
       returns: "{ jid, count, messages, history_sync }",
     },
-    handler: async ({ jid, limit, before_id, fetch_history, history_count, history_wait_ms, since, until, include_types, exclude_types }, { sock, store }) => {
+    handler: async ({ jid, limit, before_id, fetch_history, history_count, history_wait_ms, since, until, include_types, exclude_types, include_protocol }, { sock, store }) => {
       const chatJid = phoneToJid(String(jid));
       const lim = Math.min(Number(limit) || 50, 200);
       const filterOpts = {
@@ -98,6 +99,7 @@ Examples:
         until: until || undefined,
         types: include_types || undefined,
         excludeTypes: exclude_types || undefined,
+        includeProtocol: include_protocol === true || include_protocol === "true" || include_protocol === 1 ? true : undefined,
       } as any;
 
       let historySync: HistorySyncResult = {
@@ -169,6 +171,9 @@ Parameters:
     - until (optional): Unix timestamp: only include messages at or before this time.
     - include_types (optional): Only include messages of these types.
     - exclude_types (optional): Exclude messages of these types.
+    - include_protocol (optional): true shows raw protocol rows (edit stubs, revokes).
+      Default false: stubs hidden and MESSAGE_EDIT content folded into the original,
+      which carries edited:true plus editedAt and editId.
 
 Examples:
     - Read recent messages from a contact:
@@ -437,12 +442,13 @@ Examples:
         { name: "until", description: "Unix timestamp: only messages before this time.", required: false },
         { name: "include_types", description: "Only include these message types.", required: false },
         { name: "exclude_types", description: "Exclude these message types.", required: false },
+        { name: "include_protocol", description: "If true, also return raw protocol rows. Default false: stubs hidden, edits folded with edited:true.", required: false },
       ],
       example: { jids: ["33612345678", "120363000000000@g.us"] },
       returns: "{ total_chats, total_messages, chats }",
     },
     handler: async (
-      { jids, limit_per_chat, since, until, include_types, exclude_types },
+      { jids, limit_per_chat, since, until, include_types, exclude_types, include_protocol },
       { store },
     ) => {
       if (!Array.isArray(jids) || jids.length === 0) {
@@ -460,6 +466,7 @@ Examples:
         until: until !== undefined ? Number(until) : undefined,
         types: Array.isArray(include_types) ? include_types.map(String) : undefined,
         excludeTypes: Array.isArray(exclude_types) ? exclude_types.map(String) : undefined,
+        includeProtocol: include_protocol === true || include_protocol === "true" || include_protocol === 1 ? true : undefined,
       };
 
       const chats: any[] = [];
@@ -496,6 +503,8 @@ Parameters:
     - limit_per_chat (optional): Max messages per chat (default: no limit).
     - since / until (optional): Time range filter.
     - include_types / exclude_types (optional): Type filters.
+    - include_protocol (optional): true shows raw protocol rows. Default false:
+      stubs hidden, edits folded with edited:true.
 
 Examples:
     - Batch read two chats:

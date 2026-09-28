@@ -143,6 +143,7 @@ export const chatReadSchema = z.object({
   until: z.number().or(z.string()).optional(),
   include_types: z.array(z.string()).optional(),
   exclude_types: z.array(z.string()).optional(),
+  include_protocol: z.unknown().optional(),
 });
 
 export const chatManageSchema = z.object({
@@ -309,6 +310,7 @@ export const findMessagesSchema = z.object({
   since: z.number().or(z.string()).optional(),
   until: z.number().or(z.string()).optional(),
   limit: z.number().or(z.string()).optional(),
+  include_protocol: z.unknown().optional(),
 });
 
 // ── Chats (6) ──────────────────────────────────────────────────────────────
@@ -320,6 +322,7 @@ export const chatReadBatchSchema = z.object({
   until: z.number().or(z.string()).optional(),
   include_types: z.array(z.string()).optional(),
   exclude_types: z.array(z.string()).optional(),
+  include_protocol: z.unknown().optional(),
 });
 
 // ── Tags (1) ────────────────────────────────────────────────────────────────

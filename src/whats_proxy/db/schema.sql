@@ -73,6 +73,20 @@ CREATE TABLE IF NOT EXISTS message_receipts (
   PRIMARY KEY (msg_jid, reader_jid, receipt_type)
 );
 
+/* Message edits (MESSAGE_EDIT fold index).
+   One row per edited original (latest wins by timestamp). Protocol rows in
+   "messages" stay the append only history; this table is the indexed lookup so
+   reads resolve edits without full table JSON scans. Auto created on open via
+   CREATE IF NOT EXISTS, so existing DBs gain it with zero migration. */
+
+CREATE TABLE IF NOT EXISTS message_edits (
+  targetId TEXT PRIMARY KEY,
+  targetJid TEXT NOT NULL,
+  editId TEXT NOT NULL,
+  timestamp INTEGER DEFAULT 0,
+  content TEXT NOT NULL
+);
+
 -- ── Full-text search ────────────────────────────────────────────────────────
 
 CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts

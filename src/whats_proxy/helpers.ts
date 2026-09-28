@@ -137,6 +137,84 @@ export interface FormattedMessage {
   type: string;
   text: string;
   push_name: string | null | undefined;
+  /** True when this message carries folded MESSAGE_EDIT content (read or write path). */
+  edited: boolean;
+  /** Unix seconds of the winning edit; present only when edited is true. */
+  editedAt?: number;
+  /** Store msgId of the winning edit row; present only when edited is true. */
+  editId?: string | null;
+}
+
+/** Raw protocolMessage payload of a Baileys WAMessage, or null. */
+export function getProtocolMessage(msg: Record<string, unknown> | null | undefined): Record<string, any> | null {
+  const content = (msg?.message || {}) as Record<string, any>;
+  const pm = content.protocolMessage;
+  return pm && typeof pm === "object" ? pm : null;
+}
+
+/** True for ANY protocolMessage envelope (edit, revoke, history sync, ...). */
+export function isProtocolEnvelope(msg: Record<string, unknown> | null | undefined): boolean {
+  return getProtocolMessage(msg) !== null;
+}
+
+/**
+ * True when the message is a WhatsApp MESSAGE_EDIT envelope.
+ * Baileys surfaces the type as the string "MESSAGE_EDIT" (proto JSON) or the
+ * numeric enum 14; the presence of `editedMessage` is the authoritative signal.
+ */
+export function isEditEnvelope(msg: Record<string, unknown> | null | undefined): boolean {
+  const pm = getProtocolMessage(msg);
+  if (!pm) return false;
+  if (pm.editedMessage && typeof pm.editedMessage === "object") return true;
+  const t = pm.type;
+  return t === "MESSAGE_EDIT" || t === 14 || t === "14";
+}
+
+/** Target original message id of an edit envelope (`protocolMessage.key.id`). */
+export function getEditTargetId(msg: Record<string, unknown> | null | undefined): string | null {
+  const key = getProtocolMessage(msg)?.key;
+  return typeof key?.id === "string" && key.id ? key.id : null;
+}
+
+/**
+ * Replacement content of an edit envelope (`protocolMessage.editedMessage`).
+ * This is a full message-content object: `{ extendedTextMessage: { text } }`
+ * for text edits, `{ imageMessage: { ..., caption } }` for caption edits, etc.
+ */
+export function getEditContent(msg: Record<string, unknown> | null | undefined): Record<string, unknown> | null {
+  const em = getProtocolMessage(msg)?.editedMessage;
+  return em && typeof em === "object" ? em as Record<string, unknown> : null;
+}
+
+/** Unix-seconds timestamp of an edit envelope. */
+export function getEditTimestamp(msg: Record<string, unknown> | null | undefined): number {
+  return Number((msg as Record<string, any>)?.messageTimestamp || 0);
+}
+
+/**
+ * Fold an edit's replacement content into a clone of the original message.
+ * Generic merge: edited keys win (new text, new caption, ...), keys the edit
+ * does not carry (messageContextInfo, ...) are kept from the original.
+ * The original key, timestamp, pushName and chat placement are preserved;
+ * `edited` / `editId` / `editedAt` metadata records the winning edit.
+ */
+export function applyEditContent(
+  original: Record<string, any>,
+  editContent: Record<string, unknown>,
+  meta: { editId: string | null; editedAt: number },
+): Record<string, any> {
+  const clone = JSON.parse(JSON.stringify(original)) as Record<string, any>;
+  const origContent = (clone.message || {}) as Record<string, any>;
+  const merged: Record<string, any> = { ...(editContent as Record<string, any>) };
+  for (const [k, v] of Object.entries(origContent)) {
+    if (k === "protocolMessage") continue;
+    if (!(k in merged)) merged[k] = v;
+  }
+  clone.message = merged;
+  clone.edited = true;
+  clone.editId = meta.editId;
+  clone.editedAt = meta.editedAt;
+  return clone;
 }
 
 /** Format a raw WAMessage for display. */
@@ -223,6 +301,13 @@ export function formatMessage(msg: Record<string, unknown> | null | undefined): 
     type,
     text,
     push_name: (msg.pushName as string) || undefined,
+    edited: Boolean((msg as Record<string, any>).edited),
+    ...((msg as Record<string, any>).edited
+      ? {
+          editedAt: Number((msg as Record<string, any>).editedAt || 0) || undefined,
+          editId: ((msg as Record<string, any>).editId as string | null) ?? null,
+        }
+      : {}),
   };
 }
 

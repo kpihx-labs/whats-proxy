@@ -30,7 +30,16 @@ try {
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { formatMessage, phoneToJid } from "./helpers";
+import {
+  formatMessage,
+  phoneToJid,
+  isProtocolEnvelope,
+  isEditEnvelope,
+  getEditTargetId,
+  getEditContent,
+  getEditTimestamp,
+  applyEditContent,
+} from "./helpers";
 
 export interface StoreOptions {
   max_messages_per_chat?: number;
@@ -49,6 +58,8 @@ interface MessageFilters {
   until?: number;
   types?: string[];
   excludeTypes?: string[];
+  /** Opt-in to pure protocol rows (edit stubs, revokes, system). Default hides them. */
+  includeProtocol?: boolean;
 }
 
 interface SearchOptions {
@@ -56,6 +67,8 @@ interface SearchOptions {
   until?: number;
   types?: string[];
   excludeTypes?: string[];
+  /** Opt-in to pure protocol rows. Default hides them. */
+  includeProtocol?: boolean;
 }
 
 // ── Schema ─────────────────────────────────────────────────────────────────
@@ -253,6 +266,7 @@ export class SQLiteStore {
     this.db = new SqliteDb(dbPath);
     this._initPragmas();
     this.db.exec(SCHEMA_SQL);
+    this.editsBackfilled = false;
 
     // Re-initialize Map-like properties on the new DB
     this.groupMeta = new DbMap<AnyGroupMeta>(
@@ -385,6 +399,7 @@ export class SQLiteStore {
       for (const id of ids) {
         this.stmts.deleteChats.run(id);
         this.db.prepare(`DELETE FROM messages WHERE remoteJid = ?`).run(id);
+        try { this.db.prepare(`DELETE FROM message_edits WHERE targetJid = ?`).run(id); } catch { /* edit index may not exist on old handles */ }
       }
     });
     txn(ids);
@@ -536,39 +551,32 @@ export class SQLiteStore {
 
   upsertMessages(messages: AnyMsg[]) {
     const txn = this.db.transaction((messages: AnyMsg[]) => {
+      const normals: AnyMsg[] = [];
+      const edits: AnyMsg[] = [];
       for (const msg of messages) {
         const jid = msg.key?.remoteJid;
         if (!jid) continue;
+        if (isEditEnvelope(msg)) edits.push(msg);
+        else normals.push(msg);
+      }
 
+      for (const msg of normals) {
         this._touchChatFromMessage(msg);
+        this._insertMessageRow(msg);
+      }
 
-        const cols = this._messageColumns(msg);
-        const info = this.stmts.upsertMessage.run(...cols);
+      // Oldest edit first so chained edits resolve latest wins naturally.
+      edits.sort((a, b) => getEditTimestamp(a) - getEditTimestamp(b));
+      for (const edit of edits) {
+        this._touchChatFromMessage(edit);
+        this._insertMessageRow(edit);
+        this._foldEditIntoTarget(edit);
+      }
 
-        // Handle FTS: if this was an INSERT (new row), add to FTS.
-        // For UPDATE (replace), we need to delete old FTS entry first.
-        if (info.changes > 0) {
-          // Get the rowid for FTS
-          const row = this.db.prepare(`SELECT rowid FROM messages WHERE remoteJid = ? AND msgId = ?`).get(jid, msg.key?.id) as { rowid: number } | undefined;
-          if (row) {
-            // For REPLACE: the old FTS entry is now orphaned — clean it
-            if (info.lastInsertRowid !== row.rowid) {
-              try { this.stmts.deleteMessageFts.run(row.rowid); } catch { /* FTS entry may not exist */ }
-            }
-            const text = cols[5] || "";
-            if (text) {
-              try {
-                this.db.prepare(`INSERT INTO messages_fts (rowid, text) VALUES (?, ?)`).run(row.rowid, text);
-              } catch {
-                // FTS entry may already exist from a previous insert — update it
-                try {
-                  this.db.prepare(`DELETE FROM messages_fts WHERE rowid = ?`).run(row.rowid);
-                  this.db.prepare(`INSERT INTO messages_fts (rowid, text) VALUES (?, ?)`).run(row.rowid, text);
-                } catch { /* non-critical */ }
-              }
-            }
-          }
-        }
+      // Edit arrived before its original: the normal insert above just
+      // replaced the synthesized edited row with stale content, so reapply.
+      for (const msg of normals) {
+        this._reapplyPendingEdits(msg.key.remoteJid, msg.key.id);
       }
 
       // Enforce max messages per chat (prune oldest)
@@ -591,6 +599,209 @@ export class SQLiteStore {
     this._notifyChanged();
   }
 
+  // ── MESSAGE_EDIT fold (write path) + resolve (read path) ────────────────
+  // Baileys delivers WhatsApp edits as protocolMessage type MESSAGE_EDIT.
+  // Write path folds each edit into its target row (data, text, FTS) with
+  // edited/editId/editedAt metadata, so no visible stub row remains.
+  // Read path resolves the latest edit per message, which fixes DBs written
+  // before folding with zero migration (append only spirit).
+
+  /** Plain row insert with FTS upkeep. Protocol envelopes are never indexed. */
+  private _insertMessageRow(msg: AnyMsg) {
+    const jid = msg.key?.remoteJid;
+    const cols = this._messageColumns(msg);
+    const info = this.stmts.upsertMessage.run(...cols);
+    if (info.changes > 0 && !isProtocolEnvelope(msg)) {
+      const row = this.db.prepare(`SELECT rowid FROM messages WHERE remoteJid = ? AND msgId = ?`).get(jid, msg.key?.id) as { rowid: number } | undefined;
+      if (row) {
+        if (info.lastInsertRowid !== row.rowid) {
+          try { this.stmts.deleteMessageFts.run(row.rowid); } catch { /* FTS entry may not exist */ }
+        }
+        this._indexFtsRow(row.rowid, cols[5] || "");
+      }
+    }
+  }
+
+  /** Insert or replace an FTS entry for a visible message row. */
+  private _indexFtsRow(rowid: number, text: string) {
+    if (!text) return;
+    try {
+      this.db.prepare(`INSERT INTO messages_fts (rowid, text) VALUES (?, ?)`).run(rowid, text);
+    } catch {
+      try {
+        this.db.prepare(`DELETE FROM messages_fts WHERE rowid = ?`).run(rowid);
+        this.db.prepare(`INSERT INTO messages_fts (rowid, text) VALUES (?, ?)`).run(rowid, text);
+      } catch { /* non-critical */ }
+    }
+  }
+
+  /** Rewrite a target row after folding: data JSON, text column, FTS. */
+  private _updateMessageRow(storedJid: string, msgId: string, folded: AnyMsg) {
+    const formatted = formatMessage(folded);
+    const text = formatted?.text || null;
+    this.db.prepare(`UPDATE messages SET data = ?, text = ? WHERE remoteJid = ? AND msgId = ?`).run(
+      JSON.stringify(folded), text, storedJid, msgId,
+    );
+    const row = this.db.prepare(`SELECT rowid FROM messages WHERE remoteJid = ? AND msgId = ?`).get(storedJid, msgId) as { rowid: number } | undefined;
+    if (row) {
+      try { this.stmts.deleteMessageFts.run(row.rowid); } catch { /* FTS entry may not exist */ }
+      this._indexFtsRow(row.rowid, text || "");
+    }
+  }
+
+  /** Latest wins log of edits, keyed by original message id. */
+  private _recordEdit(targetId: string, targetJid: string, edit: AnyMsg, content: Record<string, unknown>) {
+    const ts = getEditTimestamp(edit);
+    const existing = this.db.prepare(`SELECT timestamp FROM message_edits WHERE targetId = ?`).get(targetId) as { timestamp: number } | undefined;
+    if (existing && ts < existing.timestamp) return;
+    this.db.prepare(`INSERT OR REPLACE INTO message_edits (targetId, targetJid, editId, timestamp, content) VALUES (?, ?, ?, ?, ?)`).run(
+      targetId, targetJid, edit.key?.id || null, ts, JSON.stringify(content),
+    );
+  }
+
+  /** Fold one edit envelope into its target row, or synthesize the target. */
+  private _foldEditIntoTarget(edit: AnyMsg) {
+    const targetId = getEditTargetId(edit);
+    const content = getEditContent(edit);
+    if (!targetId || !content) return;
+    const editTs = getEditTimestamp(edit);
+    const target = this._readMessageById(targetId);
+    if (target && !isProtocolEnvelope(target.msg)) {
+      const curEditedAt = Number((target.msg as AnyMsg).editedAt || 0);
+      if (curEditedAt && editTs < curEditedAt) {
+        this._recordEdit(targetId, target.jid, edit, content);
+        return;
+      }
+      const folded = applyEditContent(target.msg as AnyMsg, content, { editId: edit.key?.id || null, editedAt: editTs });
+      this._updateMessageRow(target.jid, targetId, folded);
+      this._recordEdit(targetId, target.jid, edit, content);
+      return;
+    }
+    if (!target) {
+      // Edit of a missing original (or edit arrived first): synthesize a
+      // visible row from the payload so content is never lost.
+      const chatJid = edit.key?.remoteJid;
+      const synth: AnyMsg = {
+        key: {
+          remoteJid: chatJid,
+          id: targetId,
+          fromMe: Boolean(edit.key?.fromMe),
+          ...(edit.key?.participant ? { participant: edit.key.participant } : {}),
+        },
+        message: { ...(content as Record<string, unknown>) },
+        messageTimestamp: editTs,
+        ...(edit.pushName ? { pushName: edit.pushName } : {}),
+        edited: true,
+        editId: edit.key?.id || null,
+        editedAt: editTs,
+      };
+      this._touchChatFromMessage(synth);
+      this._insertMessageRow(synth);
+      this._recordEdit(targetId, chatJid, edit, content);
+    }
+  }
+
+  /**
+   * Original arrived after its edit (out of order sync): the plain insert
+   * above replaced the synthesized edited row, so reapply the latest edit.
+   */
+  private _reapplyPendingEdits(jid: string, msgId: string) {
+    const latest = this._findLatestEdits([msgId]).get(msgId);
+    if (!latest) return;
+    const target = this._readMessageById(msgId);
+    if (!target || isProtocolEnvelope(target.msg)) return;
+    const curEditedAt = Number((target.msg as AnyMsg).editedAt || 0);
+    if (curEditedAt && latest.timestamp <= curEditedAt) return;
+    const folded = applyEditContent(target.msg as AnyMsg, latest.content, { editId: latest.editId, editedAt: latest.timestamp });
+    this._updateMessageRow(target.jid, msgId, folded);
+  }
+
+  /** Global lookup of a message by id across all chats (edits may name a LID or PN JID). */
+  private _readMessageById(msgId: string): { jid: string; msg: AnyMsg } | null {
+    const row = this.db.prepare(`SELECT remoteJid, data FROM messages WHERE msgId = ? LIMIT 1`).get(msgId) as { remoteJid: string; data: string } | undefined;
+    if (!row) return null;
+    try {
+      return { jid: row.remoteJid, msg: JSON.parse(row.data) as AnyMsg };
+    } catch {
+      return null;
+    }
+  }
+
+  /** One time backfill of message_edits from protocol rows predating the fold. */
+  private editsBackfilled = false;
+
+  private _ensureEditsBackfilled() {
+    if (this.editsBackfilled) return;
+    this.editsBackfilled = true;
+    try {
+      const rows = this.db.prepare(`SELECT msgId, remoteJid, timestamp, data FROM messages WHERE data LIKE '%editedMessage%'`).all() as { msgId: string; remoteJid: string; timestamp: number; data: string }[];
+      for (const r of rows) {
+        try {
+          const msg = JSON.parse(r.data) as AnyMsg;
+          if (!isEditEnvelope(msg)) continue;
+          const targetId = getEditTargetId(msg);
+          const content = getEditContent(msg);
+          if (!targetId || !content) continue;
+          const ts = getEditTimestamp(msg) || r.timestamp || 0;
+          const existing = this.db.prepare(`SELECT timestamp FROM message_edits WHERE targetId = ?`).get(targetId) as { timestamp: number } | undefined;
+          if (existing && ts < existing.timestamp) continue;
+          this.db.prepare(`INSERT OR REPLACE INTO message_edits (targetId, targetJid, editId, timestamp, content) VALUES (?, ?, ?, ?, ?)`).run(
+            targetId, r.remoteJid, r.msgId, ts, JSON.stringify(content),
+          );
+        } catch { /* skip unparseable rows */ }
+      }
+    } catch { /* backfill is best effort */ }
+  }
+
+  /** Latest winning edit per original id (indexed lookup, no table scan). */
+  private _findLatestEdits(targetIds: string[]): Map<string, { editId: string | null; timestamp: number; content: Record<string, unknown> }> {
+    const out = new Map<string, { editId: string | null; timestamp: number; content: Record<string, unknown> }>();
+    const unique = [...new Set(targetIds.filter(Boolean))];
+    if (unique.length === 0) return out;
+    this._ensureEditsBackfilled();
+    try {
+      const placeholders = unique.map(() => "?").join(",");
+      const rows = this.db.prepare(`SELECT targetId, editId, timestamp, content FROM message_edits WHERE targetId IN (${placeholders})`).all(...unique) as { targetId: string; editId: string | null; timestamp: number; content: string }[];
+      for (const r of rows) {
+        try {
+          out.set(r.targetId, { editId: r.editId, timestamp: Number(r.timestamp || 0), content: JSON.parse(r.content) as Record<string, unknown> });
+        } catch { /* skip unparseable edit content */ }
+      }
+    } catch { /* edit index unavailable, return what we have */ }
+    return out;
+  }
+
+  /**
+   * Resolve folded edits for read results. Rows already folded by the write
+   * path pass through untouched; rows from before the fold are patched in
+   * memory from the edit index. Never applied to protocol rows themselves.
+   */
+  private _resolveEdits(msgs: AnyMsg[]): AnyMsg[] {
+    const candidates = msgs.filter((m) => !isProtocolEnvelope(m));
+    if (candidates.length === 0) return msgs;
+    const ids = candidates.map((m) => m.key?.id).filter(Boolean) as string[];
+    const latestById = this._findLatestEdits(ids);
+    if (latestById.size === 0) return msgs;
+    return msgs.map((m) => {
+      if (isProtocolEnvelope(m)) return m;
+      const latest = latestById.get(m.key?.id);
+      if (!latest) return m;
+      const curEditedAt = Number((m as AnyMsg).editedAt || 0);
+      if (curEditedAt && latest.timestamp <= curEditedAt) return m;
+      try {
+        return applyEditContent(m as AnyMsg, latest.content, { editId: latest.editId, editedAt: latest.timestamp });
+      } catch {
+        return m;
+      }
+    });
+  }
+
+  /** Whether an explicit type filter already asks for protocol rows. */
+  private _typeFilterRequestsProtocol(options: MessageFilters | SearchOptions): boolean {
+    const wanted = new Set((options.types || []).map((t) => String(t).toLowerCase()));
+    return wanted.has("protocol") || wanted.has("edited") || wanted.has("deleted") || wanted.has("system");
+  }
+
   deleteMessages(keys: { remoteJid: string; id: string }[]) {
     const txn = this.db.transaction((keys: { remoteJid: string; id: string }[]) => {
       for (const key of keys) {
@@ -599,6 +810,7 @@ export class SQLiteStore {
           try { this.stmts.deleteMessageFts.run(row.rowid); } catch { /* FTS may not have entry */ }
           this.stmts.deleteMessages.run(key.remoteJid, key.id);
         }
+        try { this.db.prepare(`DELETE FROM message_edits WHERE targetId = ?`).run(key.id); } catch { /* edit index may not exist on old handles */ }
       }
     });
     txn(keys);
@@ -641,15 +853,23 @@ export class SQLiteStore {
     }
 
     query += ` ORDER BY timestamp DESC, msgId DESC`;
-    // Fetch extra rows to account for type filtering
-    const fetchLimit = (options.types && options.types.length > 0) || (options.excludeTypes && options.excludeTypes.length > 0)
-      ? limit * 5
-      : limit;
+    // Fetch extra rows to account for protocol hiding and type filtering.
+    const showProtocol = Boolean(options.includeProtocol) || this._typeFilterRequestsProtocol(options);
+    const needsFiltering = !showProtocol || (options.types && options.types.length > 0) || (options.excludeTypes && options.excludeTypes.length > 0);
+    const fetchLimit = needsFiltering ? limit * 5 : limit;
     query += ` LIMIT ?`;
     params.push(fetchLimit);
 
     const rows = this.db.prepare(query).all(...params) as { data: string }[];
     let result = rows.map((r) => JSON.parse(r.data) as AnyMsg);
+
+    // Pure protocol rows (edit stubs, revokes, system) stay hidden by default.
+    if (!showProtocol) {
+      result = result.filter((m) => !isProtocolEnvelope(m));
+    }
+
+    // Patch pre fold rows with the latest edit (zero migration fix).
+    result = this._resolveEdits(result);
 
     // Apply type filters in JS (requires formatMessage)
     if (options.types && options.types.length > 0) {
@@ -670,8 +890,25 @@ export class SQLiteStore {
     return result.slice(0, limit);
   }
 
-  countMessages(jid: string): number {
-    return (this.stmts.countMessagesByJid.get(jid) as { cnt: number }).cnt;
+  /**
+   * Visible message count for a chat. Protocol stubs are excluded by default
+   * so counts match what chat-read returns; pass true for the forensic total.
+   */
+  countMessages(jid: string, includeProtocol = false): number {
+    if (includeProtocol) {
+      return (this.stmts.countMessagesByJid.get(jid) as { cnt: number }).cnt;
+    }
+    try {
+      const row = this.db.prepare(
+        `SELECT COUNT(*) as cnt FROM messages WHERE remoteJid = ? AND json_extract(data, '$.message.protocolMessage') IS NULL`,
+      ).get(jid) as { cnt: number };
+      return row.cnt;
+    } catch {
+      const row = this.db.prepare(
+        `SELECT COUNT(*) as cnt FROM messages WHERE remoteJid = ? AND data NOT LIKE '%"protocolMessage"%'`,
+      ).get(jid) as { cnt: number };
+      return row.cnt;
+    }
   }
 
   getOldestMessage(jid: string): AnyMsg | null {
@@ -720,15 +957,20 @@ export class SQLiteStore {
       }
 
       querySql += ` ORDER BY timestamp DESC`;
-      // Fetch extra for type filtering
-      const fetchLimit = (options.types && options.types.length > 0) || (options.excludeTypes && options.excludeTypes.length > 0)
-        ? cappedLimit * 5
-        : cappedLimit * 2;
+      // Fetch extra for protocol hiding and type filtering
+      const showProtocol = Boolean(options.includeProtocol) || this._typeFilterRequestsProtocol(options);
+      const needsFiltering = !showProtocol || (options.types && options.types.length > 0) || (options.excludeTypes && options.excludeTypes.length > 0);
+      const fetchLimit = needsFiltering ? cappedLimit * 5 : cappedLimit * 2;
       querySql += ` LIMIT ?`;
       params.push(fetchLimit);
 
       const rows = this.db.prepare(querySql).all(...params) as { data: string }[];
       let msgs = rows.map((r) => JSON.parse(r.data) as AnyMsg);
+
+      if (!showProtocol) {
+        msgs = msgs.filter((m) => !isProtocolEnvelope(m));
+      }
+      msgs = this._resolveEdits(msgs);
 
       // Apply type filters
       if (options.types && options.types.length > 0) {

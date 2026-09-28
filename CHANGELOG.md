@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## 0.7.5 - 2026-09-28
+
+- **MESSAGE_EDIT fold (write path):** incoming `protocolMessage` edits now fold
+  into the target row (data, text column, FTS reindex) with `edited` / `editId`
+  / `editedAt` metadata, so no visible `[message edited]` stub row remains.
+  Covers text edits, caption edits, chained edits (latest wins by timestamp),
+  edit before original (out of order reapply), edit of a missing original
+  (visible row synthesized from the payload, content never lost), groups, and
+  the LID versus PN JID mismatch (target lookup is global by message id).
+  Original timestamps are kept, so ordering is unchanged.
+- **Edit resolve (read path):** `getMessages`, `searchMessages` and
+  `countMessages` resolve the latest edit per message through the new indexed
+  `message_edits` table (one time backfill from pre fold protocol rows), which
+  fixes all existing history with zero migration. Pure protocol rows stay
+  hidden by default; `chat-read`, `chat-read-batch` and `find-messages` accept
+  opt-in `include_protocol` for forensics. Edited hits carry `edited:true`
+  plus `editedAt` and `editId`.
+- Follow-up (not in scope): REVOKE, reactions, polls.
+
 ## 0.7.3 - 2026-09-10
 
 - **Headless service unit fix:** `src/services/whats-proxy@.service` no longer declares
