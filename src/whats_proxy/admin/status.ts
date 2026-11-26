@@ -25,7 +25,9 @@ import {
   getDefaultAccount,
   configDir,
   shareDir,
+  accountStatePaths,
 } from "../config.ts";
+import { pingDaemon } from "../client.ts";
 import { okResult } from "../helpers.ts";
 import { VERSION } from "../version.ts";
 import type { Output } from "../types.ts";
@@ -151,15 +153,27 @@ export async function adminStatus(): Promise<Output> {
     let connection = "disconnected";
     const service = `whats-proxy@${phone}.service`;
 
+    let systemdActive = false;
+    const paths = accountStatePaths(phone, cfg);
+
     try {
       const result = execSync(`systemctl --user is-active ${service}`, {
         encoding: "utf-8",
         timeout: 5000,
       }).trim();
-      serviceActive = result === "active";
+      systemdActive = result === "active";
       serviceStatus = result;
+    } catch {
+      serviceStatus = "inactive";
+    }
 
-      if (serviceActive) {
+    // A daemon reachable over its socket counts as active even when the
+    // systemd unit is inactive (CLI auto-spawn path). Only warn when neither
+    // systemd nor the daemon answers.
+    serviceActive = systemdActive || (await pingDaemon(paths));
+
+    if (serviceActive) {
+      if (systemdActive) {
         try {
           const show = execSync(
             `systemctl --user show ${service} --property=MainPID`,
@@ -170,23 +184,29 @@ export async function adminStatus(): Promise<Output> {
         } catch {
           // non-fatal
         }
-
-        // Check connection state via daemon socket
+      } else {
+        // CLI auto-spawn path: systemd has no MainPID, but the daemon wrote
+        // its own PID file. Use it so `pid` is never null for a live daemon.
         try {
-          const { rpcCall } = await import("../client.ts");
-          const sockPath = join(phoneDir, "daemon.sock");
-          if (existsSync(sockPath)) {
-            const resp = await rpcCall(sockPath, "connection-info", {}, 3000);
-            const info = resp.result as { state?: string } | undefined;
-            connection = info?.state || "unknown";
-          }
+          const p = parseInt(readFileSync(paths.pidFile, "utf-8").trim(), 10);
+          if (p > 0) pid = p;
         } catch {
-          connection = "unreachable";
+          // non-fatal
         }
       }
-    } catch {
-      serviceActive = false;
-      serviceStatus = "inactive";
+
+      // Check connection state via daemon socket
+      try {
+        const { rpcCall } = await import("../client.ts");
+        const sockPath = join(phoneDir, "daemon.sock");
+        if (existsSync(sockPath)) {
+          const resp = await rpcCall(sockPath, "connection-info", {}, 3000);
+          const info = resp.result as { state?: string } | undefined;
+          connection = info?.state || "unknown";
+        }
+      } catch {
+        connection = "unreachable";
+      }
     }
 
     if (!serviceActive) {

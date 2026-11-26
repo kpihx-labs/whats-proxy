@@ -205,7 +205,17 @@ async function cmdDo(argv: string[]): Promise<number> {
           ) + "\n",
         );
       } else {
-        process.stdout.write(getFullHelp(REGISTRY[action]!) + "\n");
+        // Unknown action in human format → same guard as the JSON branch above.
+        // Previously this was `getFullHelp(REGISTRY[action]!)`, which threw
+        // `TypeError: Cannot read properties of undefined (reading 'docstring')`
+        // on `do <typo> --help` instead of reporting the unknown action.
+        const def = REGISTRY[action];
+        process.stdout.write(
+          (def
+            ? getFullHelp(def)
+            : `Unknown action: ${action}.\n\nRun 'whats-proxy do --help' for the catalog.`) +
+            "\n",
+        );
       }
       return 0;
     }
