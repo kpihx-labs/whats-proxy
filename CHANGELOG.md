@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.7.6 - 2026-11-26
+
+- **`admin status` reflects live daemons:** a daemon reachable over its Unix
+  socket now counts as active even when its systemd unit is inactive, so the
+  bogus "run `admin service start`" warning no longer loops after a CLI
+  auto-spawn. When systemd is inactive, `pid` is read from the daemon's own
+  pidfile instead of staying null.
+- **Unknown-action guard:** `whats-proxy do <typo> --help` in human format now
+  reports `Unknown action` instead of throwing on an undefined registry entry.
+
 ## 0.7.5 - 2026-09-28
 
 - **MESSAGE_EDIT fold (write path):** incoming `protocolMessage` edits now fold
